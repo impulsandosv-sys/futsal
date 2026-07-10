@@ -1,0 +1,15 @@
+export const ROUTES = {
+  LOGIN: '/login',
+  DASHBOARD: '/',
+  RIESGO: '/riesgo',
+  JUGADORAS: '/jugadoras',
+  JUGADORA_PROFILE: '/jugadoras/:id',
+  WELLNESS: '/wellness',
+  SESIONES: '/sesiones',
+  PARTIDOS: '/partidos',
+  LESIONES: '/lesiones',
+  TESTS: '/tests',
+  SEMANAL: '/semanal',
+  ALERTAS: '/alertas',
+  IMPORTAR: '/importar',
+} as const
