@@ -1,17 +1,38 @@
 import { useState } from 'react'
 import { useStore } from '@/store/store'
 import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
-import { AlertBadge } from '@/components/shared/AlertBadge'
+import { Modal } from '@/components/shared/Modal'
 import { generarAlertas } from '@/utils/alerts'
 import { useNavigate } from 'react-router-dom'
+import type { Alerta } from '@/types'
 
 export function AlertsPage() {
-  const { alertas, jugadoras, markAlertaLeida, clearAlertas } = useStore()
+  const {
+    alertas,
+    jugadoras,
+    updateAlertaEstado,
+    registrarAlertaDecision,
+    archivarAlertasResueltas
+  } = useStore()
   const navigate = useNavigate()
+  
   const [generating, setGenerating] = useState(false)
+  
+  // Filters state
+  const [filterEstado, setFilterEstado] = useState<string>('todas')
+  const [filterTipo, setFilterTipo] = useState<string>('todas')
+  const [filterJugadora, setFilterJugadora] = useState<string>('todas')
+  const [filterPrioridad, setFilterPrioridad] = useState<string>('todas')
+  const [filterFecha, setFilterFecha] = useState<string>('')
 
-  const noLeidas = alertas.filter((a) => !a.leida)
-  const leidas = alertas.filter((a) => a.leida)
+  // Decision Modal state
+  const [decisionModalOpen, setDecisionModalOpen] = useState(false)
+  const [selectedAlerta, setSelectedAlerta] = useState<Alerta | null>(null)
+  const [responsable, setResponsable] = useState('')
+  const [notaDecision, setNotaDecision] = useState('')
+
+  // Archive confirmation dialog state
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false)
 
   const handleGenerate = async () => {
     setGenerating(true)
@@ -23,104 +44,406 @@ export function AlertsPage() {
     }
   }
 
+  const handleOpenDecisionModal = (alerta: Alerta) => {
+    setSelectedAlerta(alerta)
+    setResponsable(alerta.responsable || '')
+    setNotaDecision(alerta.nota_decision || '')
+    setDecisionModalOpen(true)
+  }
+
+  const handleSaveDecision = async () => {
+    if (selectedAlerta && selectedAlerta.id !== undefined) {
+      await registrarAlertaDecision(selectedAlerta.id, responsable, notaDecision)
+      // Automatically transition to "en_revision" if it was "abierta"
+      const currentEstado = selectedAlerta.estado || (selectedAlerta.leida ? 'resuelta' : 'abierta')
+      if (currentEstado === 'abierta') {
+        await updateAlertaEstado(selectedAlerta.id, 'en_revision')
+      }
+      setDecisionModalOpen(false)
+      setSelectedAlerta(null)
+    }
+  }
+
+  const handleConfirmArchive = async () => {
+    await archivarAlertasResueltas()
+    setArchiveConfirmOpen(false)
+  }
+
+  const getEstadoBadge = (estado: string) => {
+    switch (estado) {
+      case 'en_revision':
+        return 'text-amber-700 bg-amber-50 border-amber-200'
+      case 'resuelta':
+        return 'text-green-700 bg-green-50 border-green-200'
+      case 'descartada':
+        return 'text-surface-600 bg-surface-50 border-surface-200'
+      case 'abierta':
+      default:
+        return 'text-red-700 bg-red-50 border-red-200'
+    }
+  }
+
+  const getPrioridadBadge = (prio: string) => {
+    switch (prio) {
+      case 'alto':
+        return 'text-red-700 bg-red-50 border-red-200 font-semibold'
+      case 'medio':
+        return 'text-amber-700 bg-amber-50 border-amber-200'
+      case 'bajo':
+      default:
+        return 'text-blue-700 bg-blue-50 border-blue-200'
+    }
+  }
+
+  const getEstadoLabel = (estado: string) => {
+    switch (estado) {
+      case 'en_revision': return 'En Revisión'
+      case 'resuelta': return 'Resuelta'
+      case 'descartada': return 'Descartada'
+      case 'abierta':
+      default: return 'Abierta'
+    }
+  }
+
+  // Filter logic
+  const filteredAlertas = alertas.filter((a) => {
+    const aEstado = a.estado || (a.leida ? 'resuelta' : 'abierta')
+    const aPrioridad = a.prioridad || a.nivel || 'bajo'
+
+    if (filterEstado !== 'todas' && aEstado !== filterEstado) return false
+    if (filterTipo !== 'todas' && a.tipo !== filterTipo) return false
+    if (filterJugadora !== 'todas' && a.id_jugadora !== filterJugadora) return false
+    if (filterPrioridad !== 'todas' && aPrioridad !== filterPrioridad) return false
+    
+    if (filterFecha) {
+      const aFecha = a.fecha_creacion?.slice(0, 10) || a.fecha
+      if (aFecha !== filterFecha) return false
+    }
+    return true
+  })
+
+  // Separate into 3 categories
+  const loadAlerts = filteredAlertas.filter(a => a.tipo === 'wellness_bajo' || a.tipo === 'carga_alta')
+  const injuryAlerts = filteredAlertas.filter(a => a.tipo === 'lesion' || a.tipo === 'readaptacion')
+  const dataAlerts = filteredAlertas.filter(a => a.tipo === 'datos_faltantes')
+
+  const renderAlertTable = (tableAlertas: Alerta[], emptyMsg: string) => (
+    <DataTable
+      headers={['Jugadora', 'Mensaje y Sustento', 'Sugerencia', 'Prioridad', 'Estado', 'Decisión / Responsable', 'Acciones']}
+      emptyMessage={emptyMsg}
+    >
+      {tableAlertas.map((a) => {
+        const jug = jugadoras.find((j) => j.id_jugadora === a.id_jugadora)
+        const aEstado = a.estado || (a.leida ? 'resuelta' : 'abierta')
+        const aPrioridad = a.prioridad || a.nivel || 'bajo'
+        const aFecha = a.fecha_creacion?.slice(0, 10) || a.fecha
+
+        return (
+          <DataRow key={a.id}>
+            <DataCell className="align-top">
+              <div className="space-y-0.5">
+                <button
+                  onClick={() => navigate(`/jugadoras/${a.id_jugadora}`)}
+                  className="text-primary-600 hover:underline font-semibold block text-left"
+                >
+                  {jug?.nombre || a.id_jugadora}
+                </button>
+                <span className="text-[10px] text-surface-400 block">{aFecha}</span>
+              </div>
+            </DataCell>
+            
+            <DataCell className="max-w-xs align-top">
+              <div className="space-y-1">
+                <div className="font-medium text-surface-700 text-xs">{a.mensaje}</div>
+                {a.datos_sustento && (
+                  <div className="text-[10px] text-surface-500 bg-surface-50 px-1.5 py-0.5 rounded border border-surface-100 font-mono">
+                    <span className="font-semibold text-surface-600 block text-[9px] uppercase">Datos de sustento</span>
+                    {a.datos_sustento}
+                  </div>
+                )}
+                {a.origen && (
+                  <div className="text-[9px] text-surface-400">
+                    Regla: {a.origen}
+                  </div>
+                )}
+              </div>
+            </DataCell>
+
+            <DataCell className="align-top max-w-[130px]">
+              <span className="text-[10px] font-medium text-surface-600 bg-surface-50 border border-surface-200 px-1.5 py-0.5 rounded block">
+                💡 {a.sugerencia || 'Revisar ficha'}
+              </span>
+            </DataCell>
+
+            <DataCell className="align-top">
+              <span className={`inline-block border rounded px-1.5 py-0.5 text-[10px] capitalize ${getPrioridadBadge(aPrioridad)}`}>
+                {aPrioridad}
+              </span>
+            </DataCell>
+
+            <DataCell className="align-top">
+              <span className={`inline-block border rounded px-1.5 py-0.5 text-[10px] font-semibold ${getEstadoBadge(aEstado)}`}>
+                {getEstadoLabel(aEstado)}
+              </span>
+            </DataCell>
+
+            <DataCell className="max-w-[150px] align-top">
+              {a.nota_decision || a.responsable ? (
+                <div className="text-[10px] space-y-1 bg-primary-25 p-1.5 rounded border border-primary-100">
+                  {a.nota_decision && <p className="text-surface-700 italic">"{a.nota_decision}"</p>}
+                  {a.responsable && <p className="text-surface-500 text-[9px] font-medium">Resp: {a.responsable}</p>}
+                </div>
+              ) : (
+                <span className="text-surface-400 italic text-[10px]">Sin revisar</span>
+              )}
+            </DataCell>
+
+            <DataCell className="align-top">
+              <div className="flex flex-wrap gap-1">
+                {aEstado === 'abierta' && (
+                  <button
+                    onClick={() => a.id !== undefined && updateAlertaEstado(a.id, 'en_revision')}
+                    className="text-[9px] bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 px-1 py-0.5 rounded"
+                  >
+                    Revisar
+                  </button>
+                )}
+                
+                <button
+                  onClick={() => handleOpenDecisionModal(a)}
+                  className="text-[9px] bg-primary-50 text-primary-700 border border-primary-200 hover:bg-primary-100 px-1 py-0.5 rounded"
+                >
+                  Nota/Resp
+                </button>
+
+                {aEstado !== 'resuelta' && (
+                  <button
+                    onClick={() => a.id !== undefined && updateAlertaEstado(a.id, 'resuelta')}
+                    className="text-[9px] bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 px-1 py-0.5 rounded"
+                  >
+                    Resolver
+                  </button>
+                )}
+
+                {aEstado !== 'descartada' && (
+                  <button
+                    onClick={() => a.id !== undefined && updateAlertaEstado(a.id, 'descartada')}
+                    className="text-[9px] bg-surface-50 text-surface-700 border border-surface-200 hover:bg-surface-100 px-1 py-0.5 rounded"
+                  >
+                    Descartar
+                  </button>
+                )}
+
+                {(aEstado === 'resuelta' || aEstado === 'descartada') && (
+                  <button
+                    onClick={() => a.id !== undefined && updateAlertaEstado(a.id, 'abierta')}
+                    className="text-[9px] bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 px-1 py-0.5 rounded"
+                  >
+                    Reabrir
+                  </button>
+                )}
+              </div>
+            </DataCell>
+          </DataRow>
+        )
+      })}
+    </DataTable>
+  )
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold text-surface-800">Alertas e Incidencias</h1>
+        <div>
+          <h1 className="text-lg font-bold text-surface-800">Panel de Decisiones del Staff</h1>
+          <p className="text-[10px] text-surface-500">Historial y estado de revisiones físicas, carga y completitud de datos</p>
+        </div>
         <div className="flex gap-2">
           <button
             onClick={handleGenerate}
             disabled={generating}
             className="bg-primary-600 text-white text-xs font-medium px-3 py-1.5 rounded hover:bg-primary-700 disabled:opacity-50"
           >
-            {generating ? 'Generando...' : 'Generar alertas'}
+            {generating ? 'Generando...' : 'Escanear Nuevas Incidencias'}
           </button>
           <button
-            onClick={clearAlertas}
-            className="text-xs text-surface-600 px-3 py-1.5 border border-surface-200 rounded hover:bg-surface-50"
+            onClick={() => setArchiveConfirmOpen(true)}
+            className="text-xs text-red-600 px-3 py-1.5 border border-red-200 rounded bg-red-25 hover:bg-red-50"
           >
-            Limpiar todas
+            Archivar Resueltas/Descartadas
           </button>
         </div>
       </div>
 
-      {noLeidas.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-          <h3 className="text-xs font-semibold text-amber-700 mb-2">
-            Alertas activas ({noLeidas.length})
-          </h3>
+      {/* Filters section */}
+      <div className="bg-white rounded-lg border border-surface-200 p-3 grid grid-cols-5 gap-3 text-xs">
+        <div>
+          <label className="text-[10px] font-medium text-surface-500 block mb-1">Estado</label>
+          <select
+            value={filterEstado}
+            onChange={(e) => setFilterEstado(e.target.value)}
+            className="w-full border border-surface-200 rounded px-2 py-1 bg-white text-surface-700"
+          >
+            <option value="todas">Todos los estados</option>
+            <option value="abierta">Abierta</option>
+            <option value="en_revision">En Revisión</option>
+            <option value="resuelta">Resuelta</option>
+            <option value="descartada">Descartada</option>
+          </select>
         </div>
-      )}
+        
+        <div>
+          <label className="text-[10px] font-medium text-surface-500 block mb-1">Tipo</label>
+          <select
+            value={filterTipo}
+            onChange={(e) => setFilterTipo(e.target.value)}
+            className="w-full border border-surface-200 rounded px-2 py-1 bg-white text-surface-700"
+          >
+            <option value="todas">Todos los tipos</option>
+            <option value="wellness_bajo">Wellness Bajo</option>
+            <option value="carga_alta">Carga Alta</option>
+            <option value="lesion">Lesión</option>
+            <option value="readaptacion">Readaptación</option>
+            <option value="datos_faltantes">Datos Faltantes</option>
+          </select>
+        </div>
 
-      <div>
-        <h3 className="text-xs font-semibold text-surface-700 mb-2">Alertas activas</h3>
-        <DataTable
-          headers={['', 'Tipo', 'Jugadora', 'Mensaje', 'Nivel', 'Fecha']}
-          emptyMessage="No hay alertas activas"
-        >
-          {noLeidas.map((a) => {
-            const jug = jugadoras.find((j) => j.id_jugadora === a.id_jugadora)
-            return (
-              <DataRow key={a.id}>
-                <DataCell>
-                  <input
-                    type="checkbox"
-                    onChange={() => a.id && markAlertaLeida(a.id)}
-                    className="cursor-pointer"
-                  />
-                </DataCell>
-                <DataCell>
-                  <span className="text-[10px] font-medium uppercase text-surface-500">{a.tipo.replace(/_/g, ' ')}</span>
-                </DataCell>
-                <DataCell>
-                  <button
-                    onClick={() => navigate(`/jugadoras/${a.id_jugadora}`)}
-                    className="text-primary-600 hover:underline font-medium"
-                  >
-                    {jug?.nombre || a.id_jugadora}
-                  </button>
-                </DataCell>
-                <DataCell className="max-w-[300px]">{a.mensaje}</DataCell>
-                <DataCell>
-                  <AlertBadge level={a.nivel} />
-                </DataCell>
-                <DataCell className="text-surface-500 text-[10px]">{a.creada?.slice(0, 10) || a.fecha}</DataCell>
-              </DataRow>
-            )
-          })}
-        </DataTable>
+        <div>
+          <label className="text-[10px] font-medium text-surface-500 block mb-1">Jugadora</label>
+          <select
+            value={filterJugadora}
+            onChange={(e) => setFilterJugadora(e.target.value)}
+            className="w-full border border-surface-200 rounded px-2 py-1 bg-white text-surface-700"
+          >
+            <option value="todas">Todas las jugadoras</option>
+            {jugadoras.map(j => (
+              <option key={j.id_jugadora} value={j.id_jugadora}>{j.nombre}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-medium text-surface-500 block mb-1">Prioridad</label>
+          <select
+            value={filterPrioridad}
+            onChange={(e) => setFilterPrioridad(e.target.value)}
+            className="w-full border border-surface-200 rounded px-2 py-1 bg-white text-surface-700"
+          >
+            <option value="todas">Todas las prioridades</option>
+            <option value="bajo">Bajo</option>
+            <option value="medio">Medio</option>
+            <option value="alto">Alto</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-medium text-surface-500 block mb-1">Fecha</label>
+          <input
+            type="date"
+            value={filterFecha}
+            onChange={(e) => setFilterFecha(e.target.value)}
+            className="w-full border border-surface-200 rounded px-2 py-1 text-surface-700 bg-white"
+          />
+        </div>
       </div>
 
-      {leidas.length > 0 && (
-        <div>
-          <h3 className="text-xs font-semibold text-surface-700 mb-2">Alertas resueltas</h3>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-surface-50 border-b border-surface-200">
-                <th className="text-left px-3 py-2 font-semibold text-surface-600">Tipo</th>
-                <th className="text-left px-3 py-2 font-semibold text-surface-600">Jugadora</th>
-                <th className="text-left px-3 py-2 font-semibold text-surface-600">Mensaje</th>
-                <th className="text-left px-3 py-2 font-semibold text-surface-600">Nivel</th>
-                <th className="text-left px-3 py-2 font-semibold text-surface-600">Fecha</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-surface-100">
-              {leidas.slice(0, 20).map((a) => {
-                const jug = jugadoras.find((j) => j.id_jugadora === a.id_jugadora)
-                return (
-                  <tr key={a.id} className="text-surface-400">
-                    <td className="px-3 py-2">{a.tipo.replace(/_/g, ' ')}</td>
-                    <td className="px-3 py-2">{jug?.nombre || a.id_jugadora}</td>
-                    <td className="px-3 py-2 max-w-[300px] truncate">{a.mensaje}</td>
-                    <td className="px-3 py-2">{a.nivel}</td>
-                    <td className="px-3 py-2">{a.creada?.slice(0, 10) || a.fecha}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+      {/* Group 1: Respuesta a la Carga */}
+      <div className="space-y-2">
+        <div className="border-b border-surface-200 pb-1">
+          <h2 className="text-xs font-bold text-surface-700 uppercase tracking-wide">
+            1. Respuesta a la Carga e Indicadores de Cansancio ({loadAlerts.length})
+          </h2>
         </div>
-      )}
+        {renderAlertTable(loadAlerts, 'No hay incidencias de wellness o carga acumulada.')}
+      </div>
+
+      {/* Group 2: Disponibilidad y Lesiones */}
+      <div className="space-y-2">
+        <div className="border-b border-surface-200 pb-1">
+          <h2 className="text-xs font-bold text-surface-700 uppercase tracking-wide">
+            2. Disponibilidad y Lesiones en Readaptación ({injuryAlerts.length})
+          </h2>
+        </div>
+        {renderAlertTable(injuryAlerts, 'No hay incidencias de lesiones o disponibilidad registradas.')}
+      </div>
+
+      {/* Group 3: Calidad y Completitud de Datos */}
+      <div className="space-y-2">
+        <div className="border-b border-surface-200 pb-1">
+          <h2 className="text-xs font-bold text-surface-700 uppercase tracking-wide">
+            3. Completitud de Datos y Calidad ({dataAlerts.length})
+          </h2>
+        </div>
+        {renderAlertTable(dataAlerts, 'No hay alertas de calidad o completitud de datos.')}
+      </div>
+
+      {/* Decision Modal */}
+      <Modal open={decisionModalOpen} onClose={() => setDecisionModalOpen(false)} title="Registrar Decisión y Nota de Revisión">
+        <div className="space-y-3">
+          <p className="text-[10px] text-surface-500">
+            Registra una decisión de staff sobre la alerta: <span className="font-semibold text-surface-700">{selectedAlerta?.mensaje}</span>
+          </p>
+          <div>
+            <label className="text-[10px] font-medium text-surface-600 block mb-1">Responsable del Staff *</label>
+            <input
+              className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs text-surface-700 bg-white"
+              value={responsable}
+              onChange={(e) => setResponsable(e.target.value)}
+              placeholder="Nombre del preparador físico, fisio, etc."
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-medium text-surface-600 block mb-1">Nota de decisión / Observación clínica o técnica *</label>
+            <textarea
+              className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs text-surface-700 bg-white"
+              rows={3}
+              value={notaDecision}
+              onChange={(e) => setNotaDecision(e.target.value)}
+              placeholder="Ej. Se acuerda descanso parcial en pista. Se consulta con fisio."
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-4">
+          <button
+            onClick={() => setDecisionModalOpen(false)}
+            className="text-xs text-surface-600 px-3 py-1.5 border border-surface-200 rounded"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSaveDecision}
+            disabled={!responsable.trim() || !notaDecision.trim()}
+            className="text-xs text-white bg-primary-600 px-3 py-1.5 rounded hover:bg-primary-700 disabled:opacity-50"
+          >
+            Guardar Decisión
+          </button>
+        </div>
+      </Modal>
+
+      {/* Archive Confirmation Dialog */}
+      <Modal open={archiveConfirmOpen} onClose={() => setArchiveConfirmOpen(false)} title="Archivar Alertas Resueltas y Descartadas">
+        <div className="space-y-3 text-xs text-surface-600">
+          <p>
+            ¿Estás seguro de que deseas archivar y eliminar permanentemente todas las alertas marcadas como <span className="font-semibold text-green-600">Resuelta</span> o <span className="font-semibold text-surface-500">Descartada</span>?
+          </p>
+          <div className="bg-amber-50 text-amber-800 border border-amber-200 p-2.5 rounded text-[10px] font-medium">
+            ⚠️ Las alertas <span className="underline">Abierta</span> y <span className="underline">En Revisión</span> **nunca** serán borradas por esta acción.
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-4">
+          <button
+            onClick={() => setArchiveConfirmOpen(false)}
+            className="text-xs text-surface-600 px-3 py-1.5 border border-surface-200 rounded"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleConfirmArchive}
+            className="text-xs text-white bg-red-600 px-3 py-1.5 rounded hover:bg-red-700"
+          >
+            Archivar permanentemente
+          </button>
+        </div>
+      </Modal>
     </div>
   )
 }

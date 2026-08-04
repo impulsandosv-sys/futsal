@@ -1,5 +1,5 @@
 import { db } from '@/db/database'
-import type { Jugadora, Sesion, Partido, Wellness } from '@/types'
+import type { Jugadora, Sesion, Partido, Wellness, SesionRPE } from '@/types'
 import { calcularScoreWellness, calcularCargaUA } from './calculations'
 
 const JUGADORAS: Jugadora[] = [
@@ -17,12 +17,14 @@ const JUGADORAS: Jugadora[] = [
   { id_jugadora: 'J12', nombre: 'Irene Torres', fecha_nacimiento: '1999-10-10', posicion: 'Cierre', altura_cm: 171, peso_kg: 66, imc: 22.5, grasa: 18.0, anos_experiencia_futsal: 7, historial_lesional: '', notas: 'Lesionada actualmente', activa: true },
 ]
 
+import { getLocalDateString } from '@/domain/dates/dates'
+
 function randomBetween(min: number, max: number): number {
   return Math.round((Math.random() * (max - min) + min) * 10) / 10
 }
 
 function dateStr(d: Date): string {
-  return d.toISOString().split('T')[0]
+  return getLocalDateString(d)
 }
 
 function daysAgo(n: number): Date {
@@ -94,18 +96,20 @@ export async function seedDatabase(): Promise<void> {
     }
   }
 
-  const jugadoresActivas = JUGADORAS.filter(j => j.activa)
+  const jugadoresActivas = JUGADORAS.filter(j => j.activa !== false)
   for (const sesion of sesiones) {
     for (const jug of jugadoresActivas) {
       const rpe = randomBetween(4, 8)
-      await db.rpe_entreno.put({
+
+      const srpe: SesionRPE = {
         id_sesion: sesion.id_sesion,
         id_jugadora: jug.id_jugadora,
         rpe,
         duracion_min: sesion.duracion_min,
-        fecha: sesion.fecha,
         carga_ua: calcularCargaUA(rpe, sesion.duracion_min),
-      })
+        fecha: sesion.fecha,
+      }
+      await db.sesion_rpe.put(srpe)
     }
   }
 

@@ -1,5 +1,5 @@
-import * as XLSX from 'xlsx'
 import type { FormularioRespuesta } from '@/types'
+import { getTodayLocalISO } from '@/domain/dates/dates'
 
 export interface ImportResult {
   importadas: number
@@ -44,6 +44,7 @@ export async function parseCSV(file: File): Promise<FormularioRespuesta[]> {
 }
 
 export async function parseExcel(file: File): Promise<FormularioRespuesta[]> {
+  const XLSX = await import('xlsx')
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (e) => {
@@ -140,7 +141,7 @@ function mapRowToFormulario(row: Record<string, string>): FormularioRespuesta | 
   return {
     marca_temporal: normalized.marca_temporal || new Date().toISOString(),
     id_jugadora: normalized.id_jugadora.trim().toUpperCase(),
-    fecha: normalized.fecha || normalized.marca_temporal?.split(' ')[0] || new Date().toISOString().split('T')[0],
+    fecha: normalized.fecha || normalized.marca_temporal?.split(' ')[0] || getTodayLocalISO(),
     calidad_sueno: parseNum(normalized.calidad_sueno, 5),
     fatiga: parseNum(normalized.fatiga, 5),
     dolor_muscular: parseNum(normalized.dolor_muscular, 5),

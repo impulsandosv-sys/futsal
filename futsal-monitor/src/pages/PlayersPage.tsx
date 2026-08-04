@@ -9,11 +9,12 @@ import { calcularIMC } from '@/utils/calculations'
 import type { Jugadora, Posicion } from '@/types'
 
 export function PlayersPage() {
-  const { jugadoras, lesiones, addJugadora, updateJugadora, deleteJugadora } = useStore()
+  const { jugadoras, lesiones, addJugadora, updateJugadora, deleteJugadora, reactivarJugadora } = useStore()
   const navigate = useNavigate()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Jugadora | null>(null)
   const [formError, setFormError] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState<'activas' | 'archivadas' | 'todas'>('activas')
   const [form, setForm] = useState<Jugadora>({
     id_jugadora: '', nombre: '', fecha_nacimiento: '', posicion: 'Ala',
     altura_cm: 165, peso_kg: 60, imc: 0, grasa: 0, anos_experiencia_futsal: 0,
@@ -22,6 +23,13 @@ export function PlayersPage() {
 
   const lesionesActivas = lesiones.filter(l => !l.disponible)
   const idsLesionadas = new Set(lesionesActivas.map(l => l.id_jugadora))
+
+  const jugadorasFiltradas = jugadoras.filter(j => {
+    const isActiva = j.activa !== false
+    if (filtroEstado === 'activas') return isActiva
+    if (filtroEstado === 'archivadas') return !isActiva
+    return true
+  })
 
   const handleEdit = (j: Jugadora) => {
     setEditing(j)
@@ -60,22 +68,51 @@ export function PlayersPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-bold text-surface-800">Jugadoras</h1>
-        <button onClick={handleNew} className="bg-primary-600 text-white text-xs font-medium px-3 py-1.5 rounded hover:bg-primary-700 transition-colors">
-          + Nueva jugadora
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex bg-surface-100 p-0.5 rounded text-xs">
+            <button
+              onClick={() => setFiltroEstado('activas')}
+              className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
+                filtroEstado === 'activas' ? 'bg-white text-surface-800 shadow-sm' : 'text-surface-500 hover:text-surface-800'
+              }`}
+            >
+              Activas ({jugadoras.filter(j => j.activa !== false).length})
+            </button>
+            <button
+              onClick={() => setFiltroEstado('archivadas')}
+              className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
+                filtroEstado === 'archivadas' ? 'bg-white text-surface-800 shadow-sm' : 'text-surface-500 hover:text-surface-800'
+              }`}
+            >
+              Archivadas ({jugadoras.filter(j => j.activa === false).length})
+            </button>
+            <button
+              onClick={() => setFiltroEstado('todas')}
+              className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
+                filtroEstado === 'todas' ? 'bg-white text-surface-800 shadow-sm' : 'text-surface-500 hover:text-surface-800'
+              }`}
+            >
+              Todas ({jugadoras.length})
+            </button>
+          </div>
+          <button onClick={handleNew} className="bg-primary-600 text-white text-xs font-medium px-3 py-1.5 rounded hover:bg-primary-700 transition-colors">
+            + Nueva jugadora
+          </button>
+        </div>
       </div>
 
       <Filters showPlayer={false} showDate={false} />
 
       <DataTable
         headers={['ID', 'Nombre', 'Posición', 'Edad', 'Altura', 'Peso', 'IMC', 'Estado', 'Acciones']}
-        emptyMessage="No hay jugadoras registradas"
+        emptyMessage="No hay jugadoras que coincidan con el filtro"
       >
-        {jugadoras.map((j) => {
+        {jugadorasFiltradas.map((j) => {
           const edad = j.fecha_nacimiento
             ? Math.floor((Date.now() - new Date(j.fecha_nacimiento).getTime()) / 31557600000)
             : null
           const lesionada = idsLesionadas.has(j.id_jugadora)
+          const isArchivada = j.activa === false
           return (
             <DataRow key={j.id_jugadora}>
               <DataCell className="font-mono text-[10px] text-surface-500">{j.id_jugadora}</DataCell>
@@ -93,7 +130,11 @@ export function PlayersPage() {
               <DataCell>{j.peso_kg} kg</DataCell>
               <DataCell>{j.imc}</DataCell>
               <DataCell>
-                {lesionada ? (
+                {isArchivada ? (
+                  <span className="px-2 py-0.5 text-[10px] font-semibold bg-surface-200 text-surface-600 rounded">
+                    Archivada
+                  </span>
+                ) : lesionada ? (
                   <AlertBadge level="alto" label="Lesionada" />
                 ) : (
                   <AlertBadge level="bajo" label="Disponible" />
@@ -103,9 +144,15 @@ export function PlayersPage() {
                 <button onClick={() => handleEdit(j)} className="text-[10px] text-primary-600 hover:underline mr-2">
                   Editar
                 </button>
-                <button onClick={() => deleteJugadora(j.id_jugadora)} className="text-[10px] text-red-500 hover:underline">
-                  Eliminar
-                </button>
+                {isArchivada ? (
+                  <button onClick={() => reactivarJugadora(j.id_jugadora)} className="text-[10px] text-emerald-600 hover:underline">
+                    Reactivar
+                  </button>
+                ) : (
+                  <button onClick={() => deleteJugadora(j.id_jugadora)} className="text-[10px] text-amber-600 hover:underline">
+                    Archivar
+                  </button>
+                )}
               </DataCell>
             </DataRow>
           )

@@ -1,0 +1,17 @@
++ SESIÓN
+ID de la sesión;Nombre;Lugar;Fecha;Comentarios
+1;SIMULATED;;27/02/2023;
+
++ PERSONAS
+ID;Nombre;Apellidos;Sexo;Fecha de nacimiento;Deporte;Especialidad;Nivel;Comentarios
+1;CJ-01;;F;2000-01-01;Futsal;;;
+2;CJ-02;;F;2001-02-02;Futsal;;;
+
++ SALTOS SIMPLES
+ID de la persona;Nombre de la persona;ID de sesión;ID de salto;Tipo;TC;TV;Caída;Peso kg;Altura;Potencia;Fórmula de la potencia;Rigidez;Velocidad inicial;RSI;Fecha;Tiempo;Descripción;Simulado
+1;CJ-01;1;1;CMJ;0;0,572;0;0;40,068;686;Lewis;0;2.8;0;2026-08-02;18:29:23;;Sí
+2;CJ-02;1;2;CMJ;0;0,630;0;0;48,600;750;Lewis;0;3.1;0;2026-08-02;18:30:49;;Sí
+2;CJ-02;1;3;CMJ;0;0,650;0;0;51,800;800;Lewis;0;3.2;0;2026-08-02;18:30:57;;Sí
+2;CJ-02;1;4;CMJ;0;0,682;0;0;56,913;880;Lewis;0;3.3;0;2026-08-02;18:31:00;;Sí
+1;CJ-01;1;5;CMJ;0;0,670;0;0;55,103;850;Lewis;0;3.3;0;2026-08-02;18:31:05;;Sí
+1;CJ-01;1;6;CMJ;0;0,610;0;0;45,600;720;Lewis;0;3.0;0;2026-08-02;18:31:07;;Sí

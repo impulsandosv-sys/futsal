@@ -1,9 +1,12 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useStore } from '@/store/store'
 import { useNavigate } from 'react-router-dom'
 import { changePassword } from '@/utils/auth'
 import { Modal } from '@/components/shared/Modal'
 import { getStoredTheme, toggleTheme } from '@/constants/theme'
+import { db } from '@/db/database'
+import { obtenerTemporadaActiva } from '@/domain/temporadas/temporadas'
+import type { Temporada } from '@/types'
 
 export function Header() {
   const { jugadoras, alertas, lesiones, logout } = useStore()
@@ -14,7 +17,26 @@ export function Header() {
   const [pwdMsg, setPwdMsg] = useState('')
   const [search, setSearch] = useState('')
   const [theme, setTheme] = useState(getStoredTheme())
+  const [temporadaActiva, setTemporadaActiva] = useState<Temporada | null>(null)
   const searchRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    let mounted = true
+    const loadTemp = async () => {
+      try {
+        const temp = await obtenerTemporadaActiva(db)
+        if (mounted) setTemporadaActiva(temp)
+      } catch {
+        if (mounted) setTemporadaActiva(null)
+      }
+    }
+    loadTemp()
+    window.addEventListener('temporadas-updated', loadTemp)
+    return () => {
+      mounted = false
+      window.removeEventListener('temporadas-updated', loadTemp)
+    }
+  }, [])
 
   const alertasNoLeidas = alertas.filter((a) => !a.leida).length
   const lesionadasActivas = lesiones.filter((l) => !l.disponible).length
@@ -76,6 +98,16 @@ export function Header() {
             {lesionadasActivas} lesionada{lesionadasActivas > 1 ? 's' : ''}
           </span>
         )}
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-100 dark:bg-surface-800 text-[11px] text-surface-700 dark:text-surface-300">
+          <span className="font-medium text-primary-600 dark:text-primary-400">
+            {temporadaActiva ? `Temporada activa: ${temporadaActiva.nombre}` : 'Sin temporada activa'}
+          </span>
+          {temporadaActiva && (
+            <span className="text-[10px] text-surface-500 dark:text-surface-400">
+              ({temporadaActiva.fecha_inicio} / {temporadaActiva.fecha_fin})
+            </span>
+          )}
+        </div>
       </div>
       <div className="flex items-center gap-4">
         <button

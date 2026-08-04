@@ -1,7 +1,7 @@
 export const ROUTES = {
   LOGIN: '/login',
   DASHBOARD: '/',
-  RIESGO: '/riesgo',
+  SEGUIMIENTO: '/seguimiento',
   JUGADORAS: '/jugadoras',
   JUGADORA_PROFILE: '/jugadoras/:id',
   WELLNESS: '/wellness',
@@ -9,7 +9,12 @@ export const ROUTES = {
   PARTIDOS: '/partidos',
   LESIONES: '/lesiones',
   TESTS: '/tests',
+  CMJ: '/pruebas-cmj',
+  FUERZA: '/fuerza',
+  PLANTILLAS_FUERZA: '/plantillas-fuerza',
   SEMANAL: '/semanal',
   ALERTAS: '/alertas',
+  DECISION_DIARIA: '/decision-diaria',
   IMPORTAR: '/importar',
+  TEMPORADAS: '/temporadas',
 } as const

@@ -1,4 +1,4 @@
-import type { Jugadora, Wellness, Sesion, Partido, Lesion, TestFisico, RPE_Entreno, RPE_Partido } from '@/types'
+import type { Jugadora, Wellness, Sesion, Partido, Lesion, TestFisico, RPE_Partido, SesionRPE } from '@/types'
 
 export interface ValidationError {
   field: string
@@ -33,8 +33,16 @@ export function validateWellness(w: Omit<Wellness, 'score_wellness' | 'id'>): Va
     { key: 'estado_animo', label: 'Estado de ánimo', value: w.estado_animo },
   ]
   for (const r of ranges) {
-    const err = validateRange(r.value, 1, 10, r.label)
-    if (err) errors.push(err)
+    if (r.value === undefined || r.value === null || r.value === '' as any || isNaN(r.value)) {
+      continue
+    }
+    const err = validateRange(r.value, 1, 10, r.key)
+    if (err) {
+      err.message = `${r.label} debe estar entre 1 y 10`
+      errors.push(err)
+    } else if (!Number.isInteger(r.value)) {
+      errors.push({ field: r.key, message: `${r.label} debe ser un número entero` })
+    }
   }
   return errors
 }
@@ -58,7 +66,19 @@ export function validateSesion(s: Sesion): ValidationError[] {
   const errors: ValidationError[] = []
   if (!s.id_sesion.trim()) errors.push({ field: 'id_sesion', message: 'El ID de sesión es obligatorio' })
   if (!s.fecha) errors.push({ field: 'fecha', message: 'La fecha es obligatoria' })
-  if (s.duracion_min < 5 || s.duracion_min > 300) errors.push({ field: 'duracion_min', message: 'Duración fuera de rango (5-300 min)' })
+  
+  const hasPlanificada = s.duracion_planificada_min !== undefined && s.duracion_planificada_min !== null
+  const hasReal = s.duracion_real_grupal_min !== undefined && s.duracion_real_grupal_min !== null
+  const hasHistorica = s.duracion_min !== undefined && s.duracion_min !== null
+
+  if (!hasPlanificada && !hasReal && !hasHistorica) {
+    errors.push({ field: 'duracion', message: 'Debe especificar al menos una duración' })
+  }
+
+  if (hasHistorica && (s.duracion_min! < 5 || s.duracion_min! > 300)) errors.push({ field: 'duracion_min', message: 'Duración histórica fuera de rango (5-300 min)' })
+  if (hasPlanificada && (s.duracion_planificada_min! < 5 || s.duracion_planificada_min! > 300)) errors.push({ field: 'duracion_planificada_min', message: 'Duración planificada fuera de rango (5-300 min)' })
+  if (hasReal && (s.duracion_real_grupal_min! < 5 || s.duracion_real_grupal_min! > 300)) errors.push({ field: 'duracion_real_grupal_min', message: 'Duración real fuera de rango (5-300 min)' })
+
   return errors
 }
 
@@ -90,26 +110,49 @@ export function validateTest(t: TestFisico): ValidationError[] {
   return errors
 }
 
-export function validateRPE_Entreno(r: RPE_Entreno): ValidationError[] {
-  const errors: ValidationError[] = []
-  if (!r.id_sesion) errors.push({ field: 'id_sesion', message: 'Selecciona una sesión' })
-  if (!r.id_jugadora) errors.push({ field: 'id_jugadora', message: 'Selecciona una jugadora' })
-  const rpeErr = validateRange(r.rpe, 1, 10, 'RPE')
-  if (rpeErr) errors.push(rpeErr)
-  if (r.duracion_min < 5) errors.push({ field: 'duracion_min', message: 'Duración mínima 5 min' })
-  return errors
-}
-
 export function validateRPE_Partido(r: RPE_Partido): ValidationError[] {
   const errors: ValidationError[] = []
   if (!r.id_partido) errors.push({ field: 'id_partido', message: 'Selecciona un partido' })
   if (!r.id_jugadora) errors.push({ field: 'id_jugadora', message: 'Selecciona una jugadora' })
-  const rpeErr = validateRange(r.rpe, 1, 10, 'RPE')
-  if (rpeErr) errors.push(rpeErr)
-  if (r.minutos_jugados < 0 || r.minutos_jugados > 40) errors.push({ field: 'minutos_jugados', message: 'Minutos fuera de rango (0-40)' })
+  
+  if (r.rpe !== undefined && r.rpe !== null && r.rpe !== '' as any) {
+    const rpeErr = validateRange(r.rpe, 1, 10, 'RPE')
+    if (rpeErr) errors.push(rpeErr)
+  }
+  
+  if (r.minutos_jugados !== undefined && r.minutos_jugados !== null && r.minutos_jugados !== '' as any) {
+    if (r.minutos_jugados < 0 || r.minutos_jugados > 40) {
+      errors.push({ field: 'minutos_jugados', message: 'Minutos fuera de rango (0-40)' })
+    }
+  }
   return errors
 }
 
 export function formatValidationErrors(errors: ValidationError[]): string {
   return errors.map((e) => e.message).join('. ')
 }
+
+export function validateSesionRPE(srpe: SesionRPE): ValidationError[] {
+  const errors: ValidationError[] = []
+  if (!srpe.id_sesion?.trim()) errors.push({ field: 'id_sesion', message: 'ID de sesión requerido' })
+  if (!srpe.id_jugadora?.trim()) errors.push({ field: 'id_jugadora', message: 'Jugadora requerida' })
+  if (!srpe.fecha) errors.push({ field: 'fecha', message: 'Fecha requerida' })
+  
+  if (srpe.rpe !== undefined && srpe.rpe !== null && srpe.rpe !== '' as any) {
+    const rpeNum = Number(srpe.rpe)
+    if (isNaN(rpeNum) || rpeNum < 1 || rpeNum > 10) {
+      errors.push({ field: 'rpe', message: 'RPE debe ser 1-10' })
+    }
+  }
+  
+  if (srpe.duracion_min !== undefined && srpe.duracion_min !== null && srpe.duracion_min !== '' as any) {
+    const durNum = Number(srpe.duracion_min)
+    if (isNaN(durNum) || durNum < 0) {
+      errors.push({ field: 'duracion_min', message: 'Duración debe ser >= 0' })
+    }
+  }
+  return errors
+}
+
+export { isFechaLocalISO, validateFechaLocalISO } from '@/domain/dates/dates'
+

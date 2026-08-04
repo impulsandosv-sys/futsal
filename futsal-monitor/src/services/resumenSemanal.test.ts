@@ -6,7 +6,7 @@ vi.mock('@/db/database', () => ({
     jugadoras: { get: vi.fn(), toArray: vi.fn(() => Promise.resolve([])) },
     sesiones: { toArray: vi.fn(() => Promise.resolve([])) },
     partidos: { toArray: vi.fn(() => Promise.resolve([])) },
-    rpe_entreno: { toArray: vi.fn(() => Promise.resolve([])) },
+    sesion_rpe: { toArray: vi.fn(() => Promise.resolve([])) },
     rpe_partido: { toArray: vi.fn(() => Promise.resolve([])) },
     wellness: { toArray: vi.fn(() => Promise.resolve([])) },
     resumen_semanal: { put: vi.fn(), where: vi.fn(() => ({ toArray: vi.fn(() => Promise.resolve([])) })) },

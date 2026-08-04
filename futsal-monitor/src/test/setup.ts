@@ -1,19 +1,36 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
 
+const mockWhereClause = () => ({
+  equals: vi.fn(() => ({
+    toArray: vi.fn(() => Promise.resolve([])),
+    first: vi.fn(() => Promise.resolve(null)),
+  })),
+  toArray: vi.fn(() => Promise.resolve([])),
+  first: vi.fn(() => Promise.resolve(null)),
+})
+
 // Mock Dexie for tests
 vi.mock('@/db/database', () => ({
   db: {
-    jugadoras: { toArray: vi.fn(() => Promise.resolve([])) },
-    wellness: { toArray: vi.fn(() => Promise.resolve([])) },
-    sesiones: { toArray: vi.fn(() => Promise.resolve([])) },
-    partidos: { toArray: vi.fn(() => Promise.resolve([])) },
-    lesiones: { toArray: vi.fn(() => Promise.resolve([])) },
-    tests_fisicos: { toArray: vi.fn(() => Promise.resolve([])) },
-    rpe_entreno: { toArray: vi.fn(() => Promise.resolve([])) },
-    rpe_partido: { toArray: vi.fn(() => Promise.resolve([])) },
-    resumen_semanal: { toArray: vi.fn(() => Promise.resolve([])) },
-    alertas: { toArray: vi.fn(() => Promise.resolve([])) },
+    jugadoras: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
+    wellness: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
+    sesiones: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
+    partidos: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
+    lesiones: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
+    tests_fisicos: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
+    rpe_partido: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
+    resumen_semanal: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
+    alertas: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
+    sesion_rpe: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
+    readiness: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
+    ciclo_menstrual: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
+    historial_importaciones: { 
+      toArray: vi.fn(() => Promise.resolve([])),
+      put: vi.fn(() => Promise.resolve()),
+      bulkPut: vi.fn(() => Promise.resolve()),
+      clear: vi.fn(() => Promise.resolve())
+    },
   },
 }))
 
@@ -31,4 +48,31 @@ vi.mock('@/utils/backup', () => ({
   createBackup: vi.fn(() => Promise.resolve()),
   startAutoBackup: vi.fn(),
   stopAutoBackup: vi.fn(),
+  getLastExternalBackupInfo: vi.fn(() => ({ exists: false, timestamp: null, daysSince: null })),
+  forceExternalBackup: vi.fn(() => Promise.resolve('mock-backup.json')),
+  parseBackupFile: vi.fn(() => Promise.resolve({ data: {} })),
+  restoreFromData: vi.fn(() => Promise.resolve(true)),
+}))
+
+// Global mock for Recharts to prevent timers/handles keeping Node event loop alive
+vi.mock('recharts', () => ({
+  ResponsiveContainer: ({ children }: any) => children,
+  LineChart: ({ children }: any) => children,
+  Line: () => null,
+  BarChart: ({ children }: any) => children,
+  Bar: () => null,
+  ComposedChart: ({ children }: any) => children,
+  ScatterChart: ({ children }: any) => children,
+  Scatter: () => null,
+  RadarChart: ({ children }: any) => children,
+  Radar: () => null,
+  PolarGrid: () => null,
+  PolarAngleAxis: () => null,
+  PolarRadiusAxis: () => null,
+  ZAxis: () => null,
+  XAxis: () => null,
+  YAxis: () => null,
+  CartesianGrid: () => null,
+  Tooltip: () => null,
+  Legend: () => null,
 }))

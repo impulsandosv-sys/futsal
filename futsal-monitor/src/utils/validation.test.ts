@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
-import type { Jugadora } from '@/types'
+import type { Jugadora, SesionRPE } from '@/types'
 
-import { validateIdUnico, validateRange, validateJugadora } from '@/utils/validation'
+import { validateIdUnico, validateRange, validateJugadora, validateSesionRPE, validateWellness } from '@/utils/validation'
 
 describe('validateIdUnico', () => {
   it('retorna error para id vacío', () => {
@@ -26,7 +26,7 @@ describe('validateIdUnico', () => {
   it('retorna error por caracteres inválidos', () => {
     const result = validateIdUnico('A@', [])
     expect(result).not.toBeNull()
-    expect(result?.message).toContain('solo contener letras')
+    expect(result?.message).toContain('solo puede contener')
   })
 
   it('retorna error por ID duplicado', () => {
@@ -118,7 +118,7 @@ describe('validateJugadora', () => {
     expect(result.some(e => e.field === 'anos_experiencia_futsal')).toBe(true)
   })
 
-  it('funciona con valores válidos', () => {
+  it('funciona con valores v\u00e1lidos', () => {
     const result = validateJugadora(defaultPlayer, [])
     expect(result.length).toBe(0)
   })
@@ -126,5 +126,105 @@ describe('validateJugadora', () => {
   it('retorna error para ID duplicado', () => {
     const result = validateJugadora(defaultPlayer, ['J01', 'J02'])
     expect(result.some(e => e.message.includes('ya existe'))).toBe(true)
+  })
+})
+
+describe('validateSesionRPE', () => {
+  const validInput: SesionRPE = {
+    id_sesion: 'SES01',
+    id_jugadora: 'J01',
+    rpe: 7,
+    duracion_min: 60,
+    fecha: '2026-01-15',
+    carga_ua: 420,
+  }
+
+  it('retorna error para id_sesion vac\u00edo', () => {
+    const input = { ...validInput, id_sesion: '' }
+    const result = validateSesionRPE(input)
+    expect(result.some(e => e.field === 'id_sesion')).toBe(true)
+  })
+
+  it('retorna error para id_jugadora vac\u00edo', () => {
+    const input = { ...validInput, id_jugadora: '' }
+    const result = validateSesionRPE(input)
+    expect(result.some(e => e.field === 'id_jugadora')).toBe(true)
+  })
+
+  it('retorna error para rpe fuera de rango (menor a 1)', () => {
+    const input = { ...validInput, rpe: 0 }
+    const result = validateSesionRPE(input)
+    expect(result.some(e => e.field === 'rpe')).toBe(true)
+  })
+
+  it('retorna error para rpe fuera de rango (mayor a 10)', () => {
+    const input = { ...validInput, rpe: 11 }
+    const result = validateSesionRPE(input)
+    expect(result.some(e => e.field === 'rpe')).toBe(true)
+  })
+
+  it('retorna error para duracion_min < 0', () => {
+    const input = { ...validInput, duracion_min: -1 }
+    const result = validateSesionRPE(input)
+    expect(result.some(e => e.field === 'duracion_min')).toBe(true)
+  })
+
+  it('retorna error para fecha vac\u00eda', () => {
+    const input = { ...validInput, fecha: '' }
+    const result = validateSesionRPE(input)
+    expect(result.some(e => e.field === 'fecha')).toBe(true)
+  })
+
+  it('funciona con entrada v\u00e1lida', () => {
+    const result = validateSesionRPE(validInput)
+    expect(result.length).toBe(0)
+  })
+})
+
+describe('validateWellness', () => {
+  const validInput = {
+    id_jugadora: 'J01',
+    fecha: '2026-07-13',
+    calidad_sueno: 8,
+    fatiga: 5,
+    dolor_muscular: 4,
+    estres: 3,
+    estado_animo: 7,
+    dolor_especifico: '',
+  }
+
+  it('funciona con entrada válida', () => {
+    const result = validateWellness(validInput)
+    expect(result.length).toBe(0)
+  })
+
+  it('permite valores nulos/vacíos (no respondidos)', () => {
+    const result = validateWellness({
+      ...validInput,
+      calidad_sueno: null as any,
+      fatiga: undefined as any,
+      dolor_muscular: '' as any,
+    })
+    expect(result.length).toBe(0)
+  })
+
+  it('retorna error para jugadora vacía', () => {
+    const result = validateWellness({ ...validInput, id_jugadora: '' })
+    expect(result.some(e => e.field === 'id_jugadora')).toBe(true)
+  })
+
+  it('retorna error para fecha vacía', () => {
+    const result = validateWellness({ ...validInput, fecha: '' })
+    expect(result.some(e => e.field === 'fecha')).toBe(true)
+  })
+
+  it('retorna error si un valor respondido está fuera de rango 1-10', () => {
+    const result = validateWellness({ ...validInput, calidad_sueno: 11 })
+    expect(result.some(e => e.field === 'calidad_sueno')).toBe(true)
+  })
+
+  it('retorna error si un valor respondido no es entero', () => {
+    const result = validateWellness({ ...validInput, fatiga: 5.5 })
+    expect(result.some(e => e.field === 'fatiga')).toBe(true)
   })
 })

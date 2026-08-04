@@ -6,12 +6,14 @@ import { Modal } from '@/components/shared/Modal'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { useNavigate } from 'react-router-dom'
 
+import { getTodayLocalISO } from '@/domain/dates/dates'
+
 export function TestsPage() {
   const { tests, jugadoras, filters, addTest } = useStore()
   const navigate = useNavigate()
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState({
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: getTodayLocalISO(),
     momento: 'Pretemporada', id_jugadora: '', test: '', resultado: 0, unidad: '', notas: '',
   })
 
@@ -101,7 +103,11 @@ export function TestsPage() {
             <select className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"
               value={form.id_jugadora} onChange={(e) => setForm({ ...form, id_jugadora: e.target.value })}>
               <option value="">Seleccionar</option>
-              {jugadoras.map((j) => <option key={j.id_jugadora} value={j.id_jugadora}>{j.nombre}</option>)}
+              {jugadoras
+                .filter((j) => j.activa !== false)
+                .map((j) => (
+                  <option key={j.id_jugadora} value={j.id_jugadora}>{j.nombre}</option>
+                ))}
             </select>
           </div>
           <div>

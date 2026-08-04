@@ -1,0 +1,20 @@
++ SESIÓN
+
+ID de sesión;Nombre;Lugar;Fecha;Comentarios
+1;SIMULATED;;27/02/2023;Use esta sesión para simular pruebas.
+
++ PERSONAS
+
+ID;Nombre;Sexo;Fecha nacimiento;Descripción;Altura;Peso;Longitud de la pierna;Altura de las caderas en flexión SJ;Deporte;Especialidad;Nivel;Comentarios
+1;bdfbd bdbd;F;24/08/2001;;170;50;0;0;Football;;Élite;
+2;fdbfdvs vasvsava;U;01/01/0001;;150;49;0;0;--Undefined;;Indefinido;
+
++ SALTOS SIMPLES
+
+ID de la persona;Nombre de la persona;ID de sesión;ID de salto;Tipo;TC;TV;Caída;Peso kg;Altura;Potencia;Fórmula de la potencia;Rigidez;Velocidad inicial;RSI;Fecha;Tiempo;Descripción;Simulado
+1;bdfbd bdbd;1;1;CMJ;0;0,572;0;0;40,068;686,579;Lewis 1974;0;2,804;0;2026-08-02;18:29:23;;Sí
+1;bdfbd bdbd;1;5;CMJ;0;0,67;0;0;55,103;805,161;Lewis 1974;0;3,288;0;2026-08-02;18:31:05;;Sí
+1;bdfbd bdbd;1;6;CMJ;0;0,534;0;0;35,016;641,838;Lewis 1974;0;2,621;0;2026-08-02;18:31:07;;Sí
+2;fdbfdvs vasvsava;1;2;CMJ;0;0,681;0;0;56,913;801,914;Lewis 1974;0;3,342;0;2026-08-02;18:30:49;;Sí
+2;fdbfdvs vasvsava;1;3;CMJ;0;0,518;0;0;32,855;609,283;Lewis 1974;0;2,539;0;2026-08-02;18:30:57;;Sí
+2;fdbfdvs vasvsava;1;4;CMJ;0;0,513;0;0;32,309;604,204;Lewis 1974;0;2,518;0;2026-08-02;18:31:00;;Sí

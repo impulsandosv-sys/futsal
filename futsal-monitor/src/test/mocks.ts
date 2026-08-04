@@ -1,4 +1,4 @@
-import type { Jugadora, Wellness, RPE_Entreno } from '@/types'
+import type { Jugadora, Wellness, SesionRPE } from '@/types'
 
 export function mockJugadora(overrides?: Partial<Jugadora>): Jugadora {
   return {
@@ -33,12 +33,12 @@ export function mockWellness(overrides?: Partial<Wellness>): Wellness {
   }
 }
 
-export function mockRPE_Entreno(overrides?: Partial<RPE_Entreno>): RPE_Entreno {
+export function mockSesionRPE(overrides?: Partial<SesionRPE>): SesionRPE {
   return {
     id: 1,
+    id_sesion: 'S001',
     id_jugadora: 'J001',
     fecha: '2026-07-01',
-    tipo_sesion: 'Fisico',
     rpe: 6,
     duracion_min: 60,
     carga_ua: 360,

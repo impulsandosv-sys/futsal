@@ -2,45 +2,35 @@ import { useMemo, useState } from 'react'
 import { useStore } from '@/store/store'
 import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { Filters } from '@/components/shared/Filters'
-import { calcularResumenSemanal, getWeekId, formatWeek, getLoadStatus } from '@/utils/calculations'
-import { db } from '@/db/database'
+import { formatWeek, getWeeksFromActivities, getLocalDateString } from '@/domain/dates/dates'
+import { getLoadStatus, calcularResumenEquipoSemanal, calcularCompletitudSemana } from '@/domain/monitoring/monitoring'
 import { exportToExcel } from '@/utils/export'
+import { generatePDFStaff } from '@/utils/pdf'
+import { construirDTOStaffResumenSemanal, construirDatosStaffPDFResumen } from '@/domain/privacy/exportPrivacy'
 import { useNavigate } from 'react-router-dom'
 
 export function WeeklySummaryPage() {
   const {
-    jugadoras, sesiones, partidos, rpe_entreno, rpe_partido,
-    wellness, resumen_semanal, filters,
+    jugadoras, sesiones, partidos, sesion_rpe,
+    resumen_semanal, filters, setFilter,
+    generateWeeklySummary
   } = useStore()
   const navigate = useNavigate()
   const [generating, setGenerating] = useState(false)
 
   const semanas = useMemo(() => {
     const allFechas = [...sesiones.map(s => s.fecha), ...partidos.map(p => p.fecha)]
-    const unique = new Set(allFechas.map(f => getWeekId(f)))
-    return Array.from(unique).sort().reverse()
+    return getWeeksFromActivities(allFechas)
   }, [sesiones, partidos])
-
-  const activePlayers = jugadoras.filter(j => j.activa)
 
   const handleGenerateWeek = async (semana: string) => {
     setGenerating(true)
     try {
-      for (const jug of activePlayers) {
-        const rs = calcularResumenSemanal(
-          jug.id_jugadora, semana, sesiones, partidos,
-          rpe_entreno, rpe_partido, wellness, resumen_semanal,
-        )
-        const existing = await db.resumen_semanal
-          .where({ id_jugadora: jug.id_jugadora, semana })
-          .first()
-        if (existing) {
-          await db.resumen_semanal.put({ ...rs, id: existing.id })
-        } else {
-          await db.resumen_semanal.put(rs)
-        }
-      }
-      await useStore.getState().loadAll()
+      await generateWeeklySummary(semana, {
+        incluirPartidos: filters.incluirPartidos ?? true,
+        incluirGimnasio: filters.incluirGimnasio ?? true,
+        incluirReadaptacion: filters.incluirReadaptacion ?? true,
+      })
     } finally {
       setGenerating(false)
     }
@@ -50,43 +40,73 @@ export function WeeklySummaryPage() {
   const resumenSemana = resumen_semanal.filter(rs => rs.semana === semanaActual)
 
   const equipoResumen = useMemo(() => {
-    if (resumenSemana.length === 0) return null
-    const n = resumenSemana.length
-    return {
-      carga_total: Math.round(resumenSemana.reduce((s, rs) => s + rs.carga_total, 0)),
-      carga_media: Math.round(resumenSemana.reduce((s, rs) => s + rs.carga_total, 0) / n * 10) / 10,
-      acwr_medio: Math.round(resumenSemana.reduce((s, rs) => s + rs.acwr, 0) / n * 100) / 100,
-      wellness_medio: Math.round(resumenSemana.reduce((s, rs) => s + rs.wellness_medio, 0) / n * 10) / 10,
-      con_datos: resumenSemana.filter(rs => rs.carga_total > 0).length,
-      riesgo: resumenSemana.filter(rs => rs.acwr >= 1.5).length,
-      elevado: resumenSemana.filter(rs => rs.acwr >= 1.3 && rs.acwr < 1.5).length,
-    }
+    return calcularResumenEquipoSemanal(resumenSemana)
   }, [resumenSemana])
 
+  const completitudSemana = useMemo(() => {
+    if (!semanaActual) return 0
+    const weekEnd = new Date(semanaActual)
+    weekEnd.setDate(weekEnd.getDate() + 6)
+    const weekEndStr = getLocalDateString(weekEnd)
+
+    const sesionesSemana = sesiones.filter(s => s.fecha >= semanaActual && s.fecha <= weekEndStr)
+    const rpesSemana = sesion_rpe.filter(r => r.fecha >= semanaActual && r.fecha <= weekEndStr)
+
+    return calcularCompletitudSemana(jugadoras, sesionesSemana, rpesSemana)
+  }, [semanaActual, sesiones, sesion_rpe, jugadoras])
+
   const handleExport = () => {
-    const data = resumenSemana.map(rs => {
+    const rawData = resumenSemana.map(rs => {
       const jug = jugadoras.find(j => j.id_jugadora === rs.id_jugadora)
       return {
-        Semana: formatWeek(rs.semana),
-        Jugadora: jug?.nombre || rs.id_jugadora,
-        'Carga Entreno': rs.carga_entreno,
-        'Carga Partido': rs.carga_partido,
-        'Carga Total': rs.carga_total,
-        'Carga Crónica': rs.carga_cronica,
-        ACWR: rs.acwr,
-        Wellness: rs.wellness_medio,
-        Sesiones: rs.num_sesiones,
-        Estado: rs.estado,
+        semana: formatWeek(rs.semana),
+        nombre: jug?.nombre || rs.id_jugadora,
+        carga_entreno: rs.carga_entreno,
+        carga_partido: rs.carga_partido,
+        carga_total: rs.carga_total,
+        carga_cronica: rs.carga_cronica,
+        acwr: rs.acwr,
+        wellness_medio: rs.wellness_medio,
+        num_sesiones: rs.num_sesiones,
+        estado: rs.estado,
       }
     })
-    exportToExcel(data, `resumen_semanal_${semanaActual}`)
+    const dtoData = construirDTOStaffResumenSemanal(rawData)
+    exportToExcel(dtoData, `resumen_semanal_${semanaActual}`)
+  }
+
+  const handlePDF = () => {
+    const rawData = resumenSemana.map(rs => {
+      const jug = jugadoras.find(j => j.id_jugadora === rs.id_jugadora)
+      return {
+        semana: formatWeek(rs.semana),
+        nombre: jug?.nombre || rs.id_jugadora,
+        carga_entreno: rs.carga_entreno,
+        carga_partido: rs.carga_partido,
+        carga_total: rs.carga_total,
+        carga_cronica: rs.carga_cronica,
+        acwr: rs.acwr,
+        wellness_medio: rs.wellness_medio,
+        num_sesiones: rs.num_sesiones,
+        estado: rs.estado,
+      }
+    })
+    const datosPDF = construirDatosStaffPDFResumen(semanaActual, rawData)
+    generatePDFStaff(datosPDF, `reporte_semanal_${semanaActual}`)
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" id="report-container">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-bold text-surface-800">Resumen Semanal</h1>
         <div className="flex gap-2">
+          <button
+            onClick={handlePDF}
+            disabled={resumenSemana.length === 0}
+            className="text-xs text-red-600 px-3 py-1.5 border border-red-200 rounded hover:bg-red-50 disabled:opacity-50"
+          >
+            PDF
+          </button>
           <button
             onClick={handleExport}
             disabled={resumenSemana.length === 0}
@@ -106,8 +126,39 @@ export function WeeklySummaryPage() {
 
       <Filters showPlayer showWeek />
 
-      {equipoResumen && (
-        <div className="grid grid-cols-5 gap-3">
+      <div className="bg-white rounded-lg border border-surface-200 p-3 flex flex-wrap gap-6 text-xs text-surface-600">
+        <span className="font-semibold text-surface-700 self-center">Incluir en Carga Semanal:</span>
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={filters.incluirPartidos ?? true}
+            onChange={(e) => setFilter('incluirPartidos', e.target.checked)}
+            className="rounded text-primary-600 focus:ring-primary-500 border-surface-300"
+          />
+          Partidos
+        </label>
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={filters.incluirGimnasio ?? true}
+            onChange={(e) => setFilter('incluirGimnasio', e.target.checked)}
+            className="rounded text-primary-600 focus:ring-primary-500 border-surface-300"
+          />
+          Gimnasio
+        </label>
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={filters.incluirReadaptacion ?? true}
+            onChange={(e) => setFilter('incluirReadaptacion', e.target.checked)}
+            className="rounded text-primary-600 focus:ring-primary-500 border-surface-300"
+          />
+          Recuperación / Readaptación
+        </label>
+      </div>
+
+      {equipoResumen && semanaActual && (
+        <div className="grid grid-cols-6 gap-3">
           <div className="bg-white rounded-lg border border-surface-200 p-3">
             <span className="text-[10px] text-surface-500 block">Carga total equipo</span>
             <span className="text-lg font-bold text-surface-800">{equipoResumen.carga_total} UA</span>
@@ -127,9 +178,17 @@ export function WeeklySummaryPage() {
             <span className="text-lg font-bold text-surface-800">{equipoResumen.wellness_medio}</span>
           </div>
           <div className="bg-white rounded-lg border border-surface-200 p-3">
-            <span className="text-[10px] text-surface-500 block">En riesgo (ACWR{'>'}1.5)</span>
-            <span className={`text-lg font-bold ${equipoResumen.riesgo > 0 ? 'text-red-600' : 'text-surface-800'}`}>
-              {equipoResumen.riesgo}
+            <span className="text-[10px] text-surface-500 block">Revisión prioritaria (ACWR &gt; 1.5)</span>
+            <span className={`text-lg font-bold ${equipoResumen.prioritarias > 0 ? 'text-red-600' : 'text-surface-800'}`}>
+              {equipoResumen.prioritarias}
+            </span>
+          </div>
+          <div className="bg-white rounded-lg border border-surface-200 p-3">
+            <span className="text-[10px] text-surface-500 block">Completitud datos</span>
+            <span className={`text-lg font-bold ${
+              completitudSemana >= 90 ? 'text-green-600' : completitudSemana >= 50 ? 'text-amber-600' : 'text-red-600'
+            }`}>
+              {completitudSemana}%
             </span>
           </div>
         </div>
@@ -153,10 +212,10 @@ export function WeeklySummaryPage() {
               <DataRow key={rs.id} onClick={() => navigate(`/jugadoras/${rs.id_jugadora}`)}>
                 <DataCell className="font-medium">{jug?.nombre || rs.id_jugadora}</DataCell>
                 <DataCell className="text-surface-500">{jug?.posicion || '—'}</DataCell>
-                <DataCell>{Math.round(rs.carga_entreno)}</DataCell>
-                <DataCell>{Math.round(rs.carga_partido)}</DataCell>
-                <DataCell className="font-medium">{Math.round(rs.carga_total)}</DataCell>
-                <DataCell>{Math.round(rs.carga_cronica)}</DataCell>
+                <DataCell>{rs.carga_entreno !== null && rs.carga_entreno !== undefined ? Math.round(rs.carga_entreno) : '—'}</DataCell>
+                <DataCell>{rs.carga_partido !== null && rs.carga_partido !== undefined ? Math.round(rs.carga_partido) : '—'}</DataCell>
+                <DataCell className="font-medium">{rs.carga_total !== null && rs.carga_total !== undefined ? Math.round(rs.carga_total) : '—'}</DataCell>
+                <DataCell>{rs.carga_cronica !== null && rs.carga_cronica !== undefined ? Math.round(rs.carga_cronica) : '—'}</DataCell>
                 <DataCell>
                   <span className={`font-semibold ${status.color.split(' ')[0]}`}>
                     {rs.acwr.toFixed(2)}

@@ -3,51 +3,49 @@ import { KPICard } from '@/components/dashboard/KPICards'
 import { WellnessChart } from '@/components/dashboard/WellnessChart'
 import { LoadChart } from '@/components/dashboard/LoadChart'
 import { AlertsWidget } from '@/components/dashboard/AlertsWidget'
+import { ReadinessTrafficLight } from '@/components/dashboard/ReadinessTrafficLight'
 import { TodayWidget } from '@/components/dashboard/TodayWidget'
 import { OnboardingGuide } from '@/components/dashboard/OnboardingGuide'
 import { useNavigate } from 'react-router-dom'
+import { useMemo } from 'react'
+import { filtrarYCalcularResumenDashboard } from '@/domain/monitoring/monitoring'
+
+import { getTodayLocalISO } from '@/domain/dates/dates'
 
 export function DashboardPage() {
   const {
-    jugadoras, wellness, resumen_semanal, lesiones, alertas,
+    jugadoras, wellness, resumen_semanal, lesiones, alertas, sesion_rpe,
   } = useStore()
   const navigate = useNavigate()
 
-  const activas = jugadoras.filter((j) => j.activa)
-  const lesionadasActivas = lesiones.filter((l) => !l.disponible)
+  const hoyStr = useMemo(() => getTodayLocalISO(), [])
 
-  const wellnessReciente = wellness.filter((w) => {
-    const d = new Date(w.fecha)
-    const semanaAtras = new Date()
-    semanaAtras.setDate(semanaAtras.getDate() - 7)
-    return d >= semanaAtras
-  })
+  const metrics = useMemo(() => {
+    return filtrarYCalcularResumenDashboard(
+      jugadoras,
+      wellness,
+      resumen_semanal,
+      alertas,
+      lesiones,
+      sesion_rpe,
+      hoyStr
+    )
+  }, [jugadoras, wellness, resumen_semanal, alertas, lesiones, sesion_rpe, hoyStr])
 
-  const wellnessMedio = wellnessReciente.length > 0
-    ? Math.round(wellnessReciente.reduce((s, w) => s + w.score_wellness, 0) / wellnessReciente.length * 10) / 10
-    : 0
+  const {
+    wellnessMedio,
+    jugConAlertasCount,
+    cargaSemanalTotal,
+    acwrMedio,
+    monotonia,
+    strain
+  } = metrics
 
-  const jugConAlertas = new Set(alertas.filter((a) => !a.leida).map((a) => a.id_jugadora)).size
+  const jugConAlertas = jugConAlertasCount
+  const activas = useMemo(() => jugadoras.filter((j) => j.activa !== false), [jugadoras])
+  const lesionadasActivas = useMemo(() => lesiones.filter((l) => !l.disponible), [lesiones])
 
-  const ultimoRS = resumen_semanal
-    .filter((rs) => rs.semana)
-    .sort((a, b) => b.semana.localeCompare(a.semana))
 
-  const cargaSemanalTotal = ultimoRS.length > 0
-    ? ultimoRS.filter((rs) => rs.semana === ultimoRS[0].semana).reduce((s, rs) => s + rs.carga_total, 0)
-    : 0
-
-  const acwrMedio = ultimoRS.length > 0
-    ? Math.round(ultimoRS.filter((rs) => rs.semana === ultimoRS[0].semana).reduce((s, rs) => s + rs.acwr, 0) / 
-        Math.max(1, ultimoRS.filter((rs) => rs.semana === ultimoRS[0].semana).length) * 100) / 100
-    : 0
-
-  const estados = new Map<string, number>()
-  jugadoras.filter(j => j.activa).forEach(j => {
-    const lesion = lesionadasActivas.find(l => l.id_jugadora === j.id_jugadora)
-    const estado = lesion ? 'Lesionada' : 'Disponible'
-    estados.set(estado, (estados.get(estado) || 0) + 1)
-  })
 
   return (
     <div className="space-y-6">
@@ -68,6 +66,10 @@ export function DashboardPage() {
             <KPICard label="Carga semanal total" value={Math.round(cargaSemanalTotal)} subtitle="UA" icon="◗" />
             <KPICard label="ACWR medio" value={acwrMedio.toFixed(2)} icon="◍" color={acwrMedio > 1.3 ? 'text-amber-600' : 'text-surface-800'} />
           </div>
+          <div className="grid grid-cols-6 gap-3 mt-3">
+            <KPICard label="Monotonía (7d)" value={monotonia.toFixed(2)} icon="📊" />
+            <KPICard label="Strain (7d)" value={Math.round(strain)} subtitle="UA" icon="⚡" />
+          </div>
         </div>
         <div className="col-span-1">
           <TodayWidget />
@@ -87,24 +89,16 @@ export function DashboardPage() {
 
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-lg border border-surface-200 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-semibold text-surface-700">Alertas recientes</h3>
-            <button onClick={() => navigate('/alertas')} className="text-[10px] text-primary-600 hover:underline">
-              Ver todas
-            </button>
-          </div>
+          <h3 className="text-xs font-semibold text-surface-700 mb-3">Alertas recientes</h3>
+          <button onClick={() => navigate('/alertas')} className="text-[10px] text-primary-600 hover:underline">
+            Ver todas
+          </button>
           <AlertsWidget />
         </div>
 
         <div className="bg-white rounded-lg border border-surface-200 p-4">
-          <h3 className="text-xs font-semibold text-surface-700 mb-3">Distribución estados</h3>
-          {Array.from(estados.entries()).map(([estado, count]) => (
-            <div key={estado} className="flex items-center justify-between py-1.5 border-b border-surface-100 last:border-0">
-              <span className="text-xs text-surface-600">{estado}</span>
-              <span className="text-xs font-semibold text-surface-800">{count}</span>
-            </div>
-          ))}
-          {estados.size === 0 && <div className="text-xs text-surface-400 text-center py-4">Sin datos</div>}
+          <h3 className="text-xs font-semibold text-surface-700 mb-3">Readiness Diaria</h3>
+          <ReadinessTrafficLight />
         </div>
 
         <div className="bg-white rounded-lg border border-surface-200 p-4">

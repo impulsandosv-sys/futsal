@@ -17,7 +17,7 @@ export function Filters({
 }: FiltersProps) {
   const { jugadoras, filters, setFilter, resetFilters } = useStore()
 
-  const players = jugadoras.filter((j) => j.activa)
+  const players = jugadoras.filter((j) => j.activa !== false)
 
   return (
     <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-white rounded-lg border border-surface-200">

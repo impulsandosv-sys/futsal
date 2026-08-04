@@ -60,7 +60,7 @@ export function MatchesPage() {
       >
         {filtered.map((p) => {
           const rpes = rpe_partido.filter((r) => r.id_partido === p.id_partido)
-          const cargaTotal = rpes.reduce((s, r) => s + r.carga_ua, 0)
+          const cargaTotal = rpes.reduce((s, r) => s + (r.carga_ua || 0), 0)
           return (
             <DataRow key={p.id_partido}>
               <DataCell className="font-mono text-[10px] text-surface-500">{p.id_partido}</DataCell>
@@ -141,7 +141,7 @@ export function MatchesPage() {
             <select className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"
               value={rpeForm.id_jugadora} onChange={(e) => setRpeForm({ ...rpeForm, id_jugadora: e.target.value })}>
               <option value="">Seleccionar</option>
-              {jugadoras.filter(j => j.activa).map((j) => (
+              {jugadoras.filter(j => j.activa !== false).map((j) => (
                 <option key={j.id_jugadora} value={j.id_jugadora}>{j.nombre}</option>
               ))}
             </select>

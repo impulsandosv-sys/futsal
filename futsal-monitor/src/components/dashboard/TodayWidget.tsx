@@ -2,29 +2,37 @@ import { useStore } from '@/store/store'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { useMemo } from 'react'
+import { getTodayLocalISO } from '@/domain/dates/dates'
+import { filtrarYCalcularResumenHoy } from '@/domain/monitoring/monitoring'
+import type { Jugadora } from '@/types'
 
 export function TodayWidget() {
   const { jugadoras, wellness, sesiones, partidos, lesiones } = useStore()
   const navigate = useNavigate()
 
-  const hoy = new Date().toISOString().split('T')[0]
-  const activas = jugadoras.filter((j) => j.activa)
+  const hoy = useMemo(() => getTodayLocalISO(), [])
+  const activas = useMemo(() => jugadoras.filter((j) => j.activa !== false), [jugadoras])
 
-  const wellnessHoy = wellness.filter((w) => w.fecha === hoy)
-  const jugadorasConWellness = new Set(wellnessHoy.map((w) => w.id_jugadora))
-  const jugadorasSinWellness = activas.filter((j) => !jugadorasConWellness.has(j.id_jugadora))
+  const resumen = useMemo(() => {
+    return filtrarYCalcularResumenHoy(jugadoras, wellness, sesiones, partidos, lesiones, hoy)
+  }, [jugadoras, wellness, sesiones, partidos, lesiones, hoy])
 
-  const sesionHoy = sesiones.find((s) => s.fecha === hoy)
-  const partidoHoy = partidos.find((p) => p.fecha === hoy)
+  const {
+    pctRespuestas,
+    wellnessScoreMedio,
+    jugadorasSinWellness,
+    jugadorasConWellnessCount,
+    sesionHoy,
+    partidoHoy,
+    lesionesActivasCount,
+    enReadaptacionCount,
+  } = resumen
 
-  const lesionesActivas = lesiones.filter((l) => !l.disponible)
-  const enReadaptacion = lesionesActivas.filter((l) => l.fase_rtp !== 'N/A' && l.fase_rtp !== 'Fase_1_Reposo')
+  const jugadorasConWellness = { size: jugadorasConWellnessCount }
+  const lesionesActivas = { length: lesionesActivasCount }
+  const enReadaptacion = { length: enReadaptacionCount }
 
-  const wellnessScoreMedio = wellnessHoy.length > 0
-    ? Math.round(wellnessHoy.reduce((s, w) => s + w.score_wellness, 0) / wellnessHoy.length * 10) / 10
-    : 0
-
-  const pctRespuestas = activas.length > 0 ? Math.round(jugadorasConWellness.size / activas.length * 100) : 0
 
   return (
     <div className="bg-white rounded-lg border border-surface-200 p-4">
@@ -51,7 +59,7 @@ export function TodayWidget() {
           ) : sesionHoy ? (
             <div className="text-xs">
               <span className="font-semibold text-primary-600">{sesionHoy.tipo_sesion}</span>
-              <span className="text-surface-400 ml-1">{sesionHoy.duracion_min} min</span>
+              <span className="text-surface-400 ml-1">{sesionHoy.duracion_planificada_min ? `${sesionHoy.duracion_planificada_min} min` : 'Planificación no registrada'}</span>
             </div>
           ) : (
             <span className="text-xs text-surface-400">Sin actividad programada</span>
@@ -84,10 +92,10 @@ export function TodayWidget() {
       {jugadorasSinWellness.length > 0 && (
         <div className="mb-3">
           <span className="text-[10px] font-medium text-surface-600 block mb-1.5">
-            Sin wellness hoy ({jugadorasSinWellness.length})
+            Wellness pendiente hoy ({jugadorasSinWellness.length})
           </span>
           <div className="flex flex-wrap gap-1">
-            {jugadorasSinWellness.map((j) => (
+            {jugadorasSinWellness.map((j: Jugadora) => (
               <span key={j.id_jugadora} className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded">
                 {j.nombre}
               </span>

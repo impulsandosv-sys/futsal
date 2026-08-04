@@ -3,10 +3,12 @@ export type Theme = 'light' | 'dark'
 const THEME_KEY = 'futsal_theme'
 
 export function getStoredTheme(): Theme {
+  if (typeof localStorage === 'undefined') return 'light'
   return (localStorage.getItem(THEME_KEY) as Theme) || 'light'
 }
 
 export function setStoredTheme(t: Theme): void {
+  if (typeof localStorage === 'undefined') return
   localStorage.setItem(THEME_KEY, t)
 }
 

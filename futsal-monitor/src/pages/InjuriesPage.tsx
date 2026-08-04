@@ -4,26 +4,48 @@ import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { Filters } from '@/components/shared/Filters'
 import { Modal } from '@/components/shared/Modal'
 import { AlertBadge } from '@/components/shared/AlertBadge'
-import type { Lesion, FaseRTP, Disponibilidad } from '@/types'
+import type { Lesion, FaseRTP, Disponibilidad, RTPChecklist } from '@/types'
+import { getTodayLocalISO } from '@/domain/dates/dates'
 
 export function InjuriesPage() {
-  const { lesiones, jugadoras, addLesion, updateLesion } = useStore()
+  const { lesiones, jugadoras, addLesion, updateLesion, rtp_checklist, addRTPChecklist, updateRTPChecklist } = useStore()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Lesion | null>(null)
+  
+  const [rtpOpen, setRtpOpen] = useState(false)
+  const [rtpForm, setRtpForm] = useState<RTPChecklist | null>(null)
   const [form, setForm] = useState<Lesion>({
-    id_lesion: '', id_jugadora: '', fecha_inicio: new Date().toISOString().split('T')[0],
+    id_lesion: '', id_jugadora: '', fecha_inicio: getTodayLocalISO(),
     fecha_fin: '', tipo: '', localizacion: '', mecanismo: '', severidad_dias_baja: 0,
     disponibilidad: 'Lesionada', comentario_fisio_medico: '', fase_rtp: 'N/A', disponible: false,
   })
 
   const activas = lesiones.filter((l) => !l.disponible)
 
+  const openRTP = (lesion: Lesion) => {
+    const existing = rtp_checklist.find(r => r.id_lesion === lesion.id_lesion)
+    if (existing) {
+      setRtpForm(existing)
+    } else {
+      setRtpForm({
+        id_lesion: lesion.id_lesion,
+        fase_1_dolor_controlado: false,
+        fase_2_rango_movimiento: false,
+        fase_3_fuerza_simetrica: false,
+        fase_4_carrera_lineal: false,
+        fase_5_cambios_direccion: false,
+        fase_6_contacto_completo: false,
+      })
+    }
+    setRtpOpen(true)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-bold text-surface-800">Lesiones y Readaptación</h1>
         <button onClick={() => { setEditing(null); setForm({
-          id_lesion: '', id_jugadora: '', fecha_inicio: new Date().toISOString().split('T')[0],
+          id_lesion: '', id_jugadora: '', fecha_inicio: getTodayLocalISO(),
           fecha_fin: '', tipo: '', localizacion: '', mecanismo: '', severidad_dias_baja: 0,
           disponibilidad: 'Lesionada', comentario_fisio_medico: '', fase_rtp: 'N/A', disponible: false,
         }); setModalOpen(true) }}
@@ -76,8 +98,12 @@ export function InjuriesPage() {
                 {l.disponible ? <AlertBadge level="bajo" label="Sí" /> : <AlertBadge level="alto" label="No" />}
               </DataCell>
               <DataCell>
-                <button onClick={() => { setEditing(l); setForm(l); setModalOpen(true) }}
-                  className="text-[10px] text-primary-600 hover:underline">Editar</button>
+                <div className="flex gap-2">
+                  <button onClick={() => { setEditing(l); setForm(l); setModalOpen(true) }}
+                    className="text-[10px] text-primary-600 hover:underline">Editar</button>
+                  <button onClick={() => openRTP(l)}
+                    className="text-[10px] text-emerald-600 hover:underline">RTP</button>
+                </div>
               </DataCell>
             </DataRow>
           )
@@ -97,7 +123,11 @@ export function InjuriesPage() {
             <select className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"
               value={form.id_jugadora} onChange={(e) => setForm({ ...form, id_jugadora: e.target.value })}>
               <option value="">Seleccionar</option>
-              {jugadoras.map((j) => <option key={j.id_jugadora} value={j.id_jugadora}>{j.nombre}</option>)}
+              {jugadoras
+                .filter((j) => j.activa !== false || (editing && j.id_jugadora === editing.id_jugadora))
+                .map((j) => (
+                  <option key={j.id_jugadora} value={j.id_jugadora}>{j.nombre}</option>
+                ))}
             </select>
           </div>
           <div>
@@ -175,6 +205,48 @@ export function InjuriesPage() {
           </button>
         </div>
       </Modal>
+
+      {rtpForm && (
+        <Modal open={rtpOpen} onClose={() => setRtpOpen(false)} title="Checklist Return to Play (RTP)">
+          <div className="space-y-4">
+            <h4 className="text-xs font-semibold text-surface-700">Criterios de Alta Médica</h4>
+            <div className="flex flex-col gap-2 text-xs">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={rtpForm.fase_1_dolor_controlado} onChange={e => setRtpForm({...rtpForm, fase_1_dolor_controlado: e.target.checked})} /> Fase 1: Dolor controlado y sin inflamación
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={rtpForm.fase_2_rango_movimiento} onChange={e => setRtpForm({...rtpForm, fase_2_rango_movimiento: e.target.checked})} /> Fase 2: Rango de movimiento completo
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={rtpForm.fase_3_fuerza_simetrica} onChange={e => setRtpForm({...rtpForm, fase_3_fuerza_simetrica: e.target.checked})} /> Fase 3: Fuerza isométrica simétrica (&gt;90%)
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={rtpForm.fase_4_carrera_lineal} onChange={e => setRtpForm({...rtpForm, fase_4_carrera_lineal: e.target.checked})} /> Fase 4: Carrera lineal sin molestias
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={rtpForm.fase_5_cambios_direccion} onChange={e => setRtpForm({...rtpForm, fase_5_cambios_direccion: e.target.checked})} /> Fase 5: Cambios de dirección e intensidad
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={rtpForm.fase_6_contacto_completo} onChange={e => setRtpForm({...rtpForm, fase_6_contacto_completo: e.target.checked})} /> Fase 6: Contacto y alta competitiva
+              </label>
+            </div>
+            
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setRtpOpen(false)} className="text-xs text-surface-600 px-3 py-1.5 border border-surface-200 rounded">Cerrar</button>
+              <button onClick={async () => {
+                if (rtpForm.id) await updateRTPChecklist(rtpForm); 
+                else await addRTPChecklist(rtpForm)
+                
+                // Si todo está marcado, podríamos auto-activar a la jugadora. 
+                // Para MVP, simplemente guardamos el checklist.
+                setRtpOpen(false)
+              }} className="text-xs text-white bg-primary-600 px-3 py-1.5 rounded hover:bg-primary-700">
+                Guardar RTP
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

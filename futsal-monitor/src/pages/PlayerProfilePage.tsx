@@ -1,40 +1,115 @@
-import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '@/store/store'
 import { useState, useMemo } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from 'recharts'
-import { getWellnessLevel, getWellnessThreshold, getLoadStatus, formatWeek, calcularScoreWellness } from '@/utils/calculations'
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, Legend, ComposedChart, ScatterChart, Scatter, ZAxis, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'recharts'
+import { getWellnessLevel, getWellnessThreshold, getLoadStatus, calcularCargaDiariaUltimosDias, calcularEdad, obtenerListaReadinessDeterminista } from '@/domain/monitoring/monitoring'
+import { calcularScoreWellness } from '@/domain/calculations/loadCalculations'
+import { formatWeek, getTodayLocalISO } from '@/domain/dates/dates'
 import { Modal } from '@/components/shared/Modal'
-import type { Wellness } from '@/types'
+import { StrengthDetailModal } from '@/components/fuerza/StrengthDetailModal'
+import { calcularResumenSesionFuerza } from '@/domain/neuromuscular/fuerzaEngine'
+import type { Wellness, FinalidadSesionFuerza } from '@/types'
+
+import { PlayerAliasSection } from '@/components/player/PlayerAliasSection'
+
+const FINALIDADES_MAP: Record<FinalidadSesionFuerza, string> = {
+  fuerza_maxima: 'Fuerza Máxima',
+  hipertrofia: 'Hipertrofia',
+  potencia: 'Potencia',
+  mantenimiento: 'Mantenimiento',
+  prevencion: 'Prevención',
+  readaptacion: 'Readaptación',
+  otro: 'Otro',
+}
 
 export function PlayerProfilePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { jugadoras, wellness, lesiones, tests, rpe_entreno, rpe_partido, resumen_semanal, updateWellness, addTest } = useStore()
+  const [searchParams] = useSearchParams()
+  const location = useLocation()
+
+  const initialTabParam = (searchParams.get('tab') || (location.state as { tab?: string })?.tab) as any
+
+  const {
+    jugadoras, wellness, lesiones, tests, rpe_partido, resumen_semanal, readiness, 
+    updateWellness, addTest, sesion_rpe, sesiones,
+    ciclo_menstrual, carga_gps, fuerza_vbt, hidratacion, test_psicologico,
+    pruebas_cmj, sesiones_fuerza_individual, trabajos_fuerza, ejercicios_fuerza,
+    addCicloMenstrual, addCargaGPS, addFuerzaVBT, addHidratacion, addTestPsicologico
+  } = useStore()
+
+  const hoyStr = useMemo(() => getTodayLocalISO(), [])
+  const [wellnessRange, setWellnessRange] = useState<7 | 28>(7)
 
   const jugadora = jugadoras.find((j) => j.id_jugadora === id)
   const [activeTabCache, setActiveTabCache] = useState<Record<string, string>>({})
-  const tab = (activeTabCache[id || ''] as 'resumen' | 'wellness' | 'carga' | 'tests' | 'lesiones' | 'semanal') || 'resumen'
+  const tab = (activeTabCache[id || ''] as 'resumen' | 'wellness' | 'carga' | 'tests' | 'lesiones' | 'semanal' | 'readiness' | 'ciclo' | 'gps' | 'vbt' | 'hidratacion' | 'psicologia' | 'cmj' | 'fuerza' | 'alias') || (initialTabParam && ['resumen', 'wellness', 'carga', 'tests', 'lesiones', 'semanal', 'readiness', 'ciclo', 'gps', 'vbt', 'hidratacion', 'psicologia', 'cmj', 'fuerza', 'alias'].includes(initialTabParam) ? initialTabParam : 'resumen')
   const [editWellness, setEditWellness] = useState<Wellness | null>(null)
   const [wellnessForm, setWellnessForm] = useState<Wellness | null>(null)
   const [newTestOpen, setNewTestOpen] = useState(false)
   const [testForm, setTestForm] = useState({ fecha: '', momento: 'Pretemporada', test: '', resultado: 0, unidad: '', notas: '' })
 
-  const rpeEntrenoJug = rpe_entreno.filter((r) => r.id_jugadora === id)
-  const rpePartidoJug = rpe_partido.filter((r) => r.id_jugadora === id)
+  const [fuerzaFilters, setFuerzaFilters] = useState({
+    fecha_desde: '',
+    fecha_hasta: '',
+    finalidad: '',
+    id_ejercicio: '',
+  })
+  const [fuerzaDetailId, setFuerzaDetailId] = useState<string | null>(null)
+
+  const [newCicloOpen, setNewCicloOpen] = useState(false)
+  const [cicloForm, setCicloForm] = useState<any>({ fecha: '', fase: 'Menstruacion', sintomas: '', notas: '' })
+  
+  const [newGPSOpen, setNewGPSOpen] = useState(false)
+  const [gpsForm, setGpsForm] = useState<any>({ fecha: '', distancia_total: 0, distancia_hsr: 0, aceleraciones: 0, deceleraciones: 0, player_load: 0 })
+
+  const [newVBTOpen, setNewVBTOpen] = useState(false)
+  const [vbtForm, setVbtForm] = useState<any>({ fecha: '', ejercicio: 'Sentadilla', carga_kg: 0, velocidad_media: 0, velocidad_pico: 0, perdida_velocidad: 0 })
+
+  const [newHidratacionOpen, setNewHidratacionOpen] = useState(false)
+  const [hidratacionForm, setHidratacionForm] = useState<any>({ fecha: '', peso_pre: 0, peso_post: 0, liquido_ingerido_ml: 0, tasa_sudoracion: 0 })
+
+  const [newPsicologiaOpen, setNewPsicologiaOpen] = useState(false)
+  const [psicologiaForm, setPsicologiaForm] = useState<any>({ fecha: '', tension: 0, depresion: 0, ira: 0, vigor: 0, fatiga_mental: 0, confusion: 0, notas: '' })
+
+  const rpeEntrenoJug = useMemo(() => sesion_rpe.filter((r) => r.id_jugadora === id), [sesion_rpe, id])
+  const rpePartidoJug = useMemo(() => rpe_partido.filter((r) => r.id_jugadora === id), [rpe_partido, id])
+
 
   const cargaDiaria = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const r of rpeEntrenoJug) {
-      map.set(r.fecha, (map.get(r.fecha) || 0) + r.carga_ua)
-    }
-    for (const r of rpePartidoJug) {
-      map.set(r.fecha, (map.get(r.fecha) || 0) + r.carga_ua)
-    }
-    return Array.from(map.entries())
-      .map(([fecha, carga]) => ({ fecha: fecha.slice(5), carga }))
-      .sort((a, b) => a.fecha.localeCompare(b.fecha))
-      .slice(-14)
-  }, [rpeEntrenoJug, rpePartidoJug])
+    return calcularCargaDiariaUltimosDias(rpeEntrenoJug, rpePartidoJug, 14, hoyStr, sesiones)
+  }, [rpeEntrenoJug, rpePartidoJug, hoyStr, sesiones])
+
+  const wellnessJug = useMemo(() => wellness.filter((w) => w.id_jugadora === id).sort((a, b) => b.fecha.localeCompare(a.fecha)), [wellness, id])
+  const lesionesJug = useMemo(() => lesiones.filter((l) => l.id_jugadora === id).sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio)), [lesiones, id])
+  const testsJug = useMemo(() => tests.filter((t) => t.id_jugadora === id).sort((a, b) => b.fecha.localeCompare(a.fecha)), [tests, id])
+  const resumenJug = useMemo(() => resumen_semanal.filter((rs) => rs.id_jugadora === id).sort((a, b) => b.semana.localeCompare(a.semana)), [resumen_semanal, id])
+  const cicloJug = useMemo(() => ciclo_menstrual.filter((c) => c.id_jugadora === id).sort((a, b) => b.fecha.localeCompare(a.fecha)), [ciclo_menstrual, id])
+  const gpsJug = useMemo(() => carga_gps.filter((g) => g.id_jugadora === id).sort((a, b) => a.fecha.localeCompare(b.fecha)), [carga_gps, id])
+  const vbtJug = useMemo(() => fuerza_vbt.filter((v) => v.id_jugadora === id).sort((a, b) => a.fecha.localeCompare(b.fecha)), [fuerza_vbt, id])
+  const hidratacionJug = useMemo(() => hidratacion.filter((h) => h.id_jugadora === id).sort((a, b) => a.fecha.localeCompare(b.fecha)), [hidratacion, id])
+  const psicoJug = useMemo(() => test_psicologico.filter((t) => t.id_jugadora === id).sort((a, b) => a.fecha.localeCompare(b.fecha)), [test_psicologico, id])
+  const cmjJug = useMemo(() => pruebas_cmj.filter((p) => p.id_jugadora === id).sort((a, b) => b.fecha.localeCompare(a.fecha) || b.createdAt.localeCompare(a.createdAt)), [pruebas_cmj, id])
+  const fuerzaJug = useMemo(() => sesiones_fuerza_individual.filter((s) => s.id_jugadora === id).sort((a, b) => b.fecha.localeCompare(a.fecha) || b.createdAt.localeCompare(a.createdAt)), [sesiones_fuerza_individual, id])
+
+  const filteredFuerzaJug = useMemo(() => {
+    return fuerzaJug.filter((s) => {
+      if (fuerzaFilters.fecha_desde && s.fecha < fuerzaFilters.fecha_desde) return false
+      if (fuerzaFilters.fecha_hasta && s.fecha > fuerzaFilters.fecha_hasta) return false
+      if (fuerzaFilters.finalidad && s.finalidad !== fuerzaFilters.finalidad) return false
+      if (fuerzaFilters.id_ejercicio) {
+        const tieneEjercicio = trabajos_fuerza.some(
+          (t) =>
+            (t.id_sesion_fuerza === s.id_sesion_fuerza || t.id_sesion === s.id_sesion_fuerza) &&
+            t.id_ejercicio === fuerzaFilters.id_ejercicio
+        )
+        if (!tieneEjercicio) return false
+      }
+      return true
+    })
+  }, [fuerzaJug, trabajos_fuerza, fuerzaFilters])
+
+  const wellnessGrafico = useMemo(() => wellnessJug.slice().reverse().slice(-wellnessRange), [wellnessJug, wellnessRange])
 
   if (!jugadora) {
     return (
@@ -48,15 +123,8 @@ export function PlayerProfilePage() {
   }
 
   const edad = jugadora.fecha_nacimiento
-    ? Math.floor((Date.now() - new Date(jugadora.fecha_nacimiento).getTime()) / 31557600000)
+    ? calcularEdad(jugadora.fecha_nacimiento, hoyStr)
     : null
-
-  const wellnessJug = wellness.filter((w) => w.id_jugadora === id).sort((a, b) => b.fecha.localeCompare(a.fecha))
-  const lesionesJug = lesiones.filter((l) => l.id_jugadora === id).sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio))
-  const testsJug = tests.filter((t) => t.id_jugadora === id).sort((a, b) => b.fecha.localeCompare(a.fecha))
-  const resumenJug = resumen_semanal.filter((rs) => rs.id_jugadora === id).sort((a, b) => b.semana.localeCompare(a.semana))
-
-  const wellnessGrafico = wellnessJug.slice().reverse().slice(-14)
 
   const lesionActiva = lesionesJug.find((l) => !l.disponible)
 
@@ -67,9 +135,18 @@ export function PlayerProfilePage() {
     { key: 'resumen', label: 'Resumen' },
     { key: 'wellness', label: 'Wellness' },
     { key: 'carga', label: 'Carga' },
+    { key: 'readiness', label: 'Readiness' },
+    { key: 'ciclo', label: 'Ciclo' },
+    { key: 'gps', label: 'GPS' },
+    { key: 'vbt', label: 'VBT' },
+    { key: 'hidratacion', label: 'Hidratación' },
+    { key: 'psicologia', label: 'Psicología' },
     { key: 'tests', label: 'Tests' },
+    { key: 'cmj', label: 'CMJ' },
+    { key: 'fuerza', label: 'Fuerza' },
     { key: 'lesiones', label: 'Lesiones' },
     { key: 'semanal', label: 'Semanal' },
+    { key: 'alias', label: 'Alias' },
   ] as const
 
   const handleSaveWellness = async () => {
@@ -92,11 +169,20 @@ export function PlayerProfilePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate('/jugadoras')} className="text-surface-400 hover:text-surface-600 text-sm">&larr;</button>
-        <div>
-          <h1 className="text-lg font-bold text-surface-800">{jugadora.nombre}</h1>
-          <p className="text-[10px] text-surface-500">{jugadora.posicion} · {jugadora.id_jugadora}</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate('/jugadoras')} className="text-surface-400 hover:text-surface-600 text-sm">&larr;</button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-bold text-surface-800">{jugadora.nombre}</h1>
+              {jugadora.activa === false && (
+                <span className="px-2 py-0.5 text-[10px] font-semibold bg-surface-200 text-surface-600 rounded">
+                  Archivada
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] text-surface-500">{jugadora.posicion} · {jugadora.id_jugadora}</p>
+          </div>
         </div>
       </div>
 
@@ -252,21 +338,78 @@ export function PlayerProfilePage() {
               </div>
             )}
           </div>
+          <div className="bg-white rounded-lg border border-surface-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-surface-700">Fuerza reciente</h3>
+              <button
+                onClick={() => setActiveTabCache((prev) => ({ ...prev, [id || '']: 'fuerza' }))}
+                className="text-[10px] text-primary-600 hover:underline font-medium"
+              >
+                Ver historial de fuerza
+              </button>
+            </div>
+            {fuerzaJug.length > 0 ? (
+              <div className="space-y-2">
+                {fuerzaJug.slice(0, 3).map((sesion) => {
+                  const sesTrabajos = trabajos_fuerza.filter(
+                    (t) => t.id_sesion_fuerza === sesion.id_sesion_fuerza || t.id_sesion === sesion.id_sesion_fuerza
+                  )
+                  const summary = calcularResumenSesionFuerza(sesTrabajos)
+
+                  return (
+                    <div key={sesion.id_sesion_fuerza} className="flex items-center justify-between text-[10px] py-1 border-b border-surface-100 last:border-0">
+                      <div>
+                        <span className="font-semibold text-surface-800">{sesion.fecha}</span>
+                        <span className="text-surface-400 ml-1.5 font-normal">
+                          ({summary.ejerciciosCount} ej / {summary.seriesCount} series)
+                        </span>
+                      </div>
+                      <span className="font-medium text-primary-700">{summary.tonelajeLabel}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-[10px] text-surface-400">Sin sesiones de fuerza registradas</p>
+            )}
+          </div>
         </div>
       )}
 
       {tab === 'wellness' && (
         <div className="space-y-4">
           <div className="bg-white rounded-lg border border-surface-200 p-4">
-            <h3 className="text-xs font-semibold text-surface-700 mb-3">Evolución wellness (14 días)</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-surface-700">Evolución componentes de wellness</h3>
+              <div className="flex gap-1 bg-surface-100 p-0.5 rounded border border-surface-200">
+                <button
+                  onClick={() => setWellnessRange(7)}
+                  className={`text-[10px] px-2 py-0.5 rounded transition-colors ${wellnessRange === 7 ? 'bg-white text-surface-800 font-medium shadow-sm' : 'text-surface-500 hover:text-surface-700'}`}
+                >
+                  7 días
+                </button>
+                <button
+                  onClick={() => setWellnessRange(28)}
+                  className={`text-[10px] px-2 py-0.5 rounded transition-colors ${wellnessRange === 28 ? 'bg-white text-surface-800 font-medium shadow-sm' : 'text-surface-500 hover:text-surface-700'}`}
+                >
+                  28 días
+                </button>
+              </div>
+            </div>
             {wellnessGrafico.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={wellnessGrafico} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="fecha" tick={{ fontSize: 10 }} />
                   <YAxis domain={[0, 10]} tick={{ fontSize: 10 }} />
                   <Tooltip contentStyle={{ fontSize: 12 }} />
-                  <Line type="monotone" dataKey="score_wellness" stroke="#1a6dff" strokeWidth={2} name="Wellness" dot={{ r: 3 }} />
+                  <Legend wrapperStyle={{ fontSize: 10, paddingTop: 10 }} />
+                  <Line type="monotone" dataKey="score_wellness" stroke="#1a6dff" strokeWidth={3} name="Score" dot={{ r: 3 }} connectNulls={true} />
+                  <Line type="monotone" dataKey="calidad_sueno" stroke="#3b82f6" strokeWidth={1.5} name="Sueño" strokeDasharray="3 3" dot={{ r: 2 }} connectNulls={true} />
+                  <Line type="monotone" dataKey="fatiga" stroke="#f59e0b" strokeWidth={1.5} name="Fatiga" strokeDasharray="3 3" dot={{ r: 2 }} connectNulls={true} />
+                  <Line type="monotone" dataKey="dolor_muscular" stroke="#ef4444" strokeWidth={1.5} name="Dolor Musc." strokeDasharray="3 3" dot={{ r: 2 }} connectNulls={true} />
+                  <Line type="monotone" dataKey="estres" stroke="#a855f7" strokeWidth={1.5} name="Estrés" strokeDasharray="3 3" dot={{ r: 2 }} connectNulls={true} />
+                  <Line type="monotone" dataKey="estado_animo" stroke="#10b981" strokeWidth={1.5} name="Ánimo" strokeDasharray="3 3" dot={{ r: 2 }} connectNulls={true} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -298,11 +441,11 @@ export function PlayerProfilePage() {
                   }}
                 >
                   <td className="px-3 py-2 text-surface-700">{w.fecha}</td>
-                  <td className="px-3 py-2">{w.calidad_sueno}</td>
-                  <td className="px-3 py-2">{w.fatiga}</td>
-                  <td className="px-3 py-2">{w.dolor_muscular}</td>
-                  <td className="px-3 py-2">{w.estres}</td>
-                  <td className="px-3 py-2">{w.estado_animo}</td>
+                  <td className="px-3 py-2">{(w.calidad_sueno !== null && w.calidad_sueno !== undefined) ? w.calidad_sueno : '—'}</td>
+                  <td className="px-3 py-2">{(w.fatiga !== null && w.fatiga !== undefined) ? w.fatiga : '—'}</td>
+                  <td className="px-3 py-2">{(w.dolor_muscular !== null && w.dolor_muscular !== undefined) ? w.dolor_muscular : '—'}</td>
+                  <td className="px-3 py-2">{(w.estres !== null && w.estres !== undefined) ? w.estres : '—'}</td>
+                  <td className="px-3 py-2">{(w.estado_animo !== null && w.estado_animo !== undefined) ? w.estado_animo : '—'}</td>
                   <td className={`px-3 py-2 font-semibold ${getWellnessThreshold(getWellnessLevel(w.score_wellness)).color.split(' ')[0]}`}>
                     {w.score_wellness}
                   </td>
@@ -331,6 +474,168 @@ export function PlayerProfilePage() {
             ) : (
               <p className="text-xs text-surface-400 text-center py-8">Sin datos de carga</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'readiness' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-lg border border-surface-200 p-4">
+            <h3 className="text-xs font-semibold text-surface-700 mb-3">Historial de Readiness (14 días)</h3>
+            {(() => {
+              const readinessJug = obtenerListaReadinessDeterminista(readiness, id)
+                .sort((a, b) => b.fecha.localeCompare(a.fecha))
+                .slice(0, 14)
+              if (readinessJug.length === 0) return <p className="text-xs text-surface-400 text-center py-8">Sin datos de readiness</p>
+              return (
+                <div className="space-y-1">
+                  {readinessJug.map(r => {
+                    const dotColor = r.nivel === 'rojo' ? 'bg-red-500' : r.nivel === 'ambar' ? 'bg-amber-500' : 'bg-green-500'
+                    return (
+                      <div key={r.fecha} className="flex items-center justify-between px-2 py-1.5 text-xs border-b border-surface-100">
+                        <span className="text-surface-600">{r.fecha.slice(5)}</span>
+                        <div className="flex items-center gap-3">
+                          <span className={`w-2 h-2 rounded-full ${dotColor}`}></span>
+                          <span className="font-mono text-surface-800 font-medium">{r.score}</span>
+                          <span className="text-[10px] text-surface-500">ACWR: {r.factores.acwr.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+          </div>
+        </div>
+      )}
+
+      {tab === 'ciclo' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button onClick={() => setNewCicloOpen(true)} className="bg-primary-600 text-white text-xs font-medium px-3 py-1.5 rounded hover:bg-primary-700">
+              + Añadir Ciclo
+            </button>
+          </div>
+          <div className="bg-white rounded-lg border border-surface-200 p-4">
+            <h3 className="text-xs font-semibold text-surface-700 mb-3">Historial de Ciclo Menstrual</h3>
+            {cicloJug.length > 0 ? (
+              <table className="w-full text-xs">
+                <thead><tr className="bg-surface-50 border-b border-surface-200"><th className="text-left px-3 py-2">Fecha</th><th className="text-left px-3 py-2">Fase</th><th className="text-left px-3 py-2">Síntomas</th></tr></thead>
+                <tbody>{cicloJug.map(c => <tr key={c.id} className="border-b"><td className="px-3 py-2">{c.fecha}</td><td className="px-3 py-2">{c.fase}</td><td className="px-3 py-2">{c.sintomas}</td></tr>)}</tbody>
+              </table>
+            ) : <p className="text-xs text-surface-400 text-center py-8">Sin datos de ciclo</p>}
+          </div>
+        </div>
+      )}
+
+      {tab === 'gps' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button onClick={() => setNewGPSOpen(true)} className="bg-primary-600 text-white text-xs font-medium px-3 py-1.5 rounded hover:bg-primary-700">
+              + Añadir GPS
+            </button>
+          </div>
+          <div className="bg-white rounded-lg border border-surface-200 p-4">
+            <h3 className="text-xs font-semibold text-surface-700 mb-3">Carga Externa GPS</h3>
+            {gpsJug.length > 0 ? (
+              <ResponsiveContainer width="100%" height={250}>
+                <ComposedChart data={gpsJug}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="fecha" tick={{ fontSize: 10 }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="distancia_total" fill="#3b82f6" name="Dist. Total (m)" />
+                  <Line yAxisId="right" type="monotone" dataKey="distancia_hsr" stroke="#ef4444" name="HSR (m)" strokeWidth={2} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : <p className="text-xs text-surface-400 text-center py-8">Sin datos GPS</p>}
+          </div>
+        </div>
+      )}
+
+      {tab === 'vbt' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button onClick={() => setNewVBTOpen(true)} className="bg-primary-600 text-white text-xs font-medium px-3 py-1.5 rounded hover:bg-primary-700">
+              + Añadir VBT
+            </button>
+          </div>
+          <div className="bg-white rounded-lg border border-surface-200 p-4">
+            <h3 className="text-xs font-semibold text-surface-700 mb-3">Perfil Fuerza-Velocidad (VBT)</h3>
+            {vbtJug.length > 0 ? (
+              <ResponsiveContainer width="100%" height={250}>
+                <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <CartesianGrid />
+                  <XAxis type="number" dataKey="carga_kg" name="Carga" unit="kg" />
+                  <YAxis type="number" dataKey="velocidad_media" name="Vel. Media" unit="m/s" />
+                  <ZAxis type="category" dataKey="fecha" name="Fecha" />
+                  <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                  <Legend />
+                  <Scatter name="Sentadilla" data={vbtJug.filter(v => v.ejercicio === 'Sentadilla')} fill="#8884d8" />
+                </ScatterChart>
+              </ResponsiveContainer>
+            ) : <p className="text-xs text-surface-400 text-center py-8">Sin datos VBT</p>}
+          </div>
+        </div>
+      )}
+
+      {tab === 'hidratacion' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button onClick={() => setNewHidratacionOpen(true)} className="bg-primary-600 text-white text-xs font-medium px-3 py-1.5 rounded hover:bg-primary-700">
+              + Añadir Peso
+            </button>
+          </div>
+          <div className="bg-white rounded-lg border border-surface-200 p-4">
+            <h3 className="text-xs font-semibold text-surface-700 mb-3">Control Peso / Hidratación</h3>
+            {hidratacionJug.length > 0 ? (
+               <ResponsiveContainer width="100%" height={200}>
+                 <BarChart data={hidratacionJug}>
+                   <CartesianGrid strokeDasharray="3 3" />
+                   <XAxis dataKey="fecha" tick={{ fontSize: 10 }} />
+                   <YAxis tick={{ fontSize: 10 }} />
+                   <Tooltip />
+                   <Legend />
+                   <Bar dataKey="peso_pre" fill="#10b981" name="Peso Pre (kg)" />
+                   <Bar dataKey="peso_post" fill="#3b82f6" name="Peso Post (kg)" />
+                 </BarChart>
+               </ResponsiveContainer>
+            ) : <p className="text-xs text-surface-400 text-center py-8">Sin datos de peso</p>}
+          </div>
+        </div>
+      )}
+
+      {tab === 'psicologia' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button onClick={() => setNewPsicologiaOpen(true)} className="bg-primary-600 text-white text-xs font-medium px-3 py-1.5 rounded hover:bg-primary-700">
+              + Añadir Test (POMS)
+            </button>
+          </div>
+          <div className="bg-white rounded-lg border border-surface-200 p-4">
+            <h3 className="text-xs font-semibold text-surface-700 mb-3">Perfil de Estados de Ánimo (Último Test)</h3>
+            {psicoJug.length > 0 ? (
+               <ResponsiveContainer width="100%" height={250}>
+                 <RadarChart cx="50%" cy="50%" outerRadius="80%" data={
+                    [
+                      { subject: 'Tensión', A: psicoJug[psicoJug.length - 1].tension, fullMark: 10 },
+                      { subject: 'Depresión', A: psicoJug[psicoJug.length - 1].depresion, fullMark: 10 },
+                      { subject: 'Ira', A: psicoJug[psicoJug.length - 1].ira, fullMark: 10 },
+                      { subject: 'Vigor', A: psicoJug[psicoJug.length - 1].vigor, fullMark: 10 },
+                      { subject: 'Fatiga', A: psicoJug[psicoJug.length - 1].fatiga_mental, fullMark: 10 },
+                      { subject: 'Confusión', A: psicoJug[psicoJug.length - 1].confusion, fullMark: 10 }
+                    ]
+                 }>
+                   <PolarGrid />
+                   <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10 }} />
+                   <PolarRadiusAxis angle={30} domain={[0, 10]} />
+                   <Radar name="POMS" dataKey="A" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} />
+                   <Tooltip />
+                 </RadarChart>
+               </ResponsiveContainer>
+            ) : <p className="text-xs text-surface-400 text-center py-8">Sin datos psicológicos</p>}
           </div>
         </div>
       )}
@@ -369,6 +674,237 @@ export function PlayerProfilePage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {tab === 'cmj' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-sm font-semibold text-surface-800">Pruebas CMJ Recientes</h3>
+            <button 
+              onClick={() => navigate('/pruebas-cmj')}
+              className="text-xs text-primary-600 hover:underline font-medium"
+            >
+              Ver todas las pruebas &rarr;
+            </button>
+          </div>
+          
+          {cmjJug.length === 0 ? (
+            <p className="text-xs text-surface-400 text-center py-8 bg-surface-50 rounded-lg">Sin pruebas CMJ registradas</p>
+          ) : (
+            <div className="space-y-6">
+              {Array.from(new Set(cmjJug.map(c => c.id_protocolo))).map(protocoloId => {
+                const medicionesDeProtocolo = cmjJug.filter(c => c.id_protocolo === protocoloId).slice(0, 5)
+                const nombreProtocolo = medicionesDeProtocolo[0].protocolo_nombre_historico
+                
+                return (
+                  <div key={protocoloId} className="bg-white rounded-lg border border-surface-200 overflow-hidden">
+                    <div className="bg-surface-50 px-4 py-2 border-b border-surface-200">
+                      <h4 className="text-xs font-semibold text-surface-700">{nombreProtocolo}</h4>
+                    </div>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-surface-200 text-surface-500">
+                          <th className="text-left px-4 py-2 font-medium">Fecha</th>
+                          <th className="text-left px-4 py-2 font-medium">Finalidad</th>
+                          <th className="text-right px-4 py-2 font-medium">Altura Máx (cm)</th>
+                          <th className="text-right px-4 py-2 font-medium">Vuelo (ms)</th>
+                          <th className="text-center px-4 py-2 font-medium">Intentos Válidos</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-surface-100">
+                        {medicionesDeProtocolo.map(m => (
+                          <tr key={m.id_medicion} className="hover:bg-surface-50">
+                            <td className="px-4 py-2.5 text-surface-700">{m.fecha}</td>
+                            <td className="px-4 py-2.5 capitalize">{m.finalidad?.replace('_', ' ') || '—'}</td>
+                            <td className="px-4 py-2.5 text-right font-medium text-surface-900">
+                              {m.altura_mejor_cm != null ? m.altura_mejor_cm : '—'}
+                            </td>
+                            <td className="px-4 py-2.5 text-right text-surface-600">
+                              {m.tiempo_vuelo_mejor_ms != null ? m.tiempo_vuelo_mejor_ms : '—'}
+                            </td>
+                            <td className="px-4 py-2.5 text-center text-surface-500">
+                              {m.intentos.filter(i => i.valido).length} / {m.intentos.length}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'fuerza' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-white p-4 rounded-lg border border-surface-200">
+            <div>
+              <h3 className="text-sm font-bold text-surface-900">Historial de fuerza</h3>
+              <p className="text-xs text-surface-500 mt-0.5">
+                Sesiones individuales de fuerza registradas para esta jugadora.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate(`/fuerza?jugadora=${id}`)}
+              className="text-xs text-primary-600 hover:underline font-medium"
+            >
+              Ver todas en Fuerza
+            </button>
+          </div>
+
+          {/* Filtros locales */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 bg-white p-4 rounded-lg border border-surface-200">
+            <div>
+              <label className="block text-xs font-medium text-surface-500 mb-1">Desde</label>
+              <input
+                type="date"
+                className="w-full rounded border-surface-300 text-xs p-1.5"
+                value={fuerzaFilters.fecha_desde}
+                onChange={(e) => setFuerzaFilters({ ...fuerzaFilters, fecha_desde: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-surface-500 mb-1">Hasta</label>
+              <input
+                type="date"
+                className="w-full rounded border-surface-300 text-xs p-1.5"
+                value={fuerzaFilters.fecha_hasta}
+                onChange={(e) => setFuerzaFilters({ ...fuerzaFilters, fecha_hasta: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-surface-500 mb-1">Finalidad</label>
+              <select
+                className="w-full rounded border-surface-300 text-xs p-1.5"
+                value={fuerzaFilters.finalidad}
+                onChange={(e) => setFuerzaFilters({ ...fuerzaFilters, finalidad: e.target.value })}
+              >
+                <option value="">Todas</option>
+                {Object.entries(FINALIDADES_MAP).map(([val, label]) => (
+                  <option key={val} value={val}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-surface-500 mb-1">Ejercicio</label>
+              <select
+                className="w-full rounded border-surface-300 text-xs p-1.5"
+                value={fuerzaFilters.id_ejercicio}
+                onChange={(e) => setFuerzaFilters({ ...fuerzaFilters, id_ejercicio: e.target.value })}
+              >
+                <option value="">Todos</option>
+                {ejercicios_fuerza.map((ex) => (
+                  <option key={ex.id_ejercicio} value={ex.id_ejercicio}>
+                    {ex.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                onClick={() =>
+                  setFuerzaFilters({
+                    fecha_desde: '',
+                    fecha_hasta: '',
+                    finalidad: '',
+                    id_ejercicio: '',
+                  })
+                }
+                className="w-full py-1.5 text-xs text-surface-600 bg-surface-100 hover:bg-surface-200 rounded border border-surface-200"
+              >
+                Restablecer filtros
+              </button>
+            </div>
+          </div>
+
+          {/* Listado / Estados vacíos */}
+          {fuerzaJug.length === 0 ? (
+            <div className="text-center py-12 px-4 bg-white rounded-lg border border-surface-200">
+              <p className="text-sm text-surface-500 font-medium mb-3">
+                Sin sesiones de fuerza registradas
+              </p>
+              <button
+                onClick={() => navigate(`/fuerza?jugadora=${id}`)}
+                className="px-4 py-2 text-xs font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md shadow-sm"
+              >
+                Ver registro de fuerza
+              </button>
+            </div>
+          ) : filteredFuerzaJug.length === 0 ? (
+            <div className="text-center py-12 px-4 bg-white rounded-lg border border-surface-200">
+              <p className="text-sm text-surface-500 font-medium">
+                No hay sesiones que coincidan con los filtros
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-lg border border-surface-200 overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-surface-50 text-surface-500 border-b border-surface-200">
+                  <tr>
+                    <th className="py-2.5 px-3 font-medium">Fecha</th>
+                    <th className="py-2.5 px-3 font-medium">Finalidad</th>
+                    <th className="py-2.5 px-3 font-medium">Ejercicios</th>
+                    <th className="py-2.5 px-3 font-medium">Series</th>
+                    <th className="py-2.5 px-3 font-medium">Tonelaje</th>
+                    <th className="py-2.5 px-3 font-medium">RPE</th>
+                    <th className="py-2.5 px-3 font-medium">Duración</th>
+                    <th className="py-2.5 px-3 font-medium text-right">Acción</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-surface-100">
+                  {filteredFuerzaJug.map((sesion) => {
+                    const sesTrabajos = trabajos_fuerza.filter(
+                      (t) => t.id_sesion_fuerza === sesion.id_sesion_fuerza || t.id_sesion === sesion.id_sesion_fuerza
+                    )
+                    const summary = calcularResumenSesionFuerza(sesTrabajos)
+                    const finalidadLabel = sesion.finalidad
+                      ? FINALIDADES_MAP[sesion.finalidad] || sesion.finalidad
+                      : '—'
+
+                    return (
+                      <tr key={sesion.id_sesion_fuerza} className="hover:bg-surface-50">
+                        <td className="py-2.5 px-3 font-semibold text-surface-900">{sesion.fecha}</td>
+                        <td className="py-2.5 px-3 text-surface-700">{finalidadLabel}</td>
+                        <td className="py-2.5 px-3 text-surface-700">{summary.ejerciciosCount}</td>
+                        <td className="py-2.5 px-3 text-surface-700">{summary.seriesCount}</td>
+                        <td className="py-2.5 px-3 font-medium text-primary-700">{summary.tonelajeLabel}</td>
+                        <td className="py-2.5 px-3 text-surface-700">
+                          {sesion.rpe_sesion != null ? `${sesion.rpe_sesion}` : '—'}
+                        </td>
+                        <td className="py-2.5 px-3 text-surface-700">
+                          {sesion.duracion_min != null ? `${sesion.duracion_min} min` : '—'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <button
+                            onClick={() => setFuerzaDetailId(sesion.id_sesion_fuerza)}
+                            className="text-primary-600 hover:text-primary-800 font-medium"
+                          >
+                            Ver detalle
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <StrengthDetailModal
+            open={!!fuerzaDetailId}
+            onClose={() => setFuerzaDetailId(null)}
+            sesionId={fuerzaDetailId}
+            readOnly={true}
+          />
         </div>
       )}
 
@@ -463,6 +999,10 @@ export function PlayerProfilePage() {
         </div>
       )}
 
+      {tab === 'alias' && (
+        <PlayerAliasSection id_jugadora={id!} nombreJugadora={jugadora?.nombre || id!} />
+      )}
+
       <Modal open={!!editWellness} onClose={() => setEditWellness(null)} title="Editar registro de wellness">
         {wellnessForm && (
           <div className="grid grid-cols-2 gap-4">
@@ -470,37 +1010,42 @@ export function PlayerProfilePage() {
               <label className="text-[10px] font-medium text-surface-600 block mb-1">Fecha</label>
               <input
                 type="date"
-                className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"
+                className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs text-surface-700 bg-white"
                 value={wellnessForm.fecha}
                 onChange={(e) => setWellnessForm({ ...wellnessForm, fecha: e.target.value })}
               />
             </div>
             {[
-              { key: 'calidad_sueno', label: 'Calidad de sueño' },
-              { key: 'fatiga', label: 'Fatiga' },
-              { key: 'dolor_muscular', label: 'Dolor muscular' },
-              { key: 'estres', label: 'Estrés' },
-              { key: 'estado_animo', label: 'Estado de ánimo' },
+              { key: 'calidad_sueno', label: 'Calidad de sueño', minLabel: 'muy malo', maxLabel: 'excelente' },
+              { key: 'fatiga', label: 'Fatiga', minLabel: 'nada', maxLabel: 'extremo' },
+              { key: 'dolor_muscular', label: 'Dolor muscular', minLabel: 'nada', maxLabel: 'extremo' },
+              { key: 'estres', label: 'Estrés', minLabel: 'nada', maxLabel: 'extremo' },
+              { key: 'estado_animo', label: 'Estado de ánimo', minLabel: 'muy bajo', maxLabel: 'excelente' },
             ].map((field) => (
               <div key={field.key}>
-                <label className="text-[10px] font-medium text-surface-600 block mb-1">{field.label} (1-10)</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"
-                  value={wellnessForm[field.key as keyof Wellness] as number}
+                <label className="text-[10px] font-medium text-surface-600 block mb-1">{field.label}</label>
+                <select
+                  className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs bg-white text-surface-700"
+                  value={wellnessForm[field.key as keyof Wellness] ?? ''}
                   onChange={(e) => {
+                    const val = e.target.value === '' ? null : Number(e.target.value)
                     const updated = {
                       ...wellnessForm,
-                      [field.key]: Number(e.target.value),
+                      [field.key]: val,
                     }
                     setWellnessForm({
                       ...updated,
                       score_wellness: calcularScoreWellness(updated),
                     })
                   }}
-                />
+                >
+                  <option value="">No respondido</option>
+                  <option value={1}>1 - {field.minLabel}</option>
+                  {[2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                  <option value={10}>10 - {field.maxLabel}</option>
+                </select>
               </div>
             ))}
             <div className="col-span-2">
@@ -593,6 +1138,60 @@ export function PlayerProfilePage() {
           <button onClick={handleAddTest} className="text-xs text-white bg-primary-600 px-3 py-1.5 rounded hover:bg-primary-700">
             Añadir test
           </button>
+        </div>
+      </Modal>
+
+      <Modal open={newCicloOpen} onClose={() => setNewCicloOpen(false)} title="Nuevo registro de ciclo">
+        <div className="space-y-4">
+          <input type="date" className="w-full border p-2 text-xs" value={cicloForm.fecha} onChange={e => setCicloForm({...cicloForm, fecha: e.target.value})} />
+          <select className="w-full border p-2 text-xs" value={cicloForm.fase} onChange={e => setCicloForm({...cicloForm, fase: e.target.value})}>
+            <option value="Menstruacion">Menstruación</option>
+            <option value="Folicular">Folicular</option>
+            <option value="Ovulacion">Ovulación</option>
+            <option value="Lutea">Lútea</option>
+          </select>
+          <input type="text" placeholder="Síntomas" className="w-full border p-2 text-xs" value={cicloForm.sintomas} onChange={e => setCicloForm({...cicloForm, sintomas: e.target.value})} />
+          <button onClick={() => { addCicloMenstrual({...cicloForm, id_jugadora: id!}); setNewCicloOpen(false) }} className="w-full bg-primary-600 text-white py-2 rounded text-xs">Guardar</button>
+        </div>
+      </Modal>
+
+      <Modal open={newGPSOpen} onClose={() => setNewGPSOpen(false)} title="Nuevo registro GPS">
+        <div className="space-y-4">
+          <input type="date" className="w-full border p-2 text-xs" value={gpsForm.fecha} onChange={e => setGpsForm({...gpsForm, fecha: e.target.value})} />
+          <input type="number" placeholder="Distancia Total (m)" className="w-full border p-2 text-xs" value={gpsForm.distancia_total} onChange={e => setGpsForm({...gpsForm, distancia_total: Number(e.target.value)})} />
+          <input type="number" placeholder="Distancia HSR (m)" className="w-full border p-2 text-xs" value={gpsForm.distancia_hsr} onChange={e => setGpsForm({...gpsForm, distancia_hsr: Number(e.target.value)})} />
+          <button onClick={() => { addCargaGPS({...gpsForm, id_jugadora: id!}); setNewGPSOpen(false) }} className="w-full bg-primary-600 text-white py-2 rounded text-xs">Guardar</button>
+        </div>
+      </Modal>
+
+      <Modal open={newVBTOpen} onClose={() => setNewVBTOpen(false)} title="Nuevo registro VBT">
+        <div className="space-y-4">
+          <input type="date" className="w-full border p-2 text-xs" value={vbtForm.fecha} onChange={e => setVbtForm({...vbtForm, fecha: e.target.value})} />
+          <input type="number" placeholder="Carga Kg" className="w-full border p-2 text-xs" value={vbtForm.carga_kg} onChange={e => setVbtForm({...vbtForm, carga_kg: Number(e.target.value)})} />
+          <input type="number" placeholder="Velocidad Media (m/s)" className="w-full border p-2 text-xs" value={vbtForm.velocidad_media} onChange={e => setVbtForm({...vbtForm, velocidad_media: Number(e.target.value)})} />
+          <button onClick={() => { addFuerzaVBT({...vbtForm, id_jugadora: id!}); setNewVBTOpen(false) }} className="w-full bg-primary-600 text-white py-2 rounded text-xs">Guardar</button>
+        </div>
+      </Modal>
+
+      <Modal open={newHidratacionOpen} onClose={() => setNewHidratacionOpen(false)} title="Nuevo registro Peso">
+        <div className="space-y-4">
+          <input type="date" className="w-full border p-2 text-xs" value={hidratacionForm.fecha} onChange={e => setHidratacionForm({...hidratacionForm, fecha: e.target.value})} />
+          <input type="number" placeholder="Peso Pre (kg)" className="w-full border p-2 text-xs" value={hidratacionForm.peso_pre} onChange={e => setHidratacionForm({...hidratacionForm, peso_pre: Number(e.target.value)})} />
+          <input type="number" placeholder="Peso Post (kg)" className="w-full border p-2 text-xs" value={hidratacionForm.peso_post} onChange={e => setHidratacionForm({...hidratacionForm, peso_post: Number(e.target.value)})} />
+          <button onClick={() => { addHidratacion({...hidratacionForm, id_jugadora: id!}); setNewHidratacionOpen(false) }} className="w-full bg-primary-600 text-white py-2 rounded text-xs">Guardar</button>
+        </div>
+      </Modal>
+
+      <Modal open={newPsicologiaOpen} onClose={() => setNewPsicologiaOpen(false)} title="Nuevo Test POMS (1-10)">
+        <div className="space-y-4">
+          <input type="date" className="w-full border p-2 text-xs" value={psicologiaForm.fecha} onChange={e => setPsicologiaForm({...psicologiaForm, fecha: e.target.value})} />
+          <input type="number" placeholder="Tensión (1-10)" className="w-full border p-2 text-xs" value={psicologiaForm.tension} onChange={e => setPsicologiaForm({...psicologiaForm, tension: Number(e.target.value)})} />
+          <input type="number" placeholder="Depresión (1-10)" className="w-full border p-2 text-xs" value={psicologiaForm.depresion} onChange={e => setPsicologiaForm({...psicologiaForm, depresion: Number(e.target.value)})} />
+          <input type="number" placeholder="Ira (1-10)" className="w-full border p-2 text-xs" value={psicologiaForm.ira} onChange={e => setPsicologiaForm({...psicologiaForm, ira: Number(e.target.value)})} />
+          <input type="number" placeholder="Vigor (1-10)" className="w-full border p-2 text-xs" value={psicologiaForm.vigor} onChange={e => setPsicologiaForm({...psicologiaForm, vigor: Number(e.target.value)})} />
+          <input type="number" placeholder="Fatiga (1-10)" className="w-full border p-2 text-xs" value={psicologiaForm.fatiga_mental} onChange={e => setPsicologiaForm({...psicologiaForm, fatiga_mental: Number(e.target.value)})} />
+          <input type="number" placeholder="Confusión (1-10)" className="w-full border p-2 text-xs" value={psicologiaForm.confusion} onChange={e => setPsicologiaForm({...psicologiaForm, confusion: Number(e.target.value)})} />
+          <button onClick={() => { addTestPsicologico({...psicologiaForm, id_jugadora: id!}); setNewPsicologiaOpen(false) }} className="w-full bg-primary-600 text-white py-2 rounded text-xs">Guardar</button>
         </div>
       </Modal>
     </div>
