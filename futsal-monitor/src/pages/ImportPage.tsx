@@ -755,27 +755,27 @@ export function ImportPage() {
               <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                 <div className="bg-surface-50 border border-surface-200 p-3 rounded text-center">
                   <span className="text-[10px] text-surface-500 uppercase block">Total Filas</span>
-                  <span className="text-xl font-bold text-surface-800">{previewSummary.total}</span>
+                  <span data-testid="preview-count-total" className="text-xl font-bold text-surface-800">{previewSummary.total}</span>
                 </div>
                 <div className="bg-green-50 border border-green-200 p-3 rounded text-center">
                   <span className="text-[10px] text-green-700 uppercase block">Nuevos</span>
-                  <span className="text-xl font-bold text-green-700">{previewSummary.nuevos}</span>
+                  <span data-testid="preview-count-nuevos" className="text-xl font-bold text-green-700">{previewSummary.nuevos}</span>
                 </div>
                 <div className="bg-blue-50 border border-blue-200 p-3 rounded text-center">
                   <span className="text-[10px] text-blue-700 uppercase block">Actualizaciones</span>
-                  <span className="text-xl font-bold text-blue-700">{previewSummary.actualizaciones}</span>
+                  <span data-testid="preview-count-actualizaciones" className="text-xl font-bold text-blue-700">{previewSummary.actualizaciones}</span>
                 </div>
                 <div className="bg-surface-100 border border-surface-300 p-3 rounded text-center">
                   <span className="text-[10px] text-surface-600 uppercase block">Duplicados</span>
-                  <span className="text-xl font-bold text-surface-700">{previewSummary.duplicados}</span>
+                  <span data-testid="preview-count-duplicados" className="text-xl font-bold text-surface-700">{previewSummary.duplicados}</span>
                 </div>
                 <div className="bg-red-50 border border-red-200 p-3 rounded text-center">
                   <span className="text-[10px] text-red-700 uppercase block">Errores</span>
-                  <span className="text-xl font-bold text-red-700">{previewSummary.errores}</span>
+                  <span data-testid="preview-count-errores" className="text-xl font-bold text-red-700">{previewSummary.errores}</span>
                 </div>
                 <div className="bg-amber-50 border border-amber-200 p-3 rounded text-center">
                   <span className="text-[10px] text-amber-700 uppercase block">Omitidas</span>
-                  <span className="text-xl font-bold text-amber-750">{previewSummary.omitidos}</span>
+                  <span data-testid="preview-count-omitidas" className="text-xl font-bold text-amber-750">{previewSummary.omitidos}</span>
                 </div>
               </div>
 
@@ -873,9 +873,10 @@ export function ImportPage() {
                 {/* PAGINATION CONTROLS */}
                 {totalPages > 1 && (
                   <div className="flex justify-between items-center pt-2">
-                    <span className="text-[10px] text-surface-500">Página {currentPage} de {totalPages}</span>
+                    <span data-testid="pagination-info" className="text-[10px] text-surface-500">Página {currentPage} de {totalPages}</span>
                     <div className="flex gap-1.5">
                       <button
+                        data-testid="pagination-prev"
                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                         disabled={currentPage === 1}
                         className="px-2 py-1 text-[10px] font-semibold bg-white border border-surface-300 rounded hover:bg-surface-50 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -883,6 +884,7 @@ export function ImportPage() {
                         &larr; Anterior
                       </button>
                       <button
+                        data-testid="pagination-next"
                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                         disabled={currentPage === totalPages}
                         className="px-2 py-1 text-[10px] font-semibold bg-white border border-surface-300 rounded hover:bg-surface-50 disabled:opacity-40 disabled:cursor-not-allowed"

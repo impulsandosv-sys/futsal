@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import React, { StrictMode } from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -12,8 +12,14 @@ import { db } from '@/db/database'
 import { useStore } from '@/store/store'
 import { ImportPage } from './ImportPage'
 
-describe('Bloque B — Test real de ImportPage (React Testing Library & DOM)', () => {
+describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadores, Paginación, StrictMode)', () => {
+  let errorSpy: ReturnType<typeof vi.spyOn>
+  let warnSpy: ReturnType<typeof vi.spyOn>
+
   beforeEach(async () => {
+    errorSpy = vi.spyOn(console, 'error')
+    warnSpy = vi.spyOn(console, 'warn')
+
     await db.jugadoras.clear()
     await db.temporadas.clear()
     await db.alias_jugadora.clear()
@@ -74,173 +80,321 @@ describe('Bloque B — Test real de ImportPage (React Testing Library & DOM)', (
     })
   })
 
-  it('1, 2, 5 & 7. Excluir y restaurar fila NUEVO en DOM real bajo React.StrictMode actualiza contadores y badges sin escrituras Dexie', async () => {
-    const csvContent = [
-      'ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo',
-      'J001,2026-01-15,8,3,4,2,9'
-    ].join('\n')
+  afterEach(() => {
+    const reactErrorMsgs = errorSpy.mock.calls
+      .flatMap(call => call.map(arg => String(arg)))
+      .filter(msg =>
+        msg.includes('Warning:') ||
+        msg.includes('Cannot update') ||
+        msg.includes('stale state') ||
+        msg.includes('unmounted')
+      )
+    expect(reactErrorMsgs).toEqual([])
 
-    const file = new File([csvContent], 'wellness_test.csv', { type: 'text/csv' })
+    errorSpy.mockRestore()
+    warnSpy.mockRestore()
+  })
 
-    render(
-      <MemoryRouter>
-        <StrictMode>
-          <ImportPage />
-        </StrictMode>
-      </MemoryRouter>
-    )
+  describe('BLOQUE A — Contadores reales de previsualización', () => {
+    it('Caso 1 — Fila NUEVO: verifica contadores iniciales (1/1/0), exclusión (0/1/OMITIDA) y restauración (1/0/NUEVO) sin escrituras Dexie', async () => {
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo',
+        'J001,2026-01-15,8,3,4,2,9'
+      ].join('\n')
 
-    const inputs = document.querySelectorAll('input[type="file"]')
-    const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
-    expect(importInput).toBeTruthy()
+      const file = new File([csvContent], 'wellness_nuevo.csv', { type: 'text/csv' })
 
-    fireEvent.change(importInput, { target: { files: [file] } })
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
 
-    await waitFor(() => {
-      const nextBtn = screen.getByRole('button', { name: /siguiente/i })
-      expect(nextBtn).not.toBeDisabled()
-    })
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+      expect(importInput).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+      fireEvent.change(importInput, { target: { files: [file] } })
 
-    let omitirCheckbox!: HTMLInputElement
-    await waitFor(() => {
-      const checkboxes = screen.getAllByRole('checkbox')
-      expect(checkboxes.length).toBeGreaterThan(0)
-      omitirCheckbox = checkboxes[checkboxes.length - 1] as HTMLInputElement
-    })
+      await waitFor(() => {
+        const nextBtn = screen.getByRole('button', { name: /siguiente/i })
+        expect(nextBtn).not.toBeDisabled()
+      })
 
-    expect(omitirCheckbox.checked).toBe(false)
+      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
 
-    // Exclude row
-    fireEvent.click(omitirCheckbox)
+      let omitirCheckbox!: HTMLInputElement
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox')
+        expect(checkboxes.length).toBeGreaterThan(0)
+        omitirCheckbox = checkboxes[checkboxes.length - 1] as HTMLInputElement
+      })
 
-    // Check OMITIDA badge appears
-    await waitFor(() => {
-      expect(screen.getAllByText('OMITIDA').length).toBeGreaterThan(1)
-    })
-
-    // Restore row
-    fireEvent.click(omitirCheckbox)
-
-    // Check NUEVO badge recovers
-    await waitFor(() => {
+      // 3. Verifica contadores DOM iniciales
+      expect(screen.getByTestId('preview-count-total').textContent).toBe('1')
+      expect(screen.getByTestId('preview-count-nuevos').textContent).toBe('1')
+      expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('0')
       expect(screen.getAllByText('NUEVO').length).toBeGreaterThan(0)
+
+      // 4. Excluye fila
+      fireEvent.click(omitirCheckbox)
+
+      // 5. Verifica contadores y estado OMITIDA tras exclusión
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-nuevos').textContent).toBe('0')
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('1')
+        expect(screen.getAllByText('OMITIDA').length).toBeGreaterThan(1)
+      })
+
+      // 6. Restaura fila
+      fireEvent.click(omitirCheckbox)
+
+      // 7. Verifica contadores y estado NUEVO tras restauración
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-nuevos').textContent).toBe('1')
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('0')
+        expect(screen.getAllByText('NUEVO').length).toBeGreaterThan(0)
+      })
+
+      // Pureza Dexie: 0 escrituras
+      expect(await db.wellness.count()).toBe(0)
+      expect(await db.historial_importaciones.count()).toBe(0)
     })
 
-    // Pureness check: 0 writes to Dexie
-    expect(await db.wellness.count()).toBe(0)
-    expect(await db.historial_importaciones.count()).toBe(0)
+    it('Caso 2 — Fila ACTUALIZACION_POSIBLE: verifica contadores (Act:1, Omit:0, CONFLICTO), exclusión (Act:0, Omit:1) y restauración', async () => {
+      await db.wellness.add({
+        id_jugadora: 'J001',
+        fecha: '2026-01-15',
+        calidad_sueno: 8,
+        fatiga: 3,
+        dolor_muscular: 4,
+        estres: 2,
+        estado_animo: 9,
+        score_wellness: 8.0,
+        dolor_especifico: ''
+      })
+
+      useStore.setState({
+        wellness: await db.wellness.toArray()
+      })
+
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo',
+        'J001,2026-01-15,7,4,5,3,8'
+      ].join('\n')
+
+      const file = new File([csvContent], 'wellness_conflicto.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        const nextBtn = screen.getByRole('button', { name: /siguiente/i })
+        expect(nextBtn).not.toBeDisabled()
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+
+      let checkbox!: HTMLInputElement
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox')
+        expect(checkboxes.length).toBeGreaterThan(0)
+        checkbox = checkboxes[checkboxes.length - 1] as HTMLInputElement
+      })
+
+      // 3. Comprueba contadores iniciales y CONFLICTO
+      expect(screen.getByTestId('preview-count-actualizaciones').textContent).toBe('1')
+      expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('0')
+      expect(screen.getByText('CONFLICTO')).toBeInTheDocument()
+
+      // 4. Excluye fila
+      fireEvent.click(checkbox)
+
+      // 5. Comprueba contadores y OMITIDA
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-actualizaciones').textContent).toBe('0')
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('1')
+        expect(screen.getAllByText('OMITIDA').length).toBeGreaterThan(1)
+      })
+
+      // 6. Restaura fila
+      fireEvent.click(checkbox)
+
+      // Comprueba vuelta a CONFLICTO
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-actualizaciones').textContent).toBe('1')
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('0')
+        expect(screen.getByText('CONFLICTO')).toBeInTheDocument()
+      })
+
+      // Pureza Dexie: sólo el registro previo
+      expect(await db.wellness.count()).toBe(1)
+    })
+
+    it('Caso 3 — Fila ERROR: verifica contadores (Nuevos:1, Errores:1), bloqueo del paso 3, exclusión de error y desbloqueo', async () => {
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo',
+        'J001,2026-01-15,8,3,4,2,9',
+        'INVALID_ID,2099-01-01,1,1,1,1,1'
+      ].join('\n')
+
+      const file = new File([csvContent], 'wellness_error.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        const nextBtn = screen.getByRole('button', { name: /siguiente/i })
+        expect(nextBtn).not.toBeDisabled()
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+
+      let errorCheckbox!: HTMLInputElement
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox')
+        expect(checkboxes.length).toBeGreaterThan(0)
+        errorCheckbox = checkboxes[checkboxes.length - 1] as HTMLInputElement
+      })
+
+      // 2. Comprueba contadores (Nuevos: 1, Errores: 1) y bloqueo
+      expect(screen.getByTestId('preview-count-nuevos').textContent).toBe('1')
+      expect(screen.getByTestId('preview-count-errores').textContent).toBe('1')
+      expect(screen.getByText(/Asistente bloqueado/i)).toBeInTheDocument()
+
+      const stepNextBtn = screen.getByRole('button', { name: /siguiente/i })
+      expect(stepNextBtn).toBeDisabled()
+
+      // 3. Excluye fila de error
+      fireEvent.click(errorCheckbox)
+
+      // 4. Comprueba contadores (Errores: 0, Omitidas: 1) y desbloqueo del paso 3
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-errores').textContent).toBe('0')
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('1')
+        expect(screen.queryByText(/Asistente bloqueado/i)).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /siguiente/i })).not.toBeDisabled()
+      })
+
+      // Pureza Dexie: 0 escrituras
+      expect(await db.wellness.count()).toBe(0)
+    })
   })
 
-  it('3 & 4. Excluir fila ACTUALIZACION_POSIBLE y ERROR actualiza contadores en el DOM', async () => {
-    await db.wellness.add({
-      id_jugadora: 'J001',
-      fecha: '2026-01-15',
-      calidad_sueno: 8,
-      fatiga: 3,
-      dolor_muscular: 4,
-      estres: 2,
-      estado_animo: 9,
-      score_wellness: 8.0,
-      dolor_especifico: ''
-    })
+  describe('BLOQUE B — Paginación real (51 filas)', () => {
+    it('Demuestra paginación real (>50 filas), navegación a pág 2, exclusión en pág 2, filtrado OMITIDA y restauración', async () => {
+      // 1. Genera 51 filas válidas para J001 con fechas únicas en temporada 2025-2026
+      const csvLines = ['ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo']
+      
+      const startDate = new Date('2026-01-01')
+      for (let i = 0; i < 51; i++) {
+        const current = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000)
+        const y = current.getFullYear()
+        const m = String(current.getMonth() + 1).padStart(2, '0')
+        const d = String(current.getDate()).padStart(2, '0')
+        const dateStr = `${y}-${m}-${d}`
+        csvLines.push(`J001,${dateStr},8,3,4,2,9`)
+      }
 
-    useStore.setState({
-      wellness: await db.wellness.toArray()
-    })
+      const csvContent = csvLines.join('\n')
+      const file = new File([csvContent], 'wellness_51_rows.csv', { type: 'text/csv' })
 
-    const csvContent = [
-      'ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo',
-      'J001,2026-01-15,7,4,5,3,8',
-      'INVALID_ID,2099-01-01,1,1,1,1,1'
-    ].join('\n')
+      // 2. Renderiza en StrictMode
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
 
-    const file = new File([csvContent], 'wellness_test2.csv', { type: 'text/csv' })
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
 
-    render(
-      <MemoryRouter>
-        <StrictMode>
-          <ImportPage />
-        </StrictMode>
-      </MemoryRouter>
-    )
+      fireEvent.change(importInput, { target: { files: [file] } })
 
-    const inputs = document.querySelectorAll('input[type="file"]')
-    const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+      // 3. Avanza al paso de validación
+      await waitFor(() => {
+        const nextBtn = screen.getByRole('button', { name: /siguiente/i })
+        expect(nextBtn).not.toBeDisabled()
+      })
 
-    fireEvent.change(importInput, { target: { files: [file] } })
+      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
 
-    await waitFor(() => {
-      const nextBtn = screen.getByRole('button', { name: /siguiente/i })
-      expect(nextBtn).not.toBeDisabled()
-    })
+      // 4. Comprueba página 1 de 2 y botón Siguiente disponible
+      await waitFor(() => {
+        expect(screen.getByTestId('pagination-info')).toHaveTextContent('Página 1 de 2')
+        expect(screen.getByTestId('pagination-next')).not.toBeDisabled()
+      })
 
-    fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+      // 5. Pulsa Siguiente
+      fireEvent.click(screen.getByTestId('pagination-next'))
 
-    let errorCheckbox!: HTMLInputElement
-    await waitFor(() => {
-      const checkboxes = screen.getAllByRole('checkbox')
-      expect(checkboxes.length).toBeGreaterThan(0)
-      errorCheckbox = checkboxes[checkboxes.length - 1] as HTMLInputElement
-    })
+      // 6. Comprueba que muestra la segunda página
+      await waitFor(() => {
+        expect(screen.getByTestId('pagination-info')).toHaveTextContent('Página 2 de 2')
+      })
 
-    expect(screen.getByText('CONFLICTO')).toBeInTheDocument()
-    expect(screen.getAllByText('ERROR').length).toBeGreaterThan(0)
+      // 7. Excluye la fila visible en la segunda página (fila 51 original)
+      const page2Checkboxes = screen.getAllByRole('checkbox')
+      expect(page2Checkboxes.length).toBe(1) // Sólo 1 fila en la página 2
+      const row51Checkbox = page2Checkboxes[0] as HTMLInputElement
 
-    fireEvent.click(errorCheckbox)
+      fireEvent.click(row51Checkbox)
 
-    await waitFor(() => {
-      expect(screen.getAllByText('OMITIDA').length).toBeGreaterThan(1)
-    })
-  })
+      // 8. Comprueba estado visible OMITIDA, contador omitidas (1) y total (51)
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-omitidas')).toHaveTextContent('1')
+        expect(screen.getByTestId('preview-count-total')).toHaveTextContent('51')
+        expect(screen.getAllByText('OMITIDA').length).toBeGreaterThan(1)
+      })
 
-  it('6. Filtro de tabla conserva el estado OMITIDA y prevEstado de las filas', async () => {
-    const csvContent = [
-      'ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo',
-      'J001,2026-01-15,8,3,4,2,9'
-    ].join('\n')
+      // 9. Cambia el filtro a OMITIDA
+      const filterOmitidaBtn = screen.getByRole('button', { name: 'OMITIDA' })
+      fireEvent.click(filterOmitidaBtn)
 
-    const file = new File([csvContent], 'wellness_test3.csv', { type: 'text/csv' })
+      // 10. Comprueba que la fila sigue visible en el filtro OMITIDA
+      await waitFor(() => {
+        const omitidaFilterCheckboxes = screen.getAllByRole('checkbox')
+        expect(omitidaFilterCheckboxes.length).toBe(1)
+        expect(screen.getAllByText('OMITIDA').length).toBeGreaterThan(0)
+      })
 
-    render(
-      <MemoryRouter>
-        <StrictMode>
-          <ImportPage />
-        </StrictMode>
-      </MemoryRouter>
-    )
+      // 11. Restaura la fila desde el filtro OMITIDA
+      const omitidaCheckboxInFilter = screen.getByRole('checkbox')
+      fireEvent.click(omitidaCheckboxInFilter)
 
-    const inputs = document.querySelectorAll('input[type="file"]')
-    const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+      // 12. Comprueba que desaparece del filtro OMITIDA y el contador de omitidas vuelve a 0
+      await waitFor(() => {
+        expect(screen.getByText('No hay registros que coincidan con este filtro.')).toBeInTheDocument()
+        expect(screen.getByTestId('preview-count-omitidas')).toHaveTextContent('0')
+      })
 
-    fireEvent.change(importInput, { target: { files: [file] } })
-
-    await waitFor(() => {
-      const nextBtn = screen.getByRole('button', { name: /siguiente/i })
-      expect(nextBtn).not.toBeDisabled()
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
-
-    let checkbox!: HTMLInputElement
-    await waitFor(() => {
-      const checkboxes = screen.getAllByRole('checkbox')
-      expect(checkboxes.length).toBeGreaterThan(0)
-      checkbox = checkboxes[checkboxes.length - 1] as HTMLInputElement
-    })
-
-    fireEvent.click(checkbox)
-
-    await waitFor(() => {
-      expect(screen.getAllByText('OMITIDA').length).toBeGreaterThan(1)
-    })
-
-    const filterBtn = screen.getByRole('button', { name: 'OMITIDA' })
-    fireEvent.click(filterBtn)
-
-    await waitFor(() => {
-      expect(screen.getAllByText('OMITIDA').length).toBeGreaterThan(0)
+      // Pureza Dexie: 0 escrituras
+      expect(await db.wellness.count()).toBe(0)
+      expect(await db.historial_importaciones.count()).toBe(0)
     })
   })
 })
