@@ -67,12 +67,23 @@ export function getTodayLocalISO(): string {
 /**
  * Convierte un objeto Date o string a formato de fecha ISO local (YYYY-MM-DD).
  */
-export function toLocalISODate(date: Date | string): string {
+export function toLocalISODate(date: Date | string | number): string {
   if (typeof date === 'string') {
     if (isFechaLocalISO(date)) return date
-    return getLocalDateString(parseISO(date))
+    const d = new Date(date)
+    if (isNaN(d.getTime())) return ''
+    return getLocalDateString(d)
   }
-  return getLocalDateString(date)
+  if (typeof date === 'number') {
+    const d = new Date(date)
+    if (isNaN(d.getTime())) return ''
+    return getLocalDateString(d)
+  }
+  if (date instanceof Date) {
+    if (isNaN(date.getTime())) return ''
+    return getLocalDateString(date)
+  }
+  return ''
 }
 
 /**

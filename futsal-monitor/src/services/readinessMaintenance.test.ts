@@ -57,7 +57,7 @@ vi.mock('@/db/database', () => ({
       }))
     },
     rpe_partido: {
-      where: vi.fn((q: any) => ({
+      where: vi.fn((_q: any) => ({
         toArray: vi.fn(() => Promise.resolve([]))
       }))
     },

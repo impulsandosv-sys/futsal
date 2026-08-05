@@ -156,6 +156,11 @@ describe('isFechaLocalISO & validateFechaLocalISO (T-02-DOM-GOV)', () => {
     expect(errFormat).toContain('debe ser exactamente YYYY-MM-DD')
     expect(errCal).toContain('El día no existe en el calendario')
   })
+  it('13. toLocalISODate con string ISO local YYYY-MM-DD permanece intacta sin parsear via new Date()', () => {
+    const input = '2026-08-15'
+    expect(toLocalISODate(input)).toBe('2026-08-15')
+    expect(toLocalISODate('2026-02-28')).toBe('2026-02-28')
+  })
 })
 
 

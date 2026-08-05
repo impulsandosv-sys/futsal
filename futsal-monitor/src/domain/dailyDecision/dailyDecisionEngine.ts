@@ -7,7 +7,8 @@ import type {
   Alerta,
   MedicionCMJ,
   SesionRPE,
-  RPE_Partido
+  RPE_Partido,
+  Sesion
 } from '@/types'
 
 export interface DecisionDiariaJugadora {
@@ -103,7 +104,8 @@ export function construirDecisionDiaria(
   pruebasCMJList: MedicionCMJ[],
   sesionRPEList: SesionRPE[],
   rpePartidoList: RPE_Partido[],
-  fechaSeleccionada: string
+  fechaSeleccionada: string,
+  sesionesList: Sesion[] = []
 ): ResumenDecisionDiaria {
   const safeJugadoras = jugadorasList || []
   const safeWellness = wellnessList || []
@@ -112,6 +114,7 @@ export function construirDecisionDiaria(
   const safePruebasCMJ = pruebasCMJList || []
   const safeSesionRPE = sesionRPEList || []
   const safeRpePartido = rpePartidoList || []
+  const safeSesiones = sesionesList || []
 
   const activas = safeJugadoras.filter((j) => j.activa !== false)
   const fechaTarget = parseISO(fechaSeleccionada)
@@ -188,7 +191,7 @@ export function construirDecisionDiaria(
       jugadoraId: j.id_jugadora,
       fechaDesde: fechaInicio7dStr,
       fechaHasta: fechaSeleccionada,
-      sesiones: [],
+      sesiones: safeSesiones,
       sesionesRPE: safeSesionRPE,
       rpePartidos: safeRpePartido,
     })

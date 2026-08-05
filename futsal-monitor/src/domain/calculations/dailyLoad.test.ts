@@ -201,4 +201,104 @@ describe('BLOQUE C — Fuente única de carga individual (dailyLoad.ts)', () => 
 
     expect(arr).toEqual([0, 500, 0])
   })
+
+  it('10. Una sesión con id_sesion se localiza correctamente en dailyLoad', () => {
+    const sesiones: Sesion[] = [
+      { id_sesion: 'SES_100', fecha: '2026-08-10', tipo_dia: 'Entreno', tipo_sesion: 'Campo', objetivo_principal: '', observaciones_grupo: '' }
+    ]
+    const sesionesRPE: SesionRPE[] = [
+      { id_sesion: 'SES_100', id_jugadora: J1, rpe: 7, duracion_min: 60, fecha: '2026-08-10' }
+    ]
+    const map = obtenerCargasDiariasJugadora({
+      jugadoraId: J1,
+      fechaDesde: '2026-08-10',
+      fechaHasta: '2026-08-10',
+      sesiones,
+      sesionesRPE,
+      rpePartidos: []
+    })
+    const entry = map.get('2026-08-10')!
+    expect(entry.carga).toBe(420)
+    expect(entry.detalles[0].idSesion).toBe('SES_100')
+  })
+
+  it('11. Sesión con id_partido + RPE de partido equivalente no duplica carga (deduplicación explícita)', () => {
+    const sesiones: Sesion[] = [
+      { id_sesion: 'SES_P1', id_partido: 'PARTIDO_1', fecha: '2026-08-11', tipo_dia: 'Partido', tipo_sesion: 'Partido', objetivo_principal: '', observaciones_grupo: '' }
+    ]
+    const sesionesRPE: SesionRPE[] = [
+      { id_sesion: 'SES_P1', id_jugadora: J1, rpe: 8, duracion_min: 90, carga_ua: 720, fecha: '2026-08-11' }
+    ]
+    const rpePartidos: RPE_Partido[] = [
+      { id_partido: 'PARTIDO_1', id_jugadora: J1, rpe: 9, minutos_jugados: 40, carga_ua: 360, fecha: '2026-08-11' }
+    ]
+    const map = obtenerCargasDiariasJugadora({
+      jugadoraId: J1,
+      fechaDesde: '2026-08-11',
+      fechaHasta: '2026-08-11',
+      sesiones,
+      sesionesRPE,
+      rpePartidos
+    })
+    const entry = map.get('2026-08-11')!
+    expect(entry.carga).toBe(360) // solo rpePartido (360), no 720+360=1080
+    expect(entry.detalles.length).toBe(1)
+    expect(entry.detalles[0].origen).toBe('partido')
+  })
+
+  it('12. Sesión tipo Partido sin id_partido no se elimina de forma automática si no hay enlace explícito', () => {
+    const sesiones: Sesion[] = [
+      { id_sesion: 'SES_PARTIDO_SIN_LINK', fecha: '2026-08-12', tipo_dia: 'Partido', tipo_sesion: 'Partido', objetivo_principal: '', observaciones_grupo: '' }
+    ]
+    const sesionesRPE: SesionRPE[] = [
+      { id_sesion: 'SES_PARTIDO_SIN_LINK', id_jugadora: J1, rpe: 6, duracion_min: 50, carga_ua: 300, fecha: '2026-08-12' }
+    ]
+    const rpePartidos: RPE_Partido[] = [
+      { id_partido: 'PARTIDO_OTRO', id_jugadora: J1, rpe: 8, minutos_jugados: 30, carga_ua: 240, fecha: '2026-08-12' }
+    ]
+    const map = obtenerCargasDiariasJugadora({
+      jugadoraId: J1,
+      fechaDesde: '2026-08-12',
+      fechaHasta: '2026-08-12',
+      sesiones,
+      sesionesRPE,
+      rpePartidos
+    })
+    const entry = map.get('2026-08-12')!
+    expect(entry.carga).toBe(540) // 300 + 240, ambas se conservan al no haber enlace id_partido
+  })
+
+  it('13. Carga explícita carga_ua: 0 se conserva como 0', () => {
+    const sesionesRPE: SesionRPE[] = [
+      { id_sesion: 'S0', id_jugadora: J1, rpe: 5, duracion_min: 60, carga_ua: 0, fecha: '2026-08-13' }
+    ]
+    const map = obtenerCargasDiariasJugadora({
+      jugadoraId: J1,
+      fechaDesde: '2026-08-13',
+      fechaHasta: '2026-08-13',
+      sesiones: [],
+      sesionesRPE,
+      rpePartidos: []
+    })
+    const entry = map.get('2026-08-13')!
+    expect(entry.tieneDato).toBe(true)
+    expect(entry.carga).toBe(0)
+  })
+
+  it('14. Carga explícita distinta de rpe × duración tiene prioridad cuando es válida', () => {
+    const sesionesRPE: SesionRPE[] = [
+      { id_sesion: 'S_CUSTOM', id_jugadora: J1, rpe: 10, duracion_min: 100, carga_ua: 750, fecha: '2026-08-14' }
+    ]
+    const map = obtenerCargasDiariasJugadora({
+      jugadoraId: J1,
+      fechaDesde: '2026-08-14',
+      fechaHasta: '2026-08-14',
+      sesiones: [],
+      sesionesRPE,
+      rpePartidos: []
+    })
+    const entry = map.get('2026-08-14')!
+    expect(entry.carga).toBe(750) // 750 explicit UA takes precedence over 10*100=1000
+    expect(entry.detalles[0].esCargaExplicita).toBe(true)
+  })
 })

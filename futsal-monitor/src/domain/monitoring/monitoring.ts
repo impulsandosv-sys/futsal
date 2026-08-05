@@ -3,6 +3,7 @@ import { UMBRALES } from '@/config/monitoringThresholds'
 import { 
   calcularMonotonyStrain 
 } from '../calculations/loadCalculations'
+import { obtenerCargasDiariasJugadora } from '../calculations/dailyLoad'
 import { obtenerFechasUltimosDias } from '../dates/dates'
 import type { 
   Jugadora, Wellness, Sesion, Partido, Lesion, 
@@ -152,71 +153,38 @@ export function calcularResumenSemanal(
   historicoSemanas: ResumenSemanal[],
   config?: FiltrosCarga
 ): ResumenSemanal {
-  const weekEndStr = format(addDays(parseISO(semana), 6), 'yyyy-MM-dd') // end of the week (7th day)
-  const { incluirPartidos = true, incluirGimnasio = true, incluirReadaptacion = true } = config || {}
+  const weekEndStr = format(addDays(parseISO(semana), 6), 'yyyy-MM-dd') // fin de semana (día 7)
 
-  // Filter and deduplicate trainings
-  const rpeEntrenoSemana = sesion_rpe.filter((r) => {
-    if (r.id_jugadora !== jugadoraId || r.fecha < semana || r.fecha > weekEndStr) return false
-    const s = sesiones.find((x) => x.id_sesion === r.id_sesion)
-    const tipo = s?.tipo_sesion
-    if (tipo === 'Gimnasio' && incluirGimnasio === false) return false
-    if ((tipo === 'Recuperacion' || tipo === 'Preventivo' || tipo === 'Readaptacion') && incluirReadaptacion === false) return false
-    if (tipo === 'Partido' && incluirPartidos === false) return false
-    if (s?.estado === 'cancelada') return false
-    return true
+  // Usar el módulo puro unificado obtenerCargasDiariasJugadora como Fuente Única de Verdad
+  const cargasDiariasMap = obtenerCargasDiariasJugadora({
+    jugadoraId,
+    fechaDesde: semana,
+    fechaHasta: weekEndStr,
+    sesiones,
+    sesionesRPE: sesion_rpe,
+    rpePartidos: rpe_partido,
+    partidos,
+    config
   })
-
-  const rpeEntrenoSemanaUnicos: SesionRPE[] = []
-  const seenSesionIds = new Set<string>()
-  for (const r of rpeEntrenoSemana) {
-    if (!seenSesionIds.has(r.id_sesion)) {
-      seenSesionIds.add(r.id_sesion)
-      rpeEntrenoSemanaUnicos.push(r)
-    }
-  }
-
-  // Filter and deduplicate matches
-  const rpePartidoSemana = incluirPartidos === false
-    ? []
-    : rpe_partido.filter((r) => r.id_jugadora === jugadoraId && r.fecha >= semana && r.fecha <= weekEndStr)
-
-  const rpePartidoSemanaUnicos: RPE_Partido[] = []
-  const seenPartidoIds = new Set<string>()
-  
-  // Registrar los partidos que ya están vinculados a través de sesiones de tipo Partido
-  for (const r of rpeEntrenoSemanaUnicos) {
-    const s = sesiones.find((x) => x.id_sesion === r.id_sesion)
-    if (s?.id_partido) {
-      seenPartidoIds.add(s.id_partido)
-    }
-  }
-
-  for (const r of rpePartidoSemana) {
-    if (!seenPartidoIds.has(r.id_partido)) {
-      seenPartidoIds.add(r.id_partido)
-      rpePartidoSemanaUnicos.push(r)
-    }
-  }
 
   let cargaEntreno = 0
   let cargaPartido = 0
+  let numSesiones = 0
 
-  for (const r of rpeEntrenoSemanaUnicos) {
-    const s = sesiones.find((x) => x.id_sesion === r.id_sesion)
-    // Si la sesión es de tipo Partido o tiene id_partido, suma a carga de partido
-    if (s?.tipo_sesion === 'Partido' || s?.id_partido) {
-      cargaPartido += (r.carga_ua || 0)
-    } else {
-      cargaEntreno += (r.carga_ua || 0)
+  for (const entry of cargasDiariasMap.values()) {
+    for (const d of entry.detalles) {
+      if (d.origen === 'partido' || d.tipoSesion === 'Partido') {
+        cargaPartido += d.cargaCalculada
+      } else {
+        cargaEntreno += d.cargaCalculada
+      }
+      if (d.origen === 'sesion') {
+        numSesiones++
+      }
     }
   }
 
-  for (const r of rpePartidoSemanaUnicos) {
-    cargaPartido += (r.carga_ua || 0)
-  }
   const cargaTotal = cargaEntreno + cargaPartido
-  const numSesiones = rpeEntrenoSemanaUnicos.length
 
   const wellnessSemana = wellnessList.filter(
     (w) => w.id_jugadora === jugadoraId && w.fecha >= semana && w.fecha <= weekEndStr
