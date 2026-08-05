@@ -2,6 +2,7 @@ import type { Alerta, Jugadora, Wellness, ResumenSemanal, Lesion, AlertaPriorida
 import { UMBRALES } from '@/config/monitoringThresholds'
 import { parseISO, subDays, format } from 'date-fns'
 import { obtenerDetallesWellnessBajo } from '../monitoring/monitoring'
+import { isValidWeekId, getWeekStartDateISO } from '../dates/dates'
 
 export function calcularNuevasAlertas(
   jugadorasActivas: Jugadora[],
@@ -68,8 +69,14 @@ export function calcularNuevasAlertas(
     }
 
     // 2. ACWR alto/elevado
+    // Regla de comparación: Un resumen semanal rs es elegible si isValidWeekId(rs.semana) es true y su fecha de inicio (Lunes ISO) no es futura (getWeekStartDateISO(rs.semana) <= hoyStr).
     const rsReciente = resumenes
-      .filter((rs) => rs.id_jugadora === jug.id_jugadora && (!rs.semana || rs.semana <= hoyStr))
+      .filter((rs) => {
+        if (rs.id_jugadora !== jug.id_jugadora || !rs.semana) return false
+        if (!isValidWeekId(rs.semana)) return false
+        const inicioSemana = getWeekStartDateISO(rs.semana)
+        return inicioSemana !== '' && inicioSemana <= hoyStr
+      })
       .sort((a, b) => b.semana.localeCompare(a.semana))
 
     if (rsReciente.length > 0) {
@@ -170,24 +177,35 @@ export function calcularNuevasAlertas(
     })
   }
 
-  // Deduplicar contra existentes:
+  // Deduplicación intra-batch (en el mismo escaneo):
+  const batchUnico: Alerta[] = []
+  const vistanBatch = new Set<string>()
+  for (const a of alertas) {
+    const key = `${a.id_jugadora}|${a.tipo}|${a.fecha}|${a.origen || ''}`
+    if (!vistanBatch.has(key)) {
+      vistanBatch.add(key)
+      batchUnico.push(a)
+    }
+  }
+
+  // Deduplicación contra alertas existentes en Dexie:
   // - No crear alertas si la fecha es futura.
-  // - No crear alertas abiertas si ya existe una alerta equivalente abierta o en_revision.
-  // - No reabrir alertas resueltas/descartadas para la misma fecha y contexto.
-  return alertas.filter((a) => {
+  // - Bloquear si existe alerta del MISMO DÍA, MISMA JUGADORA y MISMO TIPO/ORIGEN (estado abierta/en_revision).
+  // - No reabrir resueltas/descartadas para la misma fecha y contexto.
+  // - Alertas de DÍAS DIFERENTES NO se bloquean.
+  return batchUnico.filter((a) => {
     if (a.fecha > hoyStr) return false
 
     const duplicado = existentesAlertas.some((e) => {
       if (e.id_jugadora !== a.id_jugadora || e.tipo !== a.tipo) return false
+      // Deduplicar únicamente si corresponden a la MISMA FECHA (mismo día de evento)
+      if (e.fecha !== a.fecha) return false
+      if (e.origen && a.origen && e.origen !== a.origen) return false
 
-      const eEstado = e.estado || (e.leida ? 'resuelta' : 'abierta')
-      if (eEstado === 'abierta' || eEstado === 'en_revision') {
-        return true
-      }
-      if ((eEstado === 'resuelta' || eEstado === 'descartada') && e.fecha === a.fecha) {
-        return true
-      }
-      return false
+      // En el mismo día y mismo contexto:
+      // abierta / en_revision -> bloquea duplicado
+      // resuelta / descartada -> no se reabre para la misma fecha
+      return true
     })
 
     return !duplicado

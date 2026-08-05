@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { useStore } from '@/store/store'
 import { exportToJSON } from '@/utils/export'
 import { forceExternalBackup, getLastExternalBackupInfo, parseBackupFile, restoreFromData, validateBackupData } from '@/utils/backup'
@@ -59,9 +59,26 @@ export function ImportPage() {
   const [activeMappings, setActiveMappings] = useState<ColumnMapping[]>([])
   const [newTemplateName, setNewTemplateName] = useState<string>('')
   const [previewData, setPreviewData] = useState<PreviewRow[]>([])
-  const [previewSummary, setPreviewSummary] = useState({
-    total: 0, nuevos: 0, actualizaciones: 0, duplicados: 0, errores: 0, omitidos: 0
-  })
+
+  // Derivación pura del resumen de previsualización (React State Pure Rule)
+  const previewSummary = useMemo(() => {
+    let nuevos = 0, actualizaciones = 0, duplicados = 0, errores = 0, omitidos = 0
+    previewData.forEach(r => {
+      if (r.estado === 'NUEVO') nuevos++
+      else if (r.estado === 'ACTUALIZACION_POSIBLE') actualizaciones++
+      else if (r.estado === 'DUPLICADO_IDENTICO') duplicados++
+      else if (r.estado === 'ERROR') errores++
+      else if (r.estado === 'OMITIDA') omitidos++
+    })
+    return {
+      total: previewData.length,
+      nuevos,
+      actualizaciones,
+      duplicados,
+      errores,
+      omitidos
+    }
+  }, [previewData])
 
   // Table pagination and filters
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
@@ -103,7 +120,6 @@ export function ImportPage() {
         if (!isMounted) return
         const summary = construirVistaPrevia(parsedRawRows, activeMappings, wellness, context.jugadorasMap || {}, context)
         setPreviewData(summary.rows)
-        setPreviewSummary(summary)
         setCurrentPage(1)
       })
     }
@@ -339,7 +355,7 @@ export function ImportPage() {
 
   const handleExcludeRow = (filaIndex: number) => {
     setPreviewData(prevRows => {
-      const newRows = prevRows.map(r => {
+      return prevRows.map(r => {
         if (r.filaOriginal === filaIndex) {
           const isOmitida = r.estado === 'OMITIDA'
           const prevEstado = (r as any).prevEstado || 'NUEVO'
@@ -353,26 +369,6 @@ export function ImportPage() {
         }
         return r
       })
-
-      let nuevos = 0, actualizaciones = 0, duplicados = 0, errores = 0, omitidos = 0
-      newRows.forEach(r => {
-        if (r.estado === 'NUEVO') nuevos++
-        else if (r.estado === 'ACTUALIZACION_POSIBLE') actualizaciones++
-        else if (r.estado === 'DUPLICADO_IDENTICO') duplicados++
-        else if (r.estado === 'ERROR') errores++
-        else if (r.estado === 'OMITIDA') omitidos++
-      })
-
-      setPreviewSummary({
-        total: newRows.length,
-        nuevos,
-        actualizaciones,
-        duplicados,
-        errores,
-        omitidos
-      })
-
-      return newRows
     })
   }
 

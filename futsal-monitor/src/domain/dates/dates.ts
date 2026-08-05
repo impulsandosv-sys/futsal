@@ -27,8 +27,17 @@ export function isValidWeekId(weekId: string): boolean {
   const isoWeekRegex = /^(\d{4})-W(\d{2})$/
   const match = isoWeekRegex.exec(trimmed)
   if (!match) return false
+  const year = parseInt(match[1], 10)
   const weekNum = parseInt(match[2], 10)
-  return weekNum >= 1 && weekNum <= 53
+  if (weekNum < 1 || weekNum > 53) return false
+  if (weekNum === 53) {
+    const jan4 = new Date(year, 0, 4)
+    const dayOfWeek = jan4.getDay() || 7
+    const week1Monday = new Date(year, 0, 4 - dayOfWeek + 1)
+    const week53Thursday = new Date(week1Monday.getFullYear(), week1Monday.getMonth(), week1Monday.getDate() + 364 + 3)
+    return week53Thursday.getFullYear() === year
+  }
+  return true
 }
 
 export function getWeekStartDateISO(weekId: string): string {

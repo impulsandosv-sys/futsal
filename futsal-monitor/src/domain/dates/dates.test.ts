@@ -207,4 +207,11 @@ describe('Bloque C - Semanas ISO y conversiones seguras', () => {
     expect(getWeekEndDateISO('invalid-week-id')).toBe('')
     expect(formatWeek('invalid-week-id')).toBe('invalid-week-id')
   })
+
+  it('8. Validación estricta de W53 según calendario del año ISO', () => {
+    expect(isValidWeekId('2026-W53')).toBe(true) // 2026 starts Jan 1 Thu -> 53 weeks
+    expect(isValidWeekId('2020-W53')).toBe(true) // 2020 leap year starts Jan 1 Wed -> 53 weeks
+    expect(isValidWeekId('2025-W53')).toBe(false) // 2025 has 52 weeks
+    expect(isValidWeekId('2024-W53')).toBe(false) // 2024 has 52 weeks
+  })
 })

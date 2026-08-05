@@ -143,4 +143,51 @@ describe('Bloque B - calcularNuevasAlertas, idempotencia y reglas de actividad',
     const alertasJ3 = res.filter(a => a.id_jugadora === 'J003' && a.tipo === 'wellness_bajo')
     expect(alertasJ3).toHaveLength(0)
   })
+
+  it('5b. Una alerta abierta de un día anterior (2026-07-01) NO bloquea una alerta nueva del día actual (2026-08-05)', () => {
+    const wellnessList: Wellness[] = [
+      { id_jugadora: 'J001', fecha: '2026-08-05', calidad_sueno: 3, fatiga: 3, dolor_muscular: 3, estres: 3, estado_animo: 3, dolor_especifico: '', score_wellness: 3.0 },
+      { id_jugadora: 'J001', fecha: '2026-08-04', calidad_sueno: 8, fatiga: 8, dolor_muscular: 8, estres: 8, estado_animo: 8, dolor_especifico: '', score_wellness: 8.0 },
+      { id_jugadora: 'J001', fecha: '2026-08-03', calidad_sueno: 8, fatiga: 8, dolor_muscular: 8, estres: 8, estado_animo: 8, dolor_especifico: '', score_wellness: 8.0 }
+    ]
+    const existentes: Alerta[] = [{
+      tipo: 'wellness_bajo',
+      prioridad: 'alto',
+      id_jugadora: 'J001',
+      fecha: '2026-07-01',
+      mensaje: 'Wellness bajo el 2026-07-01',
+      nivel: 'alto',
+      leida: false,
+      creada: '2026-07-01T12:00:00Z',
+      fecha_creacion: '2026-07-01T12:00:00Z',
+      origen: 'Regla de Bienestar Diario',
+      datos_sustento: 'Score: 3/10',
+      estado: 'abierta',
+      responsable: '',
+      nota_decision: '',
+      sugerencia: 'Revisar con la jugadora'
+    }]
+
+    const res = calcularNuevasAlertas([jugActiva], wellnessList, [], [], existentes, '2026-08-05', '2026-08-05T12:00:00Z')
+    const alertasNuevas = res.filter(a => a.tipo === 'wellness_bajo' && a.fecha === '2026-08-05')
+    expect(alertasNuevas).toHaveLength(1)
+  })
+
+  it('Bloque B: Resumen semanal con YYYY-Www (2026-W30 Lunes=2026-07-20 <= 2026-08-05) genera alerta', () => {
+    const resumenes = [
+      { id_jugadora: 'J001', semana: '2026-W30', acwr: 1.8, carga_total: 1000, carga_cronica: 550 } as any
+    ]
+    const res = calcularNuevasAlertas([jugActiva], normalWellnessHistory('J001'), resumenes, [], [], '2026-08-05', '2026-08-05T12:00:00Z')
+    const alertasCarga = res.filter(a => a.tipo === 'carga_alta')
+    expect(alertasCarga).toHaveLength(1)
+  })
+
+  it('Bloque B: Resumen semanal con YYYY-Www futuro (2026-W50 Lunes=2026-12-07 > 2026-08-05) es excluido', () => {
+    const resumenes = [
+      { id_jugadora: 'J001', semana: '2026-W50', acwr: 1.8, carga_total: 1000, carga_cronica: 550 } as any
+    ]
+    const res = calcularNuevasAlertas([jugActiva], normalWellnessHistory('J001'), resumenes, [], [], '2026-08-05', '2026-08-05T12:00:00Z')
+    const alertasCarga = res.filter(a => a.tipo === 'carga_alta')
+    expect(alertasCarga).toHaveLength(0)
+  })
 })
