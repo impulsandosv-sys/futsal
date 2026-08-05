@@ -118,7 +118,7 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
 
     expect(screen.getAllByText('Sin registro hoy').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Sin CMJ registrado').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Sin sRPE reciente').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('sin registro').length).toBeGreaterThan(0)
 
     expect(screen.queryByText('0 cm')).not.toBeInTheDocument()
     expect(screen.queryByText('0 UA')).not.toBeInTheDocument()
@@ -188,7 +188,7 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
         estres: 2,
         estado_animo: 8,
         dolor_especifico: 'DOLOR_ESPECIFICO_PRIVADO_2026',
-        score_wellness: 80
+        score_wellness: 8
       }
     ]
 
@@ -221,6 +221,6 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
     expect(screen.getByText('Ana Lopez')).toBeInTheDocument()
     expect(screen.getByText(/⛔ Lesionada/i)).toBeInTheDocument()
     expect(screen.getByText('Esguince Grado 1')).toBeInTheDocument()
-    expect(screen.getByText('80 / 100')).toBeInTheDocument()
+    expect(screen.getByText('8 / 10')).toBeInTheDocument()
   })
 })

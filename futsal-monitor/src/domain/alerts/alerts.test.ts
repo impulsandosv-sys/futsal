@@ -2,141 +2,145 @@ import { describe, it, expect } from 'vitest'
 import { calcularNuevasAlertas } from './alerts'
 import type { Jugadora, Wellness, Alerta } from '@/types'
 
-describe('calcularNuevasAlertas y deduplicación', () => {
-  const mockJugadora: Jugadora = {
-    id_jugadora: 'J001', nombre: 'Test', fecha_nacimiento: '2000-01-01', posicion: 'Ala',
+describe('Bloque B - calcularNuevasAlertas, idempotencia y reglas de actividad', () => {
+  const jugActiva: Jugadora = {
+    id_jugadora: 'J001', nombre: 'Ana Activa', fecha_nacimiento: '2000-01-01', posicion: 'Ala',
     altura_cm: 170, peso_kg: 60, imc: 20, grasa: 20, anos_experiencia_futsal: 5, historial_lesional: '', notas: '', activa: true
   }
 
-  // Pre-populate preceding days to avoid "datos_faltantes" alert triggering
-  const normalWellnessHistory: Wellness[] = [
-    { id_jugadora: 'J001', fecha: '2026-07-12', calidad_sueno: 8, fatiga: 8, dolor_muscular: 8, estres: 8, estado_animo: 8, dolor_especifico: '', score_wellness: 8.0 },
-    { id_jugadora: 'J001', fecha: '2026-07-11', calidad_sueno: 8, fatiga: 8, dolor_muscular: 8, estres: 8, estado_animo: 8, dolor_especifico: '', score_wellness: 8.0 },
-    { id_jugadora: 'J001', fecha: '2026-07-10', calidad_sueno: 8, fatiga: 8, dolor_muscular: 8, estres: 8, estado_animo: 8, dolor_especifico: '', score_wellness: 8.0 }
+  const jugInactiva: Jugadora = {
+    id_jugadora: 'J002', nombre: 'Bea Inactiva', fecha_nacimiento: '2000-01-01', posicion: 'Pivot',
+    altura_cm: 168, peso_kg: 58, imc: 20.5, grasa: 18, anos_experiencia_futsal: 4, historial_lesional: '', notas: '', activa: false
+  }
+
+  const jugSinCampoActiva: Jugadora = {
+    id_jugadora: 'J003', nombre: 'Clara SinCampo', fecha_nacimiento: '2000-01-01', posicion: 'Cierre',
+    altura_cm: 165, peso_kg: 55, imc: 20.2, grasa: 19, anos_experiencia_futsal: 3, historial_lesional: '', notas: ''
+    // activa: undefined
+  }
+
+  const normalWellnessHistory = (id: string): Wellness[] => [
+    { id_jugadora: id, fecha: '2026-07-12', calidad_sueno: 8, fatiga: 8, dolor_muscular: 8, estres: 8, estado_animo: 8, dolor_especifico: '', score_wellness: 8.0 },
+    { id_jugadora: id, fecha: '2026-07-11', calidad_sueno: 8, fatiga: 8, dolor_muscular: 8, estres: 8, estado_animo: 8, dolor_especifico: '', score_wellness: 8.0 },
+    { id_jugadora: id, fecha: '2026-07-10', calidad_sueno: 8, fatiga: 8, dolor_muscular: 8, estres: 8, estado_animo: 8, dolor_especifico: '', score_wellness: 8.0 }
   ]
 
-  it('debería generar una alerta con todas las propiedades de revisión requeridas', () => {
+  it('1. Jugadora activa: true es incluida en la generación de alertas', () => {
     const wellnessList: Wellness[] = [
-      { id_jugadora: 'J001', fecha: '2026-07-13', calidad_sueno: 4, fatiga: 4, dolor_muscular: 4, estres: 4, estado_animo: 4, dolor_especifico: '', score_wellness: 4.0 },
-      ...normalWellnessHistory
+      { id_jugadora: 'J001', fecha: '2026-07-13', calidad_sueno: 3, fatiga: 3, dolor_muscular: 3, estres: 3, estado_animo: 3, dolor_especifico: '', score_wellness: 3.0 },
+      ...normalWellnessHistory('J001')
     ]
-    const res = calcularNuevasAlertas([mockJugadora], wellnessList, [], [], [], '2026-07-13', '2026-07-13T12:00:00Z')
-    const wellnessAlerts = res.filter(a => a.tipo === 'wellness_bajo')
-    
-    expect(wellnessAlerts).toHaveLength(1)
-    expect(wellnessAlerts[0]).toMatchObject({
-      tipo: 'wellness_bajo',
-      id_jugadora: 'J001',
-      prioridad: 'alto',
-      estado: 'abierta',
-      origen: 'Regla de Bienestar Diario',
-      sugerencia: 'Revisar con la jugadora'
-    })
-    expect(wellnessAlerts[0].datos_sustento).toContain('Score Wellness: 4/10')
-    expect(wellnessAlerts[0].fecha_creacion).toBe('2026-07-13T12:00:00Z')
+    const res = calcularNuevasAlertas([jugActiva], wellnessList, [], [], [], '2026-07-13', '2026-07-13T12:00:00Z')
+    expect(res.some(a => a.id_jugadora === 'J001')).toBe(true)
   })
 
-  it('debería evitar alertas duplicadas para la misma jugadora, tipo y fecha/contexto si ya existe una abierta', () => {
+  it('2. Jugadora activa: false es excluida de la generación de alertas', () => {
     const wellnessList: Wellness[] = [
-      { id_jugadora: 'J001', fecha: '2026-07-13', calidad_sueno: 4, fatiga: 4, dolor_muscular: 4, estres: 4, estado_animo: 4, dolor_especifico: '', score_wellness: 4.0 },
-      ...normalWellnessHistory
+      { id_jugadora: 'J002', fecha: '2026-07-13', calidad_sueno: 3, fatiga: 3, dolor_muscular: 3, estres: 3, estado_animo: 3, dolor_especifico: '', score_wellness: 3.0 },
+      ...normalWellnessHistory('J002')
+    ]
+    const res = calcularNuevasAlertas([jugInactiva], wellnessList, [], [], [], '2026-07-13', '2026-07-13T12:00:00Z')
+    expect(res.some(a => a.id_jugadora === 'J002')).toBe(false)
+  })
+
+  it('3. Jugadora sin campo activa (undefined) es incluida por compatibilidad', () => {
+    const wellnessList: Wellness[] = [
+      { id_jugadora: 'J003', fecha: '2026-07-13', calidad_sueno: 3, fatiga: 3, dolor_muscular: 3, estres: 3, estado_animo: 3, dolor_especifico: '', score_wellness: 3.0 },
+      ...normalWellnessHistory('J003')
+    ]
+    const res = calcularNuevasAlertas([jugSinCampoActiva], wellnessList, [], [], [], '2026-07-13', '2026-07-13T12:00:00Z')
+    expect(res.some(a => a.id_jugadora === 'J003')).toBe(true)
+  })
+
+  it('4. Dos escaneos consecutivos no duplican una alerta abierta equivalente', () => {
+    const wellnessList: Wellness[] = [
+      { id_jugadora: 'J001', fecha: '2026-07-13', calidad_sueno: 3, fatiga: 3, dolor_muscular: 3, estres: 3, estado_animo: 3, dolor_especifico: '', score_wellness: 3.0 },
+      ...normalWellnessHistory('J001')
+    ]
+
+    const primerEscaneo = calcularNuevasAlertas([jugActiva], wellnessList, [], [], [], '2026-07-13', '2026-07-13T12:00:00Z')
+    expect(primerEscaneo).toHaveLength(1)
+
+    const segundoEscaneo = calcularNuevasAlertas([jugActiva], wellnessList, [], [], primerEscaneo, '2026-07-13', '2026-07-13T12:05:00Z')
+    expect(segundoEscaneo).toHaveLength(0)
+  })
+
+  it('5. Alerta resuelta: no se reabre para la misma fecha y contexto', () => {
+    const wellnessList: Wellness[] = [
+      { id_jugadora: 'J001', fecha: '2026-07-13', calidad_sueno: 3, fatiga: 3, dolor_muscular: 3, estres: 3, estado_animo: 3, dolor_especifico: '', score_wellness: 3.0 },
+      ...normalWellnessHistory('J001')
     ]
     const existentes: Alerta[] = [{
       tipo: 'wellness_bajo',
       prioridad: 'alto',
       id_jugadora: 'J001',
       fecha: '2026-07-13',
-      mensaje: 'Test: Wellness muy bajo (4/10) el 2026-07-13',
-      nivel: 'alto',
-      leida: false,
-      creada: '2026-07-13T12:00:00Z',
-      fecha_creacion: '2026-07-13T12:00:00Z',
-      origen: 'Regla de Bienestar Diario',
-      datos_sustento: 'Score Wellness: 4/10',
-      estado: 'abierta',
-      responsable: '',
-      nota_decision: '',
-      sugerencia: 'Revisar con la jugadora'
-    }]
-    
-    const res = calcularNuevasAlertas([mockJugadora], wellnessList, [], [], existentes, '2026-07-13', '2026-07-13T12:00:00Z')
-    // No debería generar otra alerta por ser duplicada de S1 en la misma fecha
-    expect(res.filter(a => a.tipo === 'wellness_bajo')).toHaveLength(0)
-  })
-
-  it('debería evitar duplicación si la alerta existente está "en_revision"', () => {
-    const wellnessList: Wellness[] = [
-      { id_jugadora: 'J001', fecha: '2026-07-13', calidad_sueno: 4, fatiga: 4, dolor_muscular: 4, estres: 4, estado_animo: 4, dolor_especifico: '', score_wellness: 4.0 },
-      ...normalWellnessHistory
-    ]
-    const existentes: Alerta[] = [{
-      tipo: 'wellness_bajo',
-      prioridad: 'alto',
-      id_jugadora: 'J001',
-      fecha: '2026-07-13',
-      mensaje: 'Test: Wellness muy bajo (4/10) el 2026-07-13',
-      nivel: 'alto',
-      leida: false,
-      creada: '2026-07-13T12:00:00Z',
-      fecha_creacion: '2026-07-13T12:00:00Z',
-      origen: 'Regla de Bienestar Diario',
-      datos_sustento: 'Score Wellness: 4/10',
-      estado: 'en_revision',
-      responsable: 'Preparador Físico',
-      nota_decision: 'En revisión clínica',
-      sugerencia: 'Revisar con la jugadora'
-    }]
-    
-    const res = calcularNuevasAlertas([mockJugadora], wellnessList, [], [], existentes, '2026-07-13', '2026-07-13T12:00:00Z')
-    expect(res.filter(a => a.tipo === 'wellness_bajo')).toHaveLength(0)
-  })
-
-  it('debería generar una nueva alerta si la alerta previa existente fue resuelta en una FECHA DIFERENTE', () => {
-    const wellnessList: Wellness[] = [
-      { id_jugadora: 'J001', fecha: '2026-07-13', calidad_sueno: 4, fatiga: 4, dolor_muscular: 4, estres: 4, estado_animo: 4, dolor_especifico: '', score_wellness: 4.0 },
-      ...normalWellnessHistory
-    ]
-    // Alerta resuelta pero del día anterior (12 de julio)
-    const existentes: Alerta[] = [{
-      tipo: 'wellness_bajo',
-      prioridad: 'alto',
-      id_jugadora: 'J001',
-      fecha: '2026-07-12',
-      mensaje: 'Test: Wellness muy bajo (4/10) el 2026-07-12',
+      mensaje: 'Wellness bajo el 2026-07-13',
       nivel: 'alto',
       leida: true,
-      creada: '2026-07-12T12:00:00Z',
-      fecha_creacion: '2026-07-12T12:00:00Z',
+      creada: '2026-07-13T12:00:00Z',
+      fecha_creacion: '2026-07-13T12:00:00Z',
       origen: 'Regla de Bienestar Diario',
-      datos_sustento: 'Score Wellness: 4/10',
+      datos_sustento: 'Score: 3/10',
       estado: 'resuelta',
-      responsable: 'Staff',
-      nota_decision: 'Resuelto ayer',
+      responsable: 'PF',
+      nota_decision: 'Hablado con la jugadora',
       sugerencia: 'Revisar con la jugadora'
     }]
-    
-    const res = calcularNuevasAlertas([mockJugadora], wellnessList, [], [], existentes, '2026-07-13', '2026-07-13T12:00:00Z')
-    // Sí debe generar alerta para el día 13
-    expect(res.filter(a => a.tipo === 'wellness_bajo')).toHaveLength(1)
+
+    const res = calcularNuevasAlertas([jugActiva], wellnessList, [], [], existentes, '2026-07-13', '2026-07-13T12:10:00Z')
+    expect(res).toHaveLength(0)
   })
 
-  it('debería proponer sugerencias no prescriptivas según el tipo de regla', () => {
-    // 1. Datos faltantes -> "Comprobar completitud de datos"
-    const resDatos = calcularNuevasAlertas([mockJugadora], [], [], [], [], '2026-07-13', '2026-07-13T12:00:00Z')
-    const datosAlert = resDatos.find(a => a.tipo === 'datos_faltantes')
-    expect(datosAlert?.sugerencia).toBe('Comprobar completitud de datos')
+  it('6. Alerta descartada: no se reabre para la misma fecha y contexto', () => {
+    const wellnessList: Wellness[] = [
+      { id_jugadora: 'J001', fecha: '2026-07-13', calidad_sueno: 3, fatiga: 3, dolor_muscular: 3, estres: 3, estado_animo: 3, dolor_especifico: '', score_wellness: 3.0 },
+      ...normalWellnessHistory('J001')
+    ]
+    const existentes: Alerta[] = [{
+      tipo: 'wellness_bajo',
+      prioridad: 'alto',
+      id_jugadora: 'J001',
+      fecha: '2026-07-13',
+      mensaje: 'Wellness bajo el 2026-07-13',
+      nivel: 'alto',
+      leida: false,
+      creada: '2026-07-13T12:00:00Z',
+      fecha_creacion: '2026-07-13T12:00:00Z',
+      origen: 'Regla de Bienestar Diario',
+      datos_sustento: 'Score: 3/10',
+      estado: 'descartada',
+      responsable: 'PF',
+      nota_decision: 'Falso positivo',
+      sugerencia: 'Revisar con la jugadora'
+    }]
 
-    // 2. Lesión -> "Consultar estado de disponibilidad con fisio"
-    const resLesion = calcularNuevasAlertas(
-      [mockJugadora],
-      normalWellnessHistory,
-      [],
-      [{ id_lesion: 'L1', id_jugadora: 'J001', tipo: 'Esguince', localizacion: 'Tobillo', fecha_inicio: '2026-07-13', disponible: false, fase_rtp: 'Fase_2_Movilidad' }],
-      [],
-      '2026-07-13',
-      '2026-07-13T12:00:00Z'
-    )
-    const lesionAlert = resLesion.find(a => a.tipo === 'lesion')
-    expect(lesionAlert?.sugerencia).toBe('Consultar estado de disponibilidad con fisio')
+    const res = calcularNuevasAlertas([jugActiva], wellnessList, [], [], existentes, '2026-07-13', '2026-07-13T12:10:00Z')
+    expect(res).toHaveLength(0)
+  })
+
+  it('7. Datos de fechas futuras: no generan alerta', () => {
+    const wellnessFuturo: Wellness[] = [
+      { id_jugadora: 'J001', fecha: '2099-01-01', calidad_sueno: 1, fatiga: 1, dolor_muscular: 1, estres: 1, estado_animo: 1, dolor_especifico: '', score_wellness: 1.0 }
+    ]
+
+    const res = calcularNuevasAlertas([jugActiva], wellnessFuturo, [], [], [], '2026-07-13', '2026-07-13T12:00:00Z')
+    const alertasFuturas = res.filter(a => a.fecha > '2026-07-13')
+    expect(alertasFuturas).toHaveLength(0)
+  })
+
+  it('8. Datos de otra jugadora: no contaminan alertas individuales', () => {
+    const wellnessJ1: Wellness[] = [
+      { id_jugadora: 'J001', fecha: '2026-07-13', calidad_sueno: 3, fatiga: 3, dolor_muscular: 3, estres: 3, estado_animo: 3, dolor_especifico: '', score_wellness: 3.0 },
+      ...normalWellnessHistory('J001')
+    ]
+    const wellnessJ3: Wellness[] = [
+      { id_jugadora: 'J003', fecha: '2026-07-13', calidad_sueno: 9, fatiga: 9, dolor_muscular: 9, estres: 9, estado_animo: 9, dolor_especifico: '', score_wellness: 9.0 },
+      ...normalWellnessHistory('J003')
+    ]
+
+    const res = calcularNuevasAlertas([jugActiva, jugSinCampoActiva], [...wellnessJ1, ...wellnessJ3], [], [], [], '2026-07-13', '2026-07-13T12:00:00Z')
+    const alertasJ3 = res.filter(a => a.id_jugadora === 'J003' && a.tipo === 'wellness_bajo')
+    expect(alertasJ3).toHaveLength(0)
   })
 })

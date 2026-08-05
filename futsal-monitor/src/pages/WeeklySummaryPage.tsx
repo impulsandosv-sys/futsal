@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useStore } from '@/store/store'
 import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { Filters } from '@/components/shared/Filters'
-import { formatWeek, getWeeksFromActivities, getLocalDateString } from '@/domain/dates/dates'
+import { formatWeek, getWeeksFromActivities, getWeekStartDateISO, getWeekEndDateISO } from '@/domain/dates/dates'
 import { getLoadStatus, calcularResumenEquipoSemanal, calcularCompletitudSemana } from '@/domain/monitoring/monitoring'
 import { exportToExcel } from '@/utils/export'
 import { generatePDFStaff } from '@/utils/pdf'
@@ -45,12 +45,12 @@ export function WeeklySummaryPage() {
 
   const completitudSemana = useMemo(() => {
     if (!semanaActual) return 0
-    const weekEnd = new Date(semanaActual)
-    weekEnd.setDate(weekEnd.getDate() + 6)
-    const weekEndStr = getLocalDateString(weekEnd)
+    const weekStartStr = getWeekStartDateISO(semanaActual)
+    const weekEndStr = getWeekEndDateISO(semanaActual)
+    if (!weekStartStr || !weekEndStr) return 0
 
-    const sesionesSemana = sesiones.filter(s => s.fecha >= semanaActual && s.fecha <= weekEndStr)
-    const rpesSemana = sesion_rpe.filter(r => r.fecha >= semanaActual && r.fecha <= weekEndStr)
+    const sesionesSemana = sesiones.filter(s => s.fecha >= weekStartStr && s.fecha <= weekEndStr)
+    const rpesSemana = sesion_rpe.filter(r => r.fecha >= weekStartStr && r.fecha <= weekEndStr)
 
     return calcularCompletitudSemana(jugadoras, sesionesSemana, rpesSemana)
   }, [semanaActual, sesiones, sesion_rpe, jugadoras])

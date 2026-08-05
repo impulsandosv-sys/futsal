@@ -19,6 +19,7 @@ import {
 import { recalcularResumenSemanal } from '@/services/resumenSemanal'
 import { recalcularReadinessJugadora } from '@/services/readiness'
 import { getLocalDateString, getWeekId } from '@/domain/dates/dates'
+import { UMBRALES } from '@/config/monitoringThresholds'
 import type {
   Jugadora, FormularioRespuesta, Wellness, Sesion, Partido,
   Lesion, TestFisico, RPE_Partido, ResumenSemanal,
@@ -271,7 +272,7 @@ const evaluarSeguimientoJugadoraDexie = async (jugadoraId: string): Promise<void
   if (!rs || !wel || !ciclo) return
 
   const isAltaCarga    = rs.acwr > 1.5
-  const isBajoWellness = wel.score_wellness < 50
+  const isBajoWellness = wel.score_wellness < UMBRALES.ALERTAS.WELLNESS_BAJO || (wel.score_wellness > 10 && wel.score_wellness < 65)
   const isFaseSensible = ciclo.fase === 'Ovulacion' || ciclo.fase === 'Lutea'
 
   if (!isAltaCarga || !isBajoWellness || !isFaseSensible) return

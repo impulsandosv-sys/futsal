@@ -14,10 +14,12 @@ export function calcularNuevasAlertas(
 ): Alerta[] {
   const alertas: Alerta[] = []
 
-  for (const jug of jugadorasActivas) {
+  const activas = jugadorasActivas.filter((j) => j.activa !== false)
+
+  for (const jug of activas) {
     // 1. Alertas de wellness bajo
     const wellnessReciente = wellness
-      .filter((w) => w.id_jugadora === jug.id_jugadora)
+      .filter((w) => w.id_jugadora === jug.id_jugadora && w.fecha <= hoyStr)
       .sort((a, b) => b.fecha.localeCompare(a.fecha))
 
     if (wellnessReciente.length > 0) {
@@ -67,7 +69,7 @@ export function calcularNuevasAlertas(
 
     // 2. ACWR alto/elevado
     const rsReciente = resumenes
-      .filter((rs) => rs.id_jugadora === jug.id_jugadora)
+      .filter((rs) => rs.id_jugadora === jug.id_jugadora && (!rs.semana || rs.semana <= hoyStr))
       .sort((a, b) => b.semana.localeCompare(a.semana))
 
     if (rsReciente.length > 0) {
@@ -84,7 +86,7 @@ export function calcularNuevasAlertas(
           creada: ahoraStr,
           fecha_creacion: ahoraStr,
           origen: 'Regla de Carga Aguda/Crónica (ACWR)',
-          datos_sustento: `ACWR: ${ultimoRS.acwr.toFixed(2)}, Carga Semanal: ${Math.round(ultimoRS.carga_total)} UA, Crónica: ${Math.round(ultimoRS.carga_cronica)} UA`,
+          datos_sustento: `ACWR: ${ultimoRS.acwr}, Carga Semanal: ${Math.round(ultimoRS.carga_total)} UA, Crónica: ${Math.round(ultimoRS.carga_cronica)} UA`,
           estado: 'abierta',
           responsable: '',
           nota_decision: '',
@@ -102,7 +104,7 @@ export function calcularNuevasAlertas(
           creada: ahoraStr,
           fecha_creacion: ahoraStr,
           origen: 'Regla de Carga Aguda/Crónica (ACWR)',
-          datos_sustento: `ACWR: ${ultimoRS.acwr.toFixed(2)}, Carga Semanal: ${Math.round(ultimoRS.carga_total)} UA, Crónica: ${Math.round(ultimoRS.carga_cronica)} UA`,
+          datos_sustento: `ACWR: ${ultimoRS.acwr}, Carga Semanal: ${Math.round(ultimoRS.carga_total)} UA, Crónica: ${Math.round(ultimoRS.carga_cronica)} UA`,
           estado: 'abierta',
           responsable: '',
           nota_decision: '',
@@ -112,13 +114,13 @@ export function calcularNuevasAlertas(
     }
 
     // 3. Datos faltantes (últimos 3 días sin wellness)
-    const fechasRecientes = wellnessReciente.slice(0, 3).map((w) => w.fecha)
+    const todasFechasWellness = new Set(wellnessReciente.map((w) => w.fecha))
     const faltan = []
     const refDate = parseISO(hoyStr)
     for (let i = 1; i <= UMBRALES.ALERTAS.DIAS_FALTANTES_WELLNESS; i++) {
       const d = subDays(refDate, i)
       const fechaStr = format(d, 'yyyy-MM-dd')
-      if (!fechasRecientes.includes(fechaStr)) {
+      if (!todasFechasWellness.has(fechaStr)) {
         faltan.push(fechaStr)
       }
     }
@@ -147,13 +149,14 @@ export function calcularNuevasAlertas(
   // 4. Lesiones activas
   const lesionesActivas = lesiones.filter((l) => !l.disponible)
   for (const les of lesionesActivas) {
-    const jug = jugadorasActivas.find((j) => j.id_jugadora === les.id_jugadora)
+    const jug = activas.find((j) => j.id_jugadora === les.id_jugadora)
+    if (!jug) continue
     alertas.push({
       tipo: 'lesion',
       prioridad: 'alto',
       id_jugadora: les.id_jugadora,
       fecha: hoyStr,
-      mensaje: `${jug?.nombre || les.id_jugadora}: Lesionada - ${les.tipo} (${les.localizacion}) - Fase: ${les.fase_rtp}`,
+      mensaje: `${jug.nombre}: Lesionada - ${les.tipo} (${les.localizacion}) - Fase: ${les.fase_rtp}`,
       nivel: 'alto',
       leida: false,
       creada: ahoraStr,
@@ -167,13 +170,26 @@ export function calcularNuevasAlertas(
     })
   }
 
-  // Deduplicar contra existentes (evitar duplicados de misma jugadora, tipo y fecha/contexto en estado abierta, en_revision o resuelta)
+  // Deduplicar contra existentes:
+  // - No crear alertas si la fecha es futura.
+  // - No crear alertas abiertas si ya existe una alerta equivalente abierta o en_revision.
+  // - No reabrir alertas resueltas/descartadas para la misma fecha y contexto.
   return alertas.filter((a) => {
+    if (a.fecha > hoyStr) return false
+
     const duplicado = existentesAlertas.some((e) => {
+      if (e.id_jugadora !== a.id_jugadora || e.tipo !== a.tipo) return false
+
       const eEstado = e.estado || (e.leida ? 'resuelta' : 'abierta')
-      const esActivo = eEstado === 'abierta' || eEstado === 'en_revision' || eEstado === 'resuelta'
-      return e.tipo === a.tipo && e.id_jugadora === a.id_jugadora && e.fecha === a.fecha && esActivo
+      if (eEstado === 'abierta' || eEstado === 'en_revision') {
+        return true
+      }
+      if ((eEstado === 'resuelta' || eEstado === 'descartada') && e.fecha === a.fecha) {
+        return true
+      }
+      return false
     })
+
     return !duplicado
   })
 }

@@ -18,7 +18,7 @@ import {
   crearInformeValidacion,
   calcularVentanaPropagacion,
   confirmarYEjecutarImportacion,
-  obtenerMapaJugadorasDexie
+  obtenerContextoValidacionWellness
 } from '@/utils/importEngine'
 import { getWeekId } from '@/domain/dates/dates'
 import { recalcularReadinessJugadora } from '@/services/readiness'
@@ -99,9 +99,9 @@ export function ImportPage() {
   useEffect(() => {
     let isMounted = true
     if (parsedRawRows.length > 0 && activeMappings.length > 0) {
-      obtenerMapaJugadorasDexie().then(playersMap => {
+      obtenerContextoValidacionWellness().then(context => {
         if (!isMounted) return
-        const summary = construirVistaPrevia(parsedRawRows, activeMappings, wellness, playersMap)
+        const summary = construirVistaPrevia(parsedRawRows, activeMappings, wellness, context.jugadorasMap || {}, context)
         setPreviewData(summary.rows)
         setPreviewSummary(summary)
         setCurrentPage(1)
@@ -338,40 +338,41 @@ export function ImportPage() {
   }
 
   const handleExcludeRow = (filaIndex: number) => {
-    setPreviewData(prev => prev.map(r => {
-      if (r.filaOriginal === filaIndex) {
-        const isOmitida = r.estado === 'OMITIDA'
-        const prevEstado = (r as any).prevEstado || 'NUEVO'
-        const newEstado = isOmitida ? prevEstado : 'OMITIDA'
-        return {
-          ...r,
-          prevEstado: isOmitida ? undefined : r.estado,
-          estado: newEstado,
-          mensaje: newEstado === 'OMITIDA' ? 'Excluido manualmente por el usuario' : 'Habilitado de nuevo'
-        }
-      }
-      return r
-    }))
-
-    // Recalculate summary counts
-    setPreviewSummary(prev => {
-      const rows = previewData.map(r => {
+    setPreviewData(prevRows => {
+      const newRows = prevRows.map(r => {
         if (r.filaOriginal === filaIndex) {
           const isOmitida = r.estado === 'OMITIDA'
           const prevEstado = (r as any).prevEstado || 'NUEVO'
-          return { ...r, estado: isOmitida ? prevEstado : 'OMITIDA' }
+          const newEstado = isOmitida ? prevEstado : 'OMITIDA'
+          return {
+            ...r,
+            prevEstado: isOmitida ? undefined : r.estado,
+            estado: newEstado,
+            mensaje: newEstado === 'OMITIDA' ? 'Excluido manualmente por el usuario' : 'Habilitado de nuevo'
+          }
         }
         return r
       })
+
       let nuevos = 0, actualizaciones = 0, duplicados = 0, errores = 0, omitidos = 0
-      rows.forEach(r => {
+      newRows.forEach(r => {
         if (r.estado === 'NUEVO') nuevos++
         else if (r.estado === 'ACTUALIZACION_POSIBLE') actualizaciones++
         else if (r.estado === 'DUPLICADO_IDENTICO') duplicados++
         else if (r.estado === 'ERROR') errores++
         else if (r.estado === 'OMITIDA') omitidos++
       })
-      return { ...prev, nuevos, actualizaciones, duplicados, errores, omitidos }
+
+      setPreviewSummary({
+        total: newRows.length,
+        nuevos,
+        actualizaciones,
+        duplicados,
+        errores,
+        omitidos
+      })
+
+      return newRows
     })
   }
 

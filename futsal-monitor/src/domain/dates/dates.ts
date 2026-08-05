@@ -20,20 +20,66 @@ export function compareDateStrings(a: string, b: string, desc = false): number {
   return desc ? timeB - timeA : timeA - timeB
 }
 
+export function isValidWeekId(weekId: string): boolean {
+  if (!weekId || typeof weekId !== 'string') return false
+  const trimmed = weekId.trim()
+  if (isFechaLocalISO(trimmed)) return true
+  const isoWeekRegex = /^(\d{4})-W(\d{2})$/
+  const match = isoWeekRegex.exec(trimmed)
+  if (!match) return false
+  const weekNum = parseInt(match[2], 10)
+  return weekNum >= 1 && weekNum <= 53
+}
+
+export function getWeekStartDateISO(weekId: string): string {
+  if (!isValidWeekId(weekId)) return ''
+  const trimmed = weekId.trim()
+
+  const isoWeekMatch = /^(\d{4})-W(\d{2})$/.exec(trimmed)
+  if (isoWeekMatch) {
+    const year = parseInt(isoWeekMatch[1], 10)
+    const week = parseInt(isoWeekMatch[2], 10)
+
+    const jan4 = new Date(year, 0, 4)
+    const dayOfWeek = jan4.getDay() || 7
+    const week1Monday = new Date(year, 0, 4 - (dayOfWeek - 1))
+
+    const targetMonday = new Date(week1Monday.getTime() + (week - 1) * 7 * 86400000)
+    return getLocalDateString(targetMonday)
+  }
+
+  const d = parseISO(trimmed)
+  if (isNaN(d.getTime())) return ''
+  const mon = startOfWeek(d, { weekStartsOn: 1 })
+  return getLocalDateString(mon)
+}
+
+export function getWeekEndDateISO(weekId: string): string {
+  const startISO = getWeekStartDateISO(weekId)
+  if (!startISO) return ''
+  const mon = parseISO(startISO)
+  const sun = addDays(mon, 6)
+  return getLocalDateString(sun)
+}
+
 export function getWeekId(fecha: string): string {
+  if (!fecha || !isFechaLocalISO(fecha)) return ''
   const d = parseISO(fecha)
-  return format(startOfWeek(d, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+  if (isNaN(d.getTime())) return ''
+  return getLocalDateString(startOfWeek(d, { weekStartsOn: 1 }))
 }
 
 export function formatWeek(weekId: string): string {
-  const d = parseISO(weekId)
-  const end = addDays(d, 6)
-  return `${format(d, 'd MMM', { locale: es })} - ${format(end, 'd MMM yyyy', { locale: es })}`
+  const startStr = getWeekStartDateISO(weekId)
+  if (!startStr) return weekId || 'Semana no válida'
+  const mon = parseISO(startStr)
+  const sun = addDays(mon, 6)
+  return `${format(mon, 'd MMM', { locale: es })} - ${format(sun, 'd MMM yyyy', { locale: es })}`
 }
 
 export function getWeeksFromActivities(fechas: string[]): string[] {
-  const validFechas = fechas.filter(Boolean)
-  const unique = new Set(validFechas.map(f => getWeekId(f)))
+  const validFechas = fechas.filter(f => f && isFechaLocalISO(f))
+  const unique = new Set(validFechas.map(f => getWeekId(f)).filter(Boolean))
   return Array.from(unique).sort((a, b) => compareDateStrings(a, b, true))
 }
 

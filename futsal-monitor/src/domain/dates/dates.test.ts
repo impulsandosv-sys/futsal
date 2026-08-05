@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest'
 import { 
   compareDateStrings, 
   getWeekId, 
@@ -10,7 +9,10 @@ import {
   toLocalISODate,
   isValidLocalISODate,
   isFechaLocalISO,
-  validateFechaLocalISO
+  validateFechaLocalISO,
+  isValidWeekId,
+  getWeekStartDateISO,
+  getWeekEndDateISO
 } from './dates'
 
 describe('compareDateStrings', () => {
@@ -163,4 +165,46 @@ describe('isFechaLocalISO & validateFechaLocalISO (T-02-DOM-GOV)', () => {
   })
 })
 
+describe('Bloque C - Semanas ISO y conversiones seguras', () => {
+  it('1. Semana ISO estándar (2026-05-11) calcula inicio (lunes) y fin (domingo)', () => {
+    expect(isValidWeekId('2026-05-11')).toBe(true)
+    expect(getWeekStartDateISO('2026-05-11')).toBe('2026-05-11')
+    expect(getWeekEndDateISO('2026-05-11')).toBe('2026-05-17')
+    expect(formatWeek('2026-05-11')).toBe('11 may - 17 may 2026')
+  })
 
+  it('2. Primera semana del año (2026-W01)', () => {
+    expect(isValidWeekId('2026-W01')).toBe(true)
+    expect(getWeekStartDateISO('2026-W01')).toBe('2025-12-29') // ISO W01 2026 starts Dec 29 2025
+    expect(getWeekEndDateISO('2026-W01')).toBe('2026-01-04')
+  })
+
+  it('3. Última semana del año (2026-W52)', () => {
+    expect(isValidWeekId('2026-W52')).toBe(true)
+    expect(getWeekStartDateISO('2026-W52')).toBe('2026-12-21')
+    expect(getWeekEndDateISO('2026-W52')).toBe('2026-12-27')
+  })
+
+  it('4. Semana que cruza año (2026-12-28)', () => {
+    expect(getWeekStartDateISO('2026-12-28')).toBe('2026-12-28')
+    expect(getWeekEndDateISO('2026-12-28')).toBe('2027-01-03')
+  })
+
+  it('5 & 6. Domingo de la semana está incluido y lunes siguiente excluido', () => {
+    const start = getWeekStartDateISO('2026-05-11') // 2026-05-11
+    const end = getWeekEndDateISO('2026-05-11')     // 2026-05-17 (Domingo)
+
+    const sunday = '2026-05-17'
+    const nextMonday = '2026-05-18'
+
+    expect(sunday >= start && sunday <= end).toBe(true)
+    expect(nextMonday >= start && nextMonday <= end).toBe(false)
+  })
+
+  it('7. Week ID inválido devuelve valores seguros sin lanzar excepción', () => {
+    expect(isValidWeekId('invalid-week-id')).toBe(false)
+    expect(getWeekStartDateISO('invalid-week-id')).toBe('')
+    expect(getWeekEndDateISO('invalid-week-id')).toBe('')
+    expect(formatWeek('invalid-week-id')).toBe('invalid-week-id')
+  })
+})

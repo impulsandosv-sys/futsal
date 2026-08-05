@@ -3,13 +3,15 @@ import { calcularNuevasAlertas } from '@/domain/alerts/alerts'
 import { getTodayLocalISO } from '@/domain/dates/dates'
 
 export async function generarAlertas(): Promise<void> {
-  const [jugadoras, wellness, resumenes, lesiones, existentes] = await Promise.all([
-    db.jugadoras.where('activa').equals(1).toArray(),
+  const [todasJugadoras, wellness, resumenes, lesiones, existentes] = await Promise.all([
+    db.jugadoras.toArray(),
     db.wellness.toArray(),
     db.resumen_semanal.toArray(),
     db.lesiones.toArray(),
     db.alertas.toArray()
   ])
+
+  const jugadoras = todasJugadoras.filter((j) => j.activa !== false)
 
   const hoy = getTodayLocalISO()
   const ahora = new Date().toISOString()

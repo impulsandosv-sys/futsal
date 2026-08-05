@@ -19,7 +19,7 @@ import type {
 import { parseISO, addDays, format } from 'date-fns'
 import * as readinessService from '@/services/readiness'
 import * as resumenSemanalService from '@/services/resumenSemanal'
-import { getWeekId, validateFechaLocalISO } from '@/domain/dates/dates'
+import { getWeekId, validateFechaLocalISO, getTodayLocalISO } from '@/domain/dates/dates'
 import { obtenerTemporadaActiva } from '@/domain/temporadas/temporadas'
 import type { FiltrosCarga } from '@/domain/monitoring/monitoring'
 
@@ -381,6 +381,12 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
     return { isValid: false, errorMsg: errFechaISO }
   }
 
+  // Prevent future dates
+  const todayStr = getTodayLocalISO()
+  if (fechaNorm > todayStr) {
+    return { isValid: false, errorMsg: `Fecha futura detectada: ${fechaNorm}` }
+  }
+
   // Validar Temporada Activa
   if (context.temporadaActiva === null) {
     return { isValid: false, errorMsg: 'No existe una temporada activa. Crea o activa una temporada antes de importar wellness.' }
@@ -389,12 +395,6 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
     if (fechaNorm < fecha_inicio || fechaNorm > fecha_fin) {
       return { isValid: false, errorMsg: `Fecha '${fechaNorm}' fuera del rango de la temporada activa (${fecha_inicio} a ${fecha_fin})` }
     }
-  }
-
-  // Prevent future dates
-  const todayStr = new Date().toISOString().split('T')[0]
-  if (fechaNorm > todayStr) {
-    return { isValid: false, errorMsg: `Fecha futura detectada: ${fechaNorm}` }
   }
 
   const fields = ['calidad_sueno', 'fatiga', 'dolor_muscular', 'estres', 'estado_animo']
@@ -838,32 +838,36 @@ export async function aplicarImportacionWellness(
       idImportacion = await dbInstance.historial_importaciones.put(histEntry as any)
     })
   } catch (transError: any) {
-    const errorEntry: Omit<HistorialImportacion, 'id'> = {
-      fechaHora: new Date().toISOString(),
-      nombreArchivo: filename,
-      tipoImportacion: 'wellness',
-      hojaSeleccionada: sheetName || undefined,
-      plantillaMapeo: mappingName || undefined,
-      totalFilas: rows.length,
-      registrosNuevos: 0,
-      registrosActualizados: 0,
-      registrosOmitidos: rows.length,
-      registrosErroneos: rows.length,
-      detalleErrores: [`Fallo crítico: ${transError.message || 'Error de base de datos'}`],
-      estrategiaDuplicadosElegida: strategy,
-      nombreBackupPrevio: backupName,
-      versionEsquema: 11,
-      estado: 'error',
-      derivadosPendientes: false
+    try {
+      const errorEntry: Omit<HistorialImportacion, 'id'> = {
+        fechaHora: new Date().toISOString(),
+        nombreArchivo: filename,
+        tipoImportacion: 'wellness',
+        hojaSeleccionada: sheetName || undefined,
+        plantillaMapeo: mappingName || undefined,
+        totalFilas: rows.length,
+        registrosNuevos: 0,
+        registrosActualizados: 0,
+        registrosOmitidos: rows.length,
+        registrosErroneos: rows.length,
+        detalleErrores: [`Fallo crítico: ${transError.message || 'Error de base de datos'}`],
+        estrategiaDuplicadosElegida: strategy,
+        nombreBackupPrevio: backupName,
+        versionEsquema: 11,
+        estado: 'error',
+        derivadosPendientes: false
+      }
+      await dbInstance.historial_importaciones.put(errorEntry as any)
+    } catch {
+      // Ignore secondary error logging failure
     }
-    await dbInstance.historial_importaciones.put(errorEntry as any)
-
     return {
       success: false,
       inserted: 0,
       updated: 0,
-      skipped: rows.length,
+      skipped: 0,
       errors: rows.length,
+      idImportacion: undefined,
       recalculoExitoso: false
     }
   }
@@ -927,5 +931,35 @@ export async function confirmarYEjecutarImportacion(params: ConfirmImportParams)
     }
   } catch (err: any) {
     params.onFailure('Fallo en la importación: ' + err.message)
+  }
+}
+
+export interface DiagnosticoEscalaWellness {
+  totalRegistrosEvaluados: number
+  totalIncompatibles: number
+  incompatibles: Array<{
+    id?: number
+    id_jugadora: string
+    fecha: string
+    score_wellness: number
+  }>
+}
+
+/**
+ * Función de diagnóstico de solo lectura que detecta registros de wellness con score_wellness > 10
+ * sin modificar la base de datos Dexie.
+ */
+export async function diagnosticarRegistrosWellnessFueraDeEscala(dbInstance: FutsalDB = db): Promise<DiagnosticoEscalaWellness> {
+  const todos = await dbInstance.wellness.toArray()
+  const incompatibles = todos.filter(w => typeof w.score_wellness === 'number' && w.score_wellness > 10)
+  return {
+    totalRegistrosEvaluados: todos.length,
+    totalIncompatibles: incompatibles.length,
+    incompatibles: incompatibles.map(w => ({
+      id: w.id,
+      id_jugadora: w.id_jugadora,
+      fecha: w.fecha,
+      score_wellness: w.score_wellness
+    }))
   }
 }

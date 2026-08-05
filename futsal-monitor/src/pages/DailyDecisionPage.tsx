@@ -209,7 +209,7 @@ export function DailyDecisionPage() {
                       {j.wellnessDia ? (
                         <div className="space-y-0.5">
                           <span className="font-bold text-surface-900 text-xs">
-                            {j.wellnessDia.score_wellness} / 100
+                            {j.wellnessDia.score_wellness} / 10
                           </span>
                           <div className="flex gap-1 text-[9px] text-surface-500">
                             <span>Sueño: {j.wellnessDia.calidad_sueno}</span>
@@ -268,7 +268,7 @@ export function DailyDecisionPage() {
                           </span>
                         </div>
                       ) : (
-                        <span className="text-[11px] text-surface-400 italic">Sin sRPE reciente</span>
+                        <span className="text-[11px] text-surface-400 italic">sin registro</span>
                       )}
                     </td>
 
