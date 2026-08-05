@@ -77,7 +77,7 @@ export function calcularNuevasAlertas(
         const inicioSemana = getWeekStartDateISO(rs.semana)
         return inicioSemana !== '' && inicioSemana <= hoyStr
       })
-      .sort((a, b) => b.semana.localeCompare(a.semana))
+      .sort((a, b) => getWeekStartDateISO(b.semana).localeCompare(getWeekStartDateISO(a.semana)))
 
     if (rsReciente.length > 0) {
       const ultimoRS = rsReciente[0]

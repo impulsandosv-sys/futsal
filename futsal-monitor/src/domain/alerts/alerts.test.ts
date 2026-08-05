@@ -190,4 +190,16 @@ describe('Bloque B - calcularNuevasAlertas, idempotencia y reglas de actividad',
     const alertasCarga = res.filter(a => a.tipo === 'carga_alta')
     expect(alertasCarga).toHaveLength(0)
   })
+
+  it('Bloque A: Mezcla de semanas YYYY-Www y YYYY-MM-DD se ordena cronológicamente por fecha real y no por texto', () => {
+    const resumenes = [
+      { id_jugadora: 'J001', semana: '2026-W30', acwr: 1.0, carga_total: 500, carga_cronica: 500 } as any,
+      { id_jugadora: 'J001', semana: '2026-W31', acwr: 1.0, carga_total: 500, carga_cronica: 500 } as any,
+      { id_jugadora: 'J001', semana: '2026-08-03', acwr: 1.8, carga_total: 1000, carga_cronica: 550 } as any
+    ]
+    const res = calcularNuevasAlertas([jugActiva], normalWellnessHistory('J001'), resumenes, [], [], '2026-08-05', '2026-08-05T12:00:00Z')
+    const alertasCarga = res.filter(a => a.tipo === 'carga_alta')
+    expect(alertasCarga).toHaveLength(1)
+    expect(alertasCarga[0].datos_sustento).toContain('1.8')
+  })
 })
