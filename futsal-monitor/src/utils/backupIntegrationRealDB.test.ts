@@ -228,4 +228,114 @@ describe('Bloque E — Integración real Dexie de Backups y Restauración (Merge
     expect(resumenesList.length).toBeGreaterThan(0)
     expect(resumenesList[0].id_jugadora).toBe('J001')
   })
+
+  it('10. Restore replace con fallo en forceExternalBackup previo (Bloque B): detiene la operación sin modificar ni borrar ningún dato local', async () => {
+    await db.jugadoras.add({ id_jugadora: 'J_ORIGINAL', nombre: 'Jugadora Original', posicion: 'Ala', activa: true })
+    await db.wellness.add({
+      id_jugadora: 'J_ORIGINAL',
+      fecha: '2026-02-01',
+      calidad_sueno: 8,
+      fatiga: 3,
+      dolor_muscular: 2,
+      estres: 2,
+      estado_animo: 8,
+      score_wellness: 8.0,
+      dolor_especifico: ''
+    })
+    await db.sesiones.add({
+      id_sesion: 'S_ORIGINAL',
+      fecha: '2026-02-01',
+      tipo_sesion: 'Entreno',
+      rpe_promedio: 6,
+      duracion_minutos: 90,
+      notas: ''
+    })
+
+    const fullBackup = await createBackupData()
+    fullBackup.data.jugadoras = [{ id_jugadora: 'J_INCOMING', nombre: 'Jugadora Entrante', posicion: 'Pivot', activa: true } as any]
+
+    // Provocar fallo controlado en descarga de copia previa
+    const originalCreateElement = document.createElement.bind(document)
+    const spyCreateElement = vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+      if (tagName === 'a') {
+        throw new Error('Fallo de descarga simulado en DOM al intentar backup previo')
+      }
+      return originalCreateElement(tagName)
+    })
+
+    const res = await restoreFromData(fullBackup, 'replace')
+    spyCreateElement.mockRestore()
+
+    expect(res.success).toBe(false)
+    expect(res.error).toMatch(/No se pudo generar o descargar la copia de seguridad previa obligatoria/i)
+
+    const jugadoras = await db.jugadoras.toArray()
+    expect(jugadoras.length).toBe(1)
+    expect(jugadoras[0].id_jugadora).toBe('J_ORIGINAL')
+
+    const wellnessList = await db.wellness.toArray()
+    expect(wellnessList.length).toBe(1)
+    expect(wellnessList[0].id_jugadora).toBe('J_ORIGINAL')
+
+    const sesionesList = await db.sesiones.toArray()
+    expect(sesionesList.length).toBe(1)
+    expect(sesionesList[0].id_sesion).toBe('S_ORIGINAL')
+
+    expect(await db.jugadoras.get('J_INCOMING')).toBeUndefined()
+    expect(await db.historial_copias.toArray()).toHaveLength(0)
+  })
+
+  it('11. Restore replace con fallo dentro de la transacción Dexie (Bloque C): realiza rollback físico completo restaurando los datos locales originales', async () => {
+    await db.jugadoras.add({ id_jugadora: 'J_LOCAL_ROLLBACK', nombre: 'Jugadora Local', posicion: 'Ala', activa: true })
+    await db.wellness.add({
+      id_jugadora: 'J_LOCAL_ROLLBACK',
+      fecha: '2026-02-01',
+      calidad_sueno: 7,
+      fatiga: 4,
+      dolor_muscular: 3,
+      estres: 2,
+      estado_animo: 7,
+      score_wellness: 7.0,
+      dolor_especifico: ''
+    })
+    await db.sesiones.add({
+      id_sesion: 'S_LOCAL_ROLLBACK',
+      fecha: '2026-02-01',
+      tipo_sesion: 'Entreno',
+      rpe_promedio: 5,
+      duracion_minutos: 75,
+      notas: ''
+    })
+
+    const fullBackup = await createBackupData()
+    fullBackup.data.jugadoras = [{ id_jugadora: 'J_INCOMING_FAIL', nombre: 'Jugadora Fallida', posicion: 'Pivot', activa: true } as any]
+
+    // Interceptar escritura en transacción para simular error físico
+    const spyPut = vi.spyOn(db.jugadoras, 'put').mockImplementationOnce(async () => {
+      throw new Error('Error de escritura forzado durante la transacción Dexie')
+    })
+
+    const res = await restoreFromData(fullBackup, 'replace')
+    spyPut.mockRestore()
+
+    expect(res.success).toBe(false)
+    expect(res.error).toMatch(/Error de escritura forzado durante la transacción Dexie/i)
+
+    // Rollback físico: datos locales intactos
+    const jugadoras = await db.jugadoras.toArray()
+    expect(jugadoras.length).toBe(1)
+    expect(jugadoras[0].id_jugadora).toBe('J_LOCAL_ROLLBACK')
+
+    const wellnessList = await db.wellness.toArray()
+    expect(wellnessList.length).toBe(1)
+    expect(wellnessList[0].id_jugadora).toBe('J_LOCAL_ROLLBACK')
+
+    const sesionesList = await db.sesiones.toArray()
+    expect(sesionesList.length).toBe(1)
+    expect(sesionesList[0].id_sesion).toBe('S_LOCAL_ROLLBACK')
+
+    expect(await db.jugadoras.get('J_INCOMING_FAIL')).toBeUndefined()
+    const historial = await db.historial_copias.where({ tipo: 'restauracion' }).toArray()
+    expect(historial).toHaveLength(0)
+  })
 })

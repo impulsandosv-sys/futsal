@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "types": ["vite/client", "@testing-library/jest-dom", "node"]
+  },
+  "include": [
+    "src/db/databaseTypes.test.ts",
+    "src/db/databaseMigrationReal.test.ts",
+    "src/AppLayout.test.tsx",
+    "src/utils/backupIntegrationRealDB.test.ts",
+    "src/db/database.ts",
+    "src/types/**/*"
+  ]
+}

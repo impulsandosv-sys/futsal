@@ -3,14 +3,15 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 vi.unmock('@/db/database')
 
-import type { Sesion, Partido, Lesion } from '@/types'
+import type { Sesion, Partido, Lesion, Wellness } from '@/types'
+import { FutsalDB } from '@/db/database'
 
-describe('Bloque B — Tipado Dexie de claves primarias (string key generics)', () => {
-  let db: any
+describe('Bloque A — Tipado Dexie de claves primarias (string key generics)', () => {
+  let db: FutsalDB
 
   beforeEach(async () => {
     const mod = await vi.importActual<any>('@/db/database')
-    db = mod.db
+    db = mod.db as FutsalDB
 
     await db.sesiones.clear()
     await db.partidos.clear()
@@ -18,7 +19,7 @@ describe('Bloque B — Tipado Dexie de claves primarias (string key generics)', 
     await db.wellness.clear()
   })
 
-  it('1. .get(), .put() y .delete() con claves string en sesiones', async () => {
+  it('1. .get(), .put() y .delete() con claves string en sesiones con verificación estricta de tipos', async () => {
     const s: Sesion = {
       id_sesion: 'S-2026-001',
       fecha: '2026-02-10',
@@ -40,7 +41,7 @@ describe('Bloque B — Tipado Dexie de claves primarias (string key generics)', 
     expect(deleted).toBeUndefined()
   })
 
-  it('2. .get(), .put() y .delete() con claves string en partidos', async () => {
+  it('2. .get(), .put() y .delete() con claves string en partidos con verificación estricta de tipos', async () => {
     const p: Partido = {
       id_partido: 'P-2026-001',
       fecha: '2026-02-15',
@@ -61,7 +62,7 @@ describe('Bloque B — Tipado Dexie de claves primarias (string key generics)', 
     expect(await db.partidos.get('P-2026-001')).toBeUndefined()
   })
 
-  it('3. .get(), .put() y .delete() con claves string en lesiones', async () => {
+  it('3. .get(), .put() y .delete() con claves string en lesiones con verificación estricta de tipos', async () => {
     const l: Lesion = {
       id_lesion: 'L-2026-001',
       id_jugadora: 'J001',
@@ -83,8 +84,8 @@ describe('Bloque B — Tipado Dexie de claves primarias (string key generics)', 
     expect(await db.lesiones.get('L-2026-001')).toBeUndefined()
   })
 
-  it('4. .get() y .put() en tablas autoincrementales con clave number (wellness)', async () => {
-    const id: number = await db.wellness.add({
+  it('4. .get() y .add() en tablas autoincrementales con clave number (wellness) con verificación estricta de tipos', async () => {
+    const w: Wellness = {
       id_jugadora: 'J001',
       fecha: '2026-02-10',
       calidad_sueno: 8,
@@ -94,11 +95,23 @@ describe('Bloque B — Tipado Dexie de claves primarias (string key generics)', 
       estado_animo: 9,
       score_wellness: 8.0,
       dolor_especifico: ''
-    })
+    }
 
-    expect(typeof id).toBe('number')
+    const wellnessKey: number = await db.wellness.add(w)
+    expect(typeof wellnessKey).toBe('number')
 
-    const item = await db.wellness.get(id)
-    expect(item?.id_jugadora).toBe('J001')
+    const fetched: Wellness | undefined = await db.wellness.get(wellnessKey)
+    expect(fetched?.id_jugadora).toBe('J001')
+  })
+
+  it('5. Comprobación estricta a nivel de compilación TypeScript (@ts-expect-error para claves inválidas)', async () => {
+    // @ts-expect-error: sesiones key generic es string, pasar un number debe fallar en comprobación de tipos
+    await db.sesiones.get(123)
+
+    // @ts-expect-error: partidos key generic es string, pasar un number debe fallar en comprobación de tipos
+    await db.partidos.delete(123)
+
+    // @ts-expect-error: wellness key generic es number, pasar un string debe fallar en comprobación de tipos
+    await db.wellness.get('incorrect-key')
   })
 })
