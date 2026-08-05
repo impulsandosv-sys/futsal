@@ -31,13 +31,13 @@ export class FutsalDB extends Dexie {
   wellness!: Dexie.Table<Wellness, number>
   
   // Sesiones de entrenamiento y datos grupales
-  sesiones!: Dexie.Table<Sesion, 'id_sesion'>
+  sesiones!: Dexie.Table<Sesion, string>
   
   // Partidos: por fecha y ordenación por fecha
-  partidos!: Dexie.Table<Partido, 'id_partido'>
+  partidos!: Dexie.Table<Partido, string>
   
   // Lesiones: facilitar búsqueda por jugador y disponibilidad
-  lesiones!: Dexie.Table<Lesion, 'id_lesion'>
+  lesiones!: Dexie.Table<Lesion, string>
   
   // Resultados de tests físicos – organización por jugador + fecha + test
   tests_fisicos!: Dexie.Table<TestFisico, number>

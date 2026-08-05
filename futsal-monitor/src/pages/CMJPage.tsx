@@ -6,7 +6,6 @@ import { CMJProtocolManagerModal } from '@/components/cmj/CMJProtocolManagerModa
 import { ChronojumpImportModal } from '@/components/cmj/ChronojumpImportModal'
 import { ChronojumpPrepPanel } from '@/components/cmj/ChronojumpPrepPanel'
 import type { PreparacionChronojumpResumen } from '@/domain/alias/chronojumpPrepService'
-import { Layout } from '@/components/layout/Layout'
 
 const FINALIDADES = [
   { value: 'control', label: 'Control / Evaluación' },
@@ -69,7 +68,7 @@ export function CMJPage() {
   const paginated = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
   return (
-    <Layout>
+    <div className="space-y-6">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-surface-900">Salto CMJ</h1>
@@ -323,6 +322,6 @@ export function CMJPage() {
           useStore.getState().loadAll()
         }}
       />
-    </Layout>
+    </div>
   )
 }

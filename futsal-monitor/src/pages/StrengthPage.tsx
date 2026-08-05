@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useStore } from '@/store/store'
-import { Layout } from '@/components/layout/Layout'
 import { StrengthFormModal } from '@/components/fuerza/StrengthFormModal'
 import { StrengthDetailModal } from '@/components/fuerza/StrengthDetailModal'
 import { ExerciseManagerModal } from '@/components/fuerza/ExerciseManagerModal'
@@ -117,7 +116,7 @@ export function StrengthPage() {
   }
 
   return (
-    <Layout>
+    <div className="space-y-6">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-surface-900">Entrenamiento de Fuerza</h1>
@@ -346,6 +345,6 @@ export function StrengthPage() {
       <StrengthFormModal open={formOpen} onClose={() => setFormOpen(false)} editingId={editingId} />
       <StrengthDetailModal open={!!detailId} onClose={() => setDetailId(null)} sesionId={detailId} onEdit={handleEdit} />
       <ExerciseManagerModal open={exerciseManagerOpen} onClose={() => setExerciseManagerOpen(false)} />
-    </Layout>
+    </div>
   )
 }
