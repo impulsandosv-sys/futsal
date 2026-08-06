@@ -27,3 +27,65 @@ export function exportToJSON(data: unknown, filename: string): void {
   const blob = new Blob([json], { type: 'application/json' })
   saveAs(blob, `${filename}.json`)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plantilla Estable de Exportación Semanal CSV para Reunión de Staff
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ExportSemanalStaffRow {
+  jugadora: string
+  fecha: string
+  cargaUA: number | null
+  minutosJugados: number | null
+  disponibilidad: string
+  scoreWellness: number | null
+  dolorEspecifico?: string | null
+  alertasActivas?: string | null
+  comentariosStaff?: string | null
+}
+
+/**
+ * Genera una cadena CSV estandarizada para reuniones del cuerpo técnico.
+ * Utiliza 9 columnas fijas sin exponer datos personales sensibles ni identificadores de BD.
+ */
+export function generarCSVReunionStaff(rows: ExportSemanalStaffRow[]): string {
+  const headers = [
+    'Jugadora',
+    'Fecha',
+    'Carga_UA',
+    'Minutos_Jugados',
+    'Disponibilidad',
+    'Score_Wellness',
+    'Dolor_Especifico',
+    'Alertas_Activas',
+    'Comentarios_Staff'
+  ]
+
+  const lines = [headers.join(',')]
+
+  rows.forEach((r) => {
+    const line = [
+      `"${(r.jugadora || '').replace(/"/g, '""')}"`,
+      `"${r.fecha || ''}"`,
+      `"${r.cargaUA !== null && r.cargaUA !== undefined ? r.cargaUA : ''}"`,
+      `"${r.minutosJugados !== null && r.minutosJugados !== undefined ? r.minutosJugados : ''}"`,
+      `"${(r.disponibilidad || 'Disponible').replace(/"/g, '""')}"`,
+      `"${r.scoreWellness !== null && r.scoreWellness !== undefined ? r.scoreWellness : ''}"`,
+      `"${(r.dolorEspecifico || '').replace(/"/g, '""')}"`,
+      `"${(r.alertasActivas || '').replace(/"/g, '""')}"`,
+      `"${(r.comentariosStaff || '').replace(/"/g, '""')}"`
+    ]
+    lines.push(line.join(','))
+  })
+
+  return lines.join('\n')
+}
+
+/**
+ * Descarga el CSV para reuniones de staff en el navegador con codificación UTF-8 BOM.
+ */
+export function exportarCSVReunionStaff(rows: ExportSemanalStaffRow[], filename = 'reunion_staff_semanal'): void {
+  const csvContent = generarCSVReunionStaff(rows)
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+  saveAs(blob, `${filename}.csv`)
+}

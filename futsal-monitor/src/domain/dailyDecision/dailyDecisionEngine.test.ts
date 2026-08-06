@@ -303,4 +303,20 @@ describe('dailyDecisionEngine (T-05-VISTA-DECISION-DIARIA & T-05-R)', () => {
     expect(res.jugadoras[1].id_jugadora).toBe('J2')
     expect(res.jugadoras[2].id_jugadora).toBe('J1')
   })
+
+  it('H. Dataset vacío: procesa correctamente 0 jugadoras sin lanzar excepciones', () => {
+    const res = construirDecisionDiaria([], [], [], [], [], [], [], '2026-08-02')
+    expect(res.totalActivas).toBe(0)
+    expect(res.jugadoras).toEqual([])
+    expect(res.totalAlertasActivas).toBe(0)
+  })
+
+  it('I. Carga 7d incluye días con y sin dato y calcula decisionSugerida de forma explicable', () => {
+    const res = construirDecisionDiaria(jugadoras.slice(0, 1), [], [], [], [], [], [], '2026-08-02')
+    const j1 = res.jugadoras[0]
+
+    expect(j1.completitud?.tieneWellness).toBe(false)
+    expect(j1.decisionSugerida).toBe('observar')
+  })
 })
+

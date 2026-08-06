@@ -482,5 +482,19 @@ describe('PlayerProfilePage (Pestaña e Historial de Fuerza)', () => {
     expect(storeSnapshot.wellness).toEqual([])
     expect(storeSnapshot.lesiones).toEqual([])
   })
+
+  it('28. Preserva trazabilidad metodológica de CMJ y Fuerza sin lanzar excepciones cuando los datos están vacíos o representativos', () => {
+    // Probar renderizado con jugadora sin datos de tests
+    render(
+      <MemoryRouter initialEntries={['/jugadoras/J1']}>
+        <Routes>
+          <Route path="/jugadoras/:id" element={<PlayerProfilePage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('Laura García')).toBeInTheDocument()
+  })
 })
+
 

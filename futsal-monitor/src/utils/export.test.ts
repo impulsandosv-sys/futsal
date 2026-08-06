@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { exportToCSV, exportToExcel, exportToJSON } from './export'
+import { exportToCSV, exportToExcel, exportToJSON, generarCSVReunionStaff } from './export'
 import {
   construirDTOStaffResumenSemanal,
   construirDTOStaffSeguimientoDiario
@@ -71,5 +71,55 @@ describe('T-03 — Integration export.ts: Exportaciones Staff con DTOs Concretos
     const [blobArg] = (saveAs as any).mock.calls[0]
 
     expect(blobArg).toBeInstanceOf(Blob)
+  })
+
+  describe('generarCSVReunionStaff — Plantilla Estable CSV para Reunión de Staff', () => {
+    it('1. Genera cabeceras fijas y filas formateadas correctamente con datos representativos', () => {
+      const rows = [
+        {
+          jugadora: 'Ana López',
+          fecha: '2026-08-05',
+          cargaUA: 350,
+          minutosJugados: 40,
+          disponibilidad: 'Disponible',
+          scoreWellness: 8.5,
+          dolorEspecifico: 'Molestia leve en gemelo',
+          alertasActivas: 'Sin alertas',
+          comentariosStaff: 'Carga gestionada'
+        }
+      ]
+
+      const csv = generarCSVReunionStaff(rows)
+
+      expect(csv).toContain('Jugadora,Fecha,Carga_UA,Minutos_Jugados,Disponibilidad,Score_Wellness,Dolor_Especifico,Alertas_Activas,Comentarios_Staff')
+      expect(csv).toContain('"Ana López","2026-08-05","350","40","Disponible","8.5","Molestia leve en gemelo","Sin alertas","Carga gestionada"')
+    })
+
+    it('2. Genera CSV válido con filas vacías sin romper formato ni lanzar errores', () => {
+      const csv = generarCSVReunionStaff([])
+      expect(csv).toBe('Jugadora,Fecha,Carga_UA,Minutos_Jugados,Disponibilidad,Score_Wellness,Dolor_Especifico,Alertas_Activas,Comentarios_Staff')
+    })
+
+    it('3. Excluye datos sensibles privados (DNI, contacto, historial clínico intimo)', () => {
+      const rows = [
+        {
+          jugadora: 'Bea Pérez',
+          fecha: '2026-08-05',
+          cargaUA: 200,
+          minutosJugados: 20,
+          disponibilidad: 'Readaptacion',
+          scoreWellness: 6.0,
+          dolorEspecifico: null,
+          alertasActivas: null,
+          comentariosStaff: null
+        }
+      ]
+
+      const csv = generarCSVReunionStaff(rows)
+
+      expect(csv).not.toContain('DNI')
+      expect(csv).not.toContain('telefono')
+      expect(csv).not.toContain('historial_intimo')
+    })
   })
 })

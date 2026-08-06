@@ -223,4 +223,44 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
     expect(screen.getByText('Esguince Grado 1')).toBeInTheDocument()
     expect(screen.getByText('8 / 10')).toBeInTheDocument()
   })
+
+  // H. Renderizado con datos vacíos
+  it('H. Renderiza correctamente con datos vacíos sin lanzar excepciones en pantalla', () => {
+    useStore.setState({
+      jugadoras: [],
+      wellness: [],
+      lesiones: [],
+      alertas: [],
+      pruebas_cmj: [],
+      sesion_rpe: [],
+      rpe_partido: []
+    })
+
+    render(
+      <MemoryRouter>
+        <DailyDecisionPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('Decisión diaria')).toBeInTheDocument()
+    expect(screen.getAllByText('0').length).toBeGreaterThan(0) // Múltiples KPIs muestran 0
+  })
+
+  // I. No se disparan alertas por datos ausentes
+  it('I. La falta de wellness no genera alertas automáticas espurias en la vista de Decisión Diaria', () => {
+    useStore.setState({
+      jugadoras: mockJugadoras,
+      wellness: [], // Ausencia de registros
+      alertas: []
+    })
+
+    render(
+      <MemoryRouter>
+        <DailyDecisionPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.queryByText(/wellness_bajo/i)).not.toBeInTheDocument()
+  })
 })
+

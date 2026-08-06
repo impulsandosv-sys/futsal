@@ -25,6 +25,10 @@ export interface DecisionDiariaJugadora {
     estres: number
     estado_animo: number
   } | null
+  completitud?: {
+    tieneWellness: boolean
+    tieneDisponibilidad: boolean
+  }
   alertasActivasCount: number
   alertasActivas: {
     id?: number
@@ -41,9 +45,12 @@ export interface DecisionDiariaJugadora {
     numSesiones: number
     ultimaSesionFecha?: string
     ultimaSesionCarga?: number
+    diasConDato?: number
+    diasSinDato?: number
   } | null
   requiereRevision: boolean
   motivoPrioridad: string
+  decisionSugerida?: 'modificar_carga' | 'limitar_participacion' | 'observar' | 'normal'
 }
 
 export interface ResumenDecisionDiaria {
@@ -200,41 +207,58 @@ export function construirDecisionDiaria(
     let totalSesiones = 0
     let ultimaSesionFecha: string | undefined = undefined
     let ultimaSesionCarga: number | undefined = undefined
+    let diasConDato = 0
+    let diasSinDato = 0
 
     for (const entry of cargas7dMap.values()) {
-      if (entry.tieneDato && entry.carga !== null) {
-        cargaSum += entry.carga
-        totalSesiones += entry.numActividades
-        if (!ultimaSesionFecha || entry.fecha > ultimaSesionFecha) {
-          ultimaSesionFecha = entry.fecha
-          ultimaSesionCarga = entry.carga
+      if (entry.tieneDato) {
+        diasConDato++
+        if (entry.carga !== null) {
+          cargaSum += entry.carga
+          totalSesiones += entry.numActividades
+          if (!ultimaSesionFecha || entry.fecha > ultimaSesionFecha) {
+            ultimaSesionFecha = entry.fecha
+            ultimaSesionCarga = entry.carga
+          }
         }
+      } else {
+        diasSinDato++
       }
     }
 
     const carga7d =
-      totalSesiones > 0 || ultimaSesionCarga !== undefined
+      totalSesiones > 0 || ultimaSesionCarga !== undefined || diasConDato > 0
         ? {
             cargaAcumulada7d: Math.round(cargaSum),
             numSesiones: totalSesiones,
             ultimaSesionFecha,
-            ultimaSesionCarga: ultimaSesionCarga !== undefined ? Math.round(ultimaSesionCarga) : undefined
+            ultimaSesionCarga: ultimaSesionCarga !== undefined ? Math.round(ultimaSesionCarga) : undefined,
+            diasConDato,
+            diasSinDato
           }
         : null
 
     // 6. Criterio de revisión y motivo
     let requiereRevision = false
     let motivoPrioridad = ''
+    let decisionSugerida: 'modificar_carga' | 'limitar_participacion' | 'observar' | 'normal' = 'normal'
 
-    if (alertasJ.length > 0) {
-      requiereRevision = true
-      motivoPrioridad = `${alertasJ.length} alerta(s) activa(s)`
-    } else if (disponibilidad !== 'Disponible') {
+    if (disponibilidad !== 'Disponible') {
       requiereRevision = true
       motivoPrioridad = `Estado: ${disponibilidad}`
+      decisionSugerida = 'limitar_participacion'
+    } else if (alertasJ.some((a) => a.tipo === 'carga_alta')) {
+      requiereRevision = true
+      motivoPrioridad = `${alertasJ.length} alerta(s) activa(s)`
+      decisionSugerida = 'modificar_carga'
+    } else if (alertasJ.length > 0) {
+      requiereRevision = true
+      motivoPrioridad = `${alertasJ.length} alerta(s) activa(s)`
+      decisionSugerida = 'observar'
     } else if (!wellnessDia) {
       requiereRevision = true
       motivoPrioridad = 'Sin wellness del día'
+      decisionSugerida = 'observar'
     }
 
     return {
@@ -244,6 +268,10 @@ export function construirDecisionDiaria(
       disponibilidad,
       detalleLesion,
       wellnessDia,
+      completitud: {
+        tieneWellness: !!wellnessDia,
+        tieneDisponibilidad: true
+      },
       alertasActivasCount: alertasJ.length,
       alertasActivas: alertasJ.map((a) => ({
         id: a.id,
@@ -254,7 +282,8 @@ export function construirDecisionDiaria(
       cmjReciente,
       carga7d,
       requiereRevision,
-      motivoPrioridad
+      motivoPrioridad,
+      decisionSugerida
     }
   })
 
