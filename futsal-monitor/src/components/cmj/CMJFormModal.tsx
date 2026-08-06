@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Modal } from '@/components/shared/Modal'
+import { DatePicker } from '@/components/shared/DatePicker'
 import { useStore } from '@/store/store'
 import { procesarMedicionCMJ } from '@/domain/neuromuscular/cmjEngine'
 import type { MedicionCMJ, IntentoCMJ } from '@/types'
@@ -280,15 +281,11 @@ export function CMJFormModal({ open, onClose, editingId }: Props) {
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-surface-700 mb-1">Fecha *</label>
-            <input
-              type="date"
-              className="w-full rounded-md border-surface-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-            />
-          </div>
+          <DatePicker
+            label="Fecha *"
+            value={fecha}
+            onChange={setFecha}
+          />
           <div>
             <label className="block text-sm font-medium text-surface-700 mb-1">Finalidad</label>
             <select

@@ -3,6 +3,7 @@ import { useStore } from '@/store/store'
 import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { Filters } from '@/components/shared/Filters'
 import { Modal } from '@/components/shared/Modal'
+import { DatePicker } from '@/components/shared/DatePicker'
 import type { Partido } from '@/types'
 
 export function MatchesPage() {
@@ -92,11 +93,11 @@ export function MatchesPage() {
               value={form.id_partido} onChange={(e) => setForm({ ...form, id_partido: e.target.value })}
               disabled={!!editing} />
           </div>
-          <div>
-            <label className="text-[10px] font-medium text-surface-600 block mb-1">Fecha</label>
-            <input type="date" className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"
-              value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
-          </div>
+          <DatePicker
+            label="Fecha"
+            value={form.fecha}
+            onChange={(fecha) => setForm({ ...form, fecha })}
+          />
           <div>
             <label className="text-[10px] font-medium text-surface-600 block mb-1">Rival</label>
             <input className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"

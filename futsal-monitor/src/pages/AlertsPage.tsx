@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useStore } from '@/store/store'
 import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { Modal } from '@/components/shared/Modal'
+import { ConfirmationModal } from '@/components/shared/ConfirmationModal'
+import { registrarCambioAuditoria } from '@/services/auditService'
 import { generarAlertas } from '@/utils/alerts'
 import { useNavigate } from 'react-router-dom'
 import type { Alerta } from '@/types'
@@ -33,6 +35,46 @@ export function AlertsPage() {
 
   // Archive confirmation dialog state
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false)
+
+  // Critical action confirmation modal state
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false)
+  const [pendingAction, setPendingAction] = useState<{
+    id: number
+    nuevoEstado: 'resuelta' | 'descartada'
+    estadoAnterior: string
+    idJugadora?: string
+  } | null>(null)
+
+  const handleTriggerStateChange = (alerta: Alerta, nuevoEstado: 'resuelta' | 'descartada') => {
+    if (alerta.id !== undefined) {
+      const estadoAnterior = alerta.estado || (alerta.leida ? 'resuelta' : 'abierta')
+      setPendingAction({
+        id: alerta.id,
+        nuevoEstado,
+        estadoAnterior,
+        idJugadora: alerta.id_jugadora
+      })
+      setConfirmModalOpen(true)
+    }
+  }
+
+  const handleConfirmStateChange = async (motivo: string) => {
+    if (pendingAction) {
+      await updateAlertaEstado(pendingAction.id, pendingAction.nuevoEstado)
+      registrarCambioAuditoria({
+        usuario: 'Preparador Físico',
+        entidad: 'alerta',
+        idEntidad: String(pendingAction.id),
+        idJugadora: pendingAction.idJugadora,
+        campoModificado: 'estado',
+        valorAnterior: pendingAction.estadoAnterior,
+        valorNuevo: pendingAction.nuevoEstado,
+        motivo
+      })
+      setConfirmModalOpen(false)
+      setPendingAction(null)
+    }
+  }
 
   const handleGenerate = async () => {
     setGenerating(true)
@@ -218,7 +260,7 @@ export function AlertsPage() {
 
                 {aEstado !== 'resuelta' && (
                   <button
-                    onClick={() => a.id !== undefined && updateAlertaEstado(a.id, 'resuelta')}
+                    onClick={() => handleTriggerStateChange(a, 'resuelta')}
                     className="text-[9px] bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 px-1 py-0.5 rounded"
                   >
                     Resolver
@@ -227,7 +269,7 @@ export function AlertsPage() {
 
                 {aEstado !== 'descartada' && (
                   <button
-                    onClick={() => a.id !== undefined && updateAlertaEstado(a.id, 'descartada')}
+                    onClick={() => handleTriggerStateChange(a, 'descartada')}
                     className="text-[9px] bg-surface-50 text-surface-700 border border-surface-200 hover:bg-surface-100 px-1 py-0.5 rounded"
                   >
                     Descartar
@@ -444,6 +486,22 @@ export function AlertsPage() {
           </button>
         </div>
       </Modal>
+
+      {/* Confirmation Modal for Critical Action (Resolver / Descartar Alerta) */}
+      {confirmModalOpen && pendingAction && (
+        <ConfirmationModal
+          open={confirmModalOpen}
+          onClose={() => {
+            setConfirmModalOpen(false)
+            setPendingAction(null)
+          }}
+          onConfirm={handleConfirmStateChange}
+          entidad="alerta"
+          valorAnterior={pendingAction.estadoAnterior}
+          valorNuevo={pendingAction.nuevoEstado}
+          descripcion={`Modificación de estado de alerta a ${pendingAction.nuevoEstado.toUpperCase()}. Requiere motivo justificado.`}
+        />
+      )}
     </div>
   )
 }

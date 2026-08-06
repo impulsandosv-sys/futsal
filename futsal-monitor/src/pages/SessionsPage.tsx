@@ -3,6 +3,7 @@ import { useStore } from '@/store/store'
 import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { Filters } from '@/components/shared/Filters'
 import { Modal } from '@/components/shared/Modal'
+import { DatePicker } from '@/components/shared/DatePicker'
 import { calcularCompletitudSesion } from '@/domain/monitoring/monitoring'
 import { calcularCargaUA, calcularCargaMediaRealizada } from '@/domain/calculations/loadCalculations'
 import type { Sesion, TipoDia, TipoSesion, SesionRPE } from '@/types'
@@ -249,11 +250,11 @@ export function SessionsPage() {
               value={form.id_sesion} onChange={(e) => setForm({ ...form, id_sesion: e.target.value })}
               disabled={!!editing} />
           </div>
-          <div>
-            <label className="text-[10px] font-medium text-surface-600 block mb-1">Fecha</label>
-            <input type="date" className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs text-surface-700 bg-white"
-              value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
-          </div>
+          <DatePicker
+            label="Fecha"
+            value={form.fecha}
+            onChange={(fecha) => setForm({ ...form, fecha })}
+          />
           <div>
             <label className="text-[10px] font-medium text-surface-600 block mb-1">Tipo de día</label>
             <select className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs bg-white text-surface-700"

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useStore } from '@/store/store'
 import { Modal } from '@/components/shared/Modal'
+import { DatePicker } from '@/components/shared/DatePicker'
 import {
   validarSesionFuerzaIndividual,
   validarTrabajoFuerza,
@@ -598,16 +599,11 @@ export function StrengthFormModal({ open, isOpen, onClose, editingId, templateTo
             </select>
           </div>
 
-          <div>
-            <label className="block text-[11px] font-medium text-surface-600 mb-1">Fecha (YYYY-MM-DD) *</label>
-            <input
-              type="date"
-              required
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              className="w-full rounded border-surface-300 text-xs px-2.5 py-1.5"
-            />
-          </div>
+          <DatePicker
+            label="Fecha (YYYY-MM-DD) *"
+            value={fecha}
+            onChange={setFecha}
+          />
 
           <div>
             <label htmlFor="finalidad-select" className="block text-[11px] font-medium text-surface-600 mb-1">Finalidad</label>

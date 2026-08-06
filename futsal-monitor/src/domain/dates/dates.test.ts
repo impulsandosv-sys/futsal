@@ -13,7 +13,9 @@ import {
   isValidWeekId,
   getWeekStartDateISO,
   getWeekEndDateISO,
-  extraerFechaDeportivaLocal
+  extraerFechaDeportivaLocal,
+  UMBRAL_HISTORICO_DIAS,
+  esRegistroHistorico
 } from './dates'
 
 describe('compareDateStrings', () => {
@@ -236,4 +238,23 @@ describe('extraerFechaDeportivaLocal — Preservación de Sesión Nocturna (Regl
     expect(sesion.fecha).toBe('2026-08-05')
   })
 })
+
+describe('UMBRAL_HISTORICO_DIAS y esRegistroHistorico (Regla 1 de Fase 3.1)', () => {
+  it('1. UMBRAL_HISTORICO_DIAS es igual a 7', () => {
+    expect(UMBRAL_HISTORICO_DIAS).toBe(7)
+  })
+
+  it('2. Registro con 7 días exactos no es histórico (false)', () => {
+    expect(esRegistroHistorico('2026-08-01', '2026-08-08')).toBe(false)
+  })
+
+  it('3. Registro con 8 días de antigüedad es histórico (true)', () => {
+    expect(esRegistroHistorico('2026-08-01', '2026-08-09')).toBe(true)
+  })
+
+  it('4. Registro de hoy o futuro no es histórico (false)', () => {
+    expect(esRegistroHistorico('2026-08-10', '2026-08-08')).toBe(false)
+  })
+})
+
 

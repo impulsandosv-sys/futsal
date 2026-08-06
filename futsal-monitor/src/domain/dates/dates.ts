@@ -226,4 +226,32 @@ export function extraerFechaDeportivaLocal(isoOrDateStr: string | Date): string 
   return getLocalDateString(d)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Umbral de Registros Históricos (> 7 días)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const UMBRAL_HISTORICO_DIAS = 7
+
+/**
+ * Determina si un registro es histórico (antigüedad mayor a UMBRAL_HISTORICO_DIAS días)
+ * con respecto a una fecha de referencia (por defecto, la fecha actual del sistema).
+ * Utiliza fecha deportiva local YYYY-MM-DD sin desviaciones de zona horaria UTC.
+ */
+export function esRegistroHistorico(fechaTarget: string | Date, fechaRefStr: string = getTodayLocalISO()): boolean {
+  const targetStr = extraerFechaDeportivaLocal(fechaTarget)
+  const refStr = extraerFechaDeportivaLocal(fechaRefStr)
+  if (!targetStr || !refStr) return false
+
+  const dTarget = parseISO(targetStr)
+  const dRef = parseISO(refStr)
+
+  if (isNaN(dTarget.getTime()) || isNaN(dRef.getTime())) return false
+
+  const diffMs = dRef.getTime() - dTarget.getTime()
+  const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  return diffDias > UMBRAL_HISTORICO_DIAS
+}
+
+
 

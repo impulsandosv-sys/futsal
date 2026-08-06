@@ -3,6 +3,7 @@ import { useStore } from '@/store/store'
 import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { Filters } from '@/components/shared/Filters'
 import { Modal } from '@/components/shared/Modal'
+import { DatePicker } from '@/components/shared/DatePicker'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { useNavigate } from 'react-router-dom'
 
@@ -81,11 +82,11 @@ export function TestsPage() {
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nuevo test físico" width="max-w-md">
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-[10px] font-medium text-surface-600 block mb-1">Fecha</label>
-            <input type="date" className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"
-              value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
-          </div>
+          <DatePicker
+            label="Fecha"
+            value={form.fecha}
+            onChange={(fecha) => setForm({ ...form, fecha })}
+          />
           <div>
             <label className="text-[10px] font-medium text-surface-600 block mb-1">Momento</label>
             <select className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"

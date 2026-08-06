@@ -3,6 +3,7 @@ import { useStore } from '@/store/store'
 import { PaginatedTable, PRow, PCell } from '@/components/shared/PaginatedTable'
 import { Filters } from '@/components/shared/Filters'
 import { Modal } from '@/components/shared/Modal'
+import { DatePicker } from '@/components/shared/DatePicker'
 import { getWellnessLevel, getWellnessThreshold } from '@/domain/monitoring/monitoring'
 import { calcularScoreWellness } from '@/domain/calculations/loadCalculations'
 import type { Wellness } from '@/types'
@@ -171,11 +172,11 @@ export function WellnessPage() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="text-[10px] font-medium text-surface-600 block mb-1">Fecha</label>
-            <input type="date" className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs text-surface-700 bg-white"
-              value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
-          </div>
+          <DatePicker
+            label="Fecha"
+            value={form.fecha}
+            onChange={(fecha) => setForm({ ...form, fecha })}
+          />
           <div>
             <label className="text-[10px] font-medium text-surface-600 block mb-1">Calidad de sueño</label>
             <select
