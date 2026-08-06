@@ -202,4 +202,31 @@ describe('Bloque B - calcularNuevasAlertas, idempotencia y reglas de actividad',
     expect(alertasCarga).toHaveLength(1)
     expect(alertasCarga[0].datos_sustento).toContain('1.8')
   })
+
+  it('T-ALERTAS-01. Todas las alertas generadas incluyen metadatos de explicabilidad (origen, datos_sustento, estado, responsable, nota_decision)', () => {
+    const wellnessList: Wellness[] = [
+      { id_jugadora: 'J001', fecha: '2026-07-13', calidad_sueno: 3, fatiga: 3, dolor_muscular: 3, estres: 3, estado_animo: 3, dolor_especifico: 'molestia en tobillo', score_wellness: 3.0 },
+      ...normalWellnessHistory('J001')
+    ]
+    const res = calcularNuevasAlertas([jugActiva], wellnessList, [], [], [], '2026-07-13', '2026-07-13T12:00:00Z')
+    expect(res).toHaveLength(1)
+    
+    const alerta = res[0]
+    expect(alerta.origen).toBe('Regla de Bienestar Diario')
+    expect(alerta.datos_sustento).toContain('Score Wellness: 3/10')
+    expect(alerta.estado).toBe('abierta')
+    expect(alerta.responsable).toBeDefined()
+    expect(alerta.nota_decision).toBeDefined()
+  })
+
+  it('T-ALERTAS-02. Ausencia de datos de wellness NO genera alerta de wellness_bajo por tratar datos como 0', () => {
+    // Jugadora sin registros de wellness
+    const res = calcularNuevasAlertas([jugActiva], [], [], [], [], '2026-07-13', '2026-07-13T12:00:00Z')
+    const alertasWellnessBajo = res.filter(a => a.tipo === 'wellness_bajo')
+    
+    // No debe haber alerta de wellness_bajo (solo datos_faltantes)
+    expect(alertasWellnessBajo).toHaveLength(0)
+    expect(res.some(a => a.tipo === 'datos_faltantes')).toBe(true)
+  })
 })
+

@@ -48,6 +48,9 @@ export function validarMedicionCMJ(medicion: MedicionCMJ): string[] {
     if (!r.test(medicion.fecha)) errores.push('Formato de fecha inválido (YYYY-MM-DD)')
   }
   if (!medicion.id_protocolo) errores.push('Protocolo requerido')
+  if (!medicion.protocolo_nombre_historico || !medicion.protocolo_nombre_historico.trim()) {
+    errores.push('Nombre histórico del protocolo requerido para trazabilidad')
+  }
 
   const ordenes = new Set<number>()
   for (const i of medicion.intentos) {

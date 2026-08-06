@@ -12,7 +12,8 @@ import {
   validateFechaLocalISO,
   isValidWeekId,
   getWeekStartDateISO,
-  getWeekEndDateISO
+  getWeekEndDateISO,
+  extraerFechaDeportivaLocal
 } from './dates'
 
 describe('compareDateStrings', () => {
@@ -215,3 +216,24 @@ describe('Bloque C - Semanas ISO y conversiones seguras', () => {
     expect(isValidWeekId('2024-W53')).toBe(false) // 2024 has 52 weeks
   })
 })
+
+describe('extraerFechaDeportivaLocal — Preservación de Sesión Nocturna (Regla 3)', () => {
+  it('1. Preserva el día local deportivo para sesión nocturna 2026-08-05T23:30 sin desplazamiento a 2026-08-06', () => {
+    const rawTimestamp = '2026-08-05T23:30:00+02:00'
+    const fechaDeportiva = extraerFechaDeportivaLocal(rawTimestamp)
+    
+    expect(fechaDeportiva).toBe('2026-08-05')
+    expect(fechaDeportiva).not.toBe('2026-08-06')
+  })
+
+  it('2. Sesión simulada guardada y leída conserva la fecha local 2026-08-05', () => {
+    const sesion = {
+      id_sesion: 'S_NIGHT_01',
+      marca_temporal: '2026-08-05T23:30',
+      fecha: extraerFechaDeportivaLocal('2026-08-05T23:30')
+    }
+
+    expect(sesion.fecha).toBe('2026-08-05')
+  })
+})
+

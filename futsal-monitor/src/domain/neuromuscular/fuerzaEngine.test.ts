@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { esSesionFuerza, calcularVolumenTrabajoFuerza, calcularResumenSesionFuerza, validarTrabajoFuerza, normalizarNombreEjercicio, validarEjercicioFuerza, validarSesionFuerzaIndividual, validarNuevoTrabajoFuerzaV13, plantillaToBorrador, esNumeroFinitoValido, normalizarTextoObservacion } from './fuerzaEngine'
+import { esSesionFuerza, calcularVolumenTrabajoFuerza, calcularResumenSesionFuerza, validarTrabajoFuerza, normalizarNombreEjercicio, validarEjercicioFuerza, validarSesionFuerzaIndividual, validarNuevoTrabajoFuerzaV13, plantillaToBorrador, esNumeroFinitoValido, normalizarTextoObservacion, calcularRatioHQ } from './fuerzaEngine'
 import type { Sesion, TrabajoFuerzaIndividual, PlantillaFuerza, EjercicioFuerza } from '@/types'
 
 describe('Motor Fuerza', () => {
@@ -446,5 +446,80 @@ describe('Motor Fuerza', () => {
     expect(errores).toContain('La carga de la serie #1 no puede ser negativa')
     expect(errores).toContain('El RPE de la serie #1 debe estar entre 0 y 10')
   })
+
+  describe('Cálculo de Ratio H/Q (Isquiotibiales / Cuádriceps)', () => {
+    it('1. Calcula ratio válido cuando coinciden lado, sesión y valores > 0', () => {
+      const res = calcularRatioHQ({
+        fuerzaIsquios: 150,
+        fuerzaCuadriceps: 200,
+        ladoIsquios: 'izquierda',
+        ladoCuadriceps: 'izquierda',
+        idSesionIsquios: 'S1',
+        idSesionCuadriceps: 'S1'
+      })
+
+      expect(res.valido).toBe(true)
+      expect(res.ratio).toBe(0.75) // 150 / 200 = 0.75
+      expect(res.estado).toBe('valido')
+    })
+
+    it('2. Rechaza cálculo por lado discordante (izquierda vs derecha)', () => {
+      const res = calcularRatioHQ({
+        fuerzaIsquios: 150,
+        fuerzaCuadriceps: 200,
+        ladoIsquios: 'izquierda',
+        ladoCuadriceps: 'derecha'
+      })
+
+      expect(res.valido).toBe(false)
+      expect(res.ratio).toBeNull()
+      expect(res.estado).toBe('lado_discordante')
+    })
+
+    it('3. Rechaza cálculo por sesión discordante', () => {
+      const res = calcularRatioHQ({
+        fuerzaIsquios: 150,
+        fuerzaCuadriceps: 200,
+        idSesionIsquios: 'S1',
+        idSesionCuadriceps: 'S2'
+      })
+
+      expect(res.valido).toBe(false)
+      expect(res.ratio).toBeNull()
+      expect(res.estado).toBe('sesion_discordante')
+    })
+
+    it('4. Evita división por cero cuando Cuádriceps es 0', () => {
+      const res = calcularRatioHQ({
+        fuerzaIsquios: 150,
+        fuerzaCuadriceps: 0
+      })
+
+      expect(res.valido).toBe(false)
+      expect(res.ratio).toBeNull()
+      expect(res.estado).toBe('denominador_cero')
+    })
+
+    it('5. Devuelve datos_insuficientes si falta alguno de los valores', () => {
+      const res1 = calcularRatioHQ({
+        fuerzaIsquios: null,
+        fuerzaCuadriceps: 200
+      })
+
+      expect(res1.valido).toBe(false)
+      expect(res1.ratio).toBeNull()
+      expect(res1.estado).toBe('datos_insuficientes')
+
+      const res2 = calcularRatioHQ({
+        fuerzaIsquios: 150,
+        fuerzaCuadriceps: undefined
+      })
+
+      expect(res2.valido).toBe(false)
+      expect(res2.ratio).toBeNull()
+      expect(res2.estado).toBe('datos_insuficientes')
+    })
+  })
 })
+
 

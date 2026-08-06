@@ -292,5 +292,21 @@ describe('T-04A — Dominio y Reglas Puras CMJ (Chronojump)', () => {
     const conDiferenteTiempo: MedicionCMJNormalizada = { ...base, tiempoVueloMs: 280 }
     expect(evaluarClasificacionCMJ(conDiferenteTiempo, base)).toBe('conflicto')
   })
+
+  it('14. validarMedicionCMJ exige protocolo_nombre_historico para trazabilidad metodológica', () => {
+    const medicionIncompleta: MedicionCMJ = {
+      id_medicion: 'M1',
+      id_jugadora: 'J1',
+      fecha: '2026-08-01',
+      tipo_prueba: 'cmj_bilateral',
+      id_protocolo: 'P1',
+      protocolo_nombre_historico: '', // vacio
+      intentos: [{ id_intento: '1', orden: 1, valido: true, altura_cm: 30 }]
+    }
+
+    const errores = validarMedicionCMJ(medicionIncompleta)
+    expect(errores).toContain('Nombre histórico del protocolo requerido para trazabilidad')
+  })
 })
+
 

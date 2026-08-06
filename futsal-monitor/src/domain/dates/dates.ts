@@ -202,3 +202,28 @@ export function validateFechaLocalISO(val: unknown, fieldName = 'fecha'): string
   return null
 }
 
+/**
+ * Extrae la fecha deportiva estricta (YYYY-MM-DD) preservando el día del calendario local
+ * incluso en marcas de tiempo nocturnas (ej: 2026-08-05T23:30).
+ * Previene la conversión implícita a UTC que podría desplazar el día deportivo.
+ */
+export function extraerFechaDeportivaLocal(isoOrDateStr: string | Date): string {
+  if (isoOrDateStr instanceof Date) {
+    return getLocalDateString(isoOrDateStr)
+  }
+  if (typeof isoOrDateStr !== 'string') return ''
+  const str = isoOrDateStr.trim()
+  if (isFechaLocalISO(str)) return str
+
+  // Si incluye T o hora (ej. 2026-08-05T23:30:00+02:00 o 2026-08-05T23:30)
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(str)
+  if (match) {
+    return match[1]
+  }
+
+  const d = new Date(str)
+  if (isNaN(d.getTime())) return ''
+  return getLocalDateString(d)
+}
+
+

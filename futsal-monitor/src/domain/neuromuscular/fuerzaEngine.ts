@@ -373,3 +373,102 @@ export function plantillaToBorrador(
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Ratio H/Q (Isquiotibiales / Cuádriceps) — Cálculo Seguro y Trazable
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface RatioHQInput {
+  fuerzaIsquios: number | null | undefined
+  fuerzaCuadriceps: number | null | undefined
+  ladoIsquios?: 'izquierda' | 'derecha' | 'bilateral' | string
+  ladoCuadriceps?: 'izquierda' | 'derecha' | 'bilateral' | string
+  idSesionIsquios?: string
+  idSesionCuadriceps?: string
+}
+
+export interface RatioHQResult {
+  ratio: number | null
+  valido: boolean
+  estado: 'valido' | 'datos_insuficientes' | 'lado_discordante' | 'sesion_discordante' | 'denominador_cero'
+  mensaje: string
+}
+
+/**
+ * Calcula el ratio H/Q (Fuerza Isquiotibiales / Fuerza Cuádriceps).
+ *
+ * Condiciones estrictas de validez:
+ * 1. Mismo Lado: ambos de la misma pierna (izquierda/derecha/bilateral).
+ * 2. Misma Sesión/Fecha: si se proporcionan IDs de sesión, deben coincidir.
+ * 3. Valores válidos positivos: ambos > 0.
+ * 4. Denominador > 0 (evita división por 0).
+ */
+export function calcularRatioHQ(input: RatioHQInput): RatioHQResult {
+  const {
+    fuerzaIsquios,
+    fuerzaCuadriceps,
+    ladoIsquios,
+    ladoCuadriceps,
+    idSesionIsquios,
+    idSesionCuadriceps,
+  } = input
+
+  if (
+    typeof fuerzaIsquios !== 'number' || !Number.isFinite(fuerzaIsquios) ||
+    typeof fuerzaCuadriceps !== 'number' || !Number.isFinite(fuerzaCuadriceps)
+  ) {
+    return {
+      ratio: null,
+      valido: false,
+      estado: 'datos_insuficientes',
+      mensaje: 'Datos insuficientes para calcular el Ratio H/Q (uno o ambos valores ausentes).',
+    }
+  }
+
+  if (fuerzaIsquios <= 0) {
+    return {
+      ratio: null,
+      valido: false,
+      estado: 'datos_insuficientes',
+      mensaje: 'La fuerza de isquiotibiales debe ser un valor mayor que 0.',
+    }
+  }
+
+  if (fuerzaCuadriceps <= 0) {
+    return {
+      ratio: null,
+      valido: false,
+      estado: 'denominador_cero',
+      mensaje: 'La fuerza de cuádriceps debe ser mayor que 0 para evitar división por cero.',
+    }
+  }
+
+  if (ladoIsquios && ladoCuadriceps && ladoIsquios.toLowerCase() !== ladoCuadriceps.toLowerCase()) {
+    return {
+      ratio: null,
+      valido: false,
+      estado: 'lado_discordante',
+      mensaje: `Inconsistencia de lateralidad: Isquios (${ladoIsquios}) vs Cuádriceps (${ladoCuadriceps}).`,
+    }
+  }
+
+  if (idSesionIsquios && idSesionCuadriceps && idSesionIsquios !== idSesionCuadriceps) {
+    return {
+      ratio: null,
+      valido: false,
+      estado: 'sesion_discordante',
+      mensaje: 'Las mediciones corresponden a sesiones distintas.',
+    }
+  }
+
+  const rawRatio = fuerzaIsquios / fuerzaCuadriceps
+  const ratio = Math.round(rawRatio * 100) / 100
+
+  return {
+    ratio,
+    valido: true,
+    estado: 'valido',
+    mensaje: `Ratio H/Q válido (${ratio}).`,
+  }
+}
+
+

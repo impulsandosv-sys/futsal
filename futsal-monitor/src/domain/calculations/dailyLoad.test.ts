@@ -301,4 +301,65 @@ describe('BLOQUE C — Fuente única de carga individual (dailyLoad.ts)', () => 
     expect(entry.carga).toBe(750) // 750 explicit UA takes precedence over 10*100=1000
     expect(entry.detalles[0].esCargaExplicita).toBe(true)
   })
+
+  it('15. RPE ausente (null/undefined) no genera carga 0 en DailyLoadEntry (tieneDato: false, carga: null)', () => {
+    const map = obtenerCargasDiariasJugadora({
+      jugadoraId: J1,
+      fechaDesde: '2026-08-15',
+      fechaHasta: '2026-08-15',
+      sesiones: [],
+      sesionesRPE: [],
+      rpePartidos: []
+    })
+
+    const entry = map.get('2026-08-15')!
+    expect(entry.tieneDato).toBe(false)
+    expect(entry.carga).toBeNull()
+  })
+
+  it('16. Asistencia no_convocada en sesión asigna carga 0 explícita (tieneDato: true)', () => {
+    const sesiones: Sesion[] = [
+      { id_sesion: 'S_NOCONV', fecha: '2026-08-16', tipo_dia: 'Partido', tipo_sesion: 'Partido', objetivo_principal: '', observaciones_grupo: '' }
+    ]
+    const sesionesRPE: SesionRPE[] = [
+      { id_sesion: 'S_NOCONV', id_jugadora: J1, fecha: '2026-08-16', asistencia: 'no_convocada' }
+    ]
+
+    const map = obtenerCargasDiariasJugadora({
+      jugadoraId: J1,
+      fechaDesde: '2026-08-16',
+      fechaHasta: '2026-08-16',
+      sesiones,
+      sesionesRPE,
+      rpePartidos: []
+    })
+
+    const entry = map.get('2026-08-16')!
+    expect(entry.tieneDato).toBe(true)
+    expect(entry.carga).toBe(0)
+  })
+
+  it('17. obtenerArrayCargaDiaria rellenado con 0s para matriz EWMA/ACWR conserva tieneDato: false en el Map de entrada', () => {
+    const map = obtenerCargasDiariasJugadora({
+      jugadoraId: J1,
+      fechaDesde: '2026-08-17',
+      fechaHasta: '2026-08-17',
+      sesiones: [],
+      sesionesRPE: [],
+      rpePartidos: []
+    })
+
+    const arr = obtenerArrayCargaDiaria({
+      jugadoraId: J1,
+      fechaDesde: '2026-08-17',
+      fechaHasta: '2026-08-17',
+      sesiones: [],
+      sesionesRPE: [],
+      rpePartidos: []
+    })
+
+    expect(arr).toEqual([0]) // Vector matricial 0 UA
+    expect(map.get('2026-08-17')!.tieneDato).toBe(false) // Calidad del dato distingue que no hay registro real
+  })
 })
+
