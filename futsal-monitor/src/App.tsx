@@ -1,30 +1,28 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect, Suspense, lazy } from 'react'
+import { useEffect, Suspense } from 'react'
 import { useStore } from '@/store/store'
 import { Layout } from '@/components/layout/Layout'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { ROUTES } from '@/constants/routes'
 
-
-
-const LoginPage = lazy(() => import('@/pages/LoginPage').then(m => ({ default: m.LoginPage })))
-const DashboardPage = lazy(() => import('@/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
-const PlayersPage = lazy(() => import('@/pages/PlayersPage').then(m => ({ default: m.PlayersPage })))
-const PlayerProfilePage = lazy(() => import('@/pages/PlayerProfilePage').then(m => ({ default: m.PlayerProfilePage })))
-const WellnessPage = lazy(() => import('@/pages/WellnessPage').then(m => ({ default: m.WellnessPage })))
-const SessionsPage = lazy(() => import('@/pages/SessionsPage').then(m => ({ default: m.SessionsPage })))
-const MatchesPage = lazy(() => import('@/pages/MatchesPage').then(m => ({ default: m.MatchesPage })))
-const InjuriesPage = lazy(() => import('@/pages/InjuriesPage').then(m => ({ default: m.InjuriesPage })))
-const TestsPage = lazy(() => import('@/pages/TestsPage').then(m => ({ default: m.TestsPage })))
-const StrengthPage = lazy(() => import('@/pages/StrengthPage').then(m => ({ default: m.StrengthPage })))
-const TemplateListPage = lazy(() => import('@/pages/TemplateListPage').then(m => ({ default: m.TemplateListPage })))
-const WeeklySummaryPage = lazy(() => import('@/pages/WeeklySummaryPage').then(m => ({ default: m.WeeklySummaryPage })))
-const AlertsPage = lazy(() => import('@/pages/AlertsPage').then(m => ({ default: m.AlertsPage })))
-const ImportPage = lazy(() => import('@/pages/ImportPage').then(m => ({ default: m.ImportPage })))
-const CMJPage = lazy(() => import('@/pages/CMJPage').then(m => ({ default: m.CMJPage })))
-const FollowUpDashboardPage = lazy(() => import('@/pages/FollowUpDashboardPage').then(m => ({ default: m.FollowUpDashboardPage })))
-const GovernancePage = lazy(() => import('@/pages/GovernancePage').then(m => ({ default: m.GovernancePage })))
-const DailyDecisionPage = lazy(() => import('@/pages/DailyDecisionPage').then(m => ({ default: m.DailyDecisionPage })))
+import { LoginPage } from '@/pages/LoginPage'
+import { DashboardPage } from '@/pages/DashboardPage'
+import { PlayersPage } from '@/pages/PlayersPage'
+import { PlayerProfilePage } from '@/pages/PlayerProfilePage'
+import { WellnessPage } from '@/pages/WellnessPage'
+import { SessionsPage } from '@/pages/SessionsPage'
+import { MatchesPage } from '@/pages/MatchesPage'
+import { InjuriesPage } from '@/pages/InjuriesPage'
+import { TestsPage } from '@/pages/TestsPage'
+import { StrengthPage } from '@/pages/StrengthPage'
+import { TemplateListPage } from '@/pages/TemplateListPage'
+import { WeeklySummaryPage } from '@/pages/WeeklySummaryPage'
+import { AlertsPage } from '@/pages/AlertsPage'
+import { ImportPage } from '@/pages/ImportPage'
+import { CMJPage } from '@/pages/CMJPage'
+import { FollowUpDashboardPage } from '@/pages/FollowUpDashboardPage'
+import { GovernancePage } from '@/pages/GovernancePage'
+import { DailyDecisionPage } from '@/pages/DailyDecisionPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useStore((s) => s.isAuthenticated)

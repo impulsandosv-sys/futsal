@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { useStore } from '@/store/store'
 import { exportToJSON } from '@/utils/export'
-import { forceExternalBackup, getLastExternalBackupInfo, parseBackupFile, restoreFromData, validateBackupData } from '@/utils/backup'
+import { forceExternalBackup, getLastExternalBackupInfo, parseBackupFile, restoreFromData, validateBackupData, analyzeBackupMergePreview, type MergePreviewAnalysis } from '@/utils/backup'
 import { db } from '@/db/database'
 import type {
   RawImportRow,
@@ -137,6 +137,9 @@ export function ImportPage() {
     }
   }
 
+  const [mergeStrategy, setMergeStrategy] = useState<'skip' | 'overwrite'>('skip')
+  const [mergePreview, setMergePreview] = useState<MergePreviewAnalysis | null>(null)
+
   const handleRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -148,9 +151,17 @@ export function ImportPage() {
       const validation = validateBackupData(data)
       setValidationResult(validation)
 
+      if (validation.canRestore) {
+        const preview = await analyzeBackupMergePreview(data)
+        setMergePreview(preview)
+      } else {
+        setMergePreview(null)
+      }
+
       setDownloadedPrevBackupName(null)
       setConfirmBackupPrevio(false)
       setRestoreConfirmText('')
+      setMergeStrategy('skip')
 
       setShowRestoreModal(true)
     } catch (err: any) {
@@ -175,10 +186,10 @@ export function ImportPage() {
       }
     }
     try {
-      const res = await restoreFromData(restoreData, restoreMode, 'skip')
+      const res = await restoreFromData(restoreData, restoreMode, restoreMode === 'merge' ? mergeStrategy : 'skip')
       if (res.success) {
-        if (res.conflicts.length > 0) {
-          alert(`Restauración completada. Se omitieron ${res.conflicts.length} conflictos (registros duplicados con datos diferentes) para proteger tu base de datos.\nPor favor recarga la página.`);
+        if (res.conflicts.length > 0 && restoreMode === 'merge' && mergeStrategy === 'skip') {
+          alert(`Fusión completada. Se omitieron ${res.conflicts.length} conflictos para proteger tus datos locales.\nPor favor recarga la página.`)
         } else {
           alert('Copia de seguridad restaurada con éxito. Por favor recarga la página.')
         }
@@ -1257,10 +1268,58 @@ export function ImportPage() {
                 <label className="flex flex-col gap-1 p-3 border border-red-200 bg-red-50 rounded cursor-pointer">
                   <div className="flex items-center gap-2">
                     <input type="radio" name="restoreMode" checked={restoreMode === 'replace'} onChange={() => setRestoreMode('replace')} />
-                    <span className="text-sm font-medium text-red-800">Reemplazar datos actuales</span>
+                    <span className="text-sm font-medium text-red-800">Reemplazar datos actuales (Replace)</span>
                   </div>
-                  <p className="text-[10px] text-red-600 ml-5">Vacía las tablas base locales y escribe el contenido de la copia de seguridad.</p>
+                  <p className="text-[10px] text-red-600 ml-5">Vacía las tablas base locales y escribe el contenido de la copia de seguridad tras confirmación explícita.</p>
                 </label>
+
+                {restoreMode === 'merge' && mergePreview && (
+                  <div className="bg-blue-50/70 p-3 rounded border border-blue-200 text-xs space-y-3">
+                    <p className="font-semibold text-blue-900">📊 Previsualización del análisis de Fusión:</p>
+                    <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                      <div className="bg-white p-2 rounded border border-blue-150">
+                        <span className="block font-bold text-green-700">{mergePreview.totalNew}</span>
+                        <span className="text-[10px] text-surface-500">Nuevos</span>
+                      </div>
+                      <div className="bg-white p-2 rounded border border-blue-150">
+                        <span className="block font-bold text-amber-700">{mergePreview.totalConflicts}</span>
+                        <span className="text-[10px] text-surface-500">Conflictos</span>
+                      </div>
+                      <div className="bg-white p-2 rounded border border-blue-150">
+                        <span className="block font-bold text-surface-600">{mergePreview.totalOrphans}</span>
+                        <span className="text-[10px] text-surface-500">Huérfanos</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 pt-1">
+                      <p className="font-semibold text-blue-900 text-[11px]">Estrategia para registros conflictivos:</p>
+                      <label className="flex items-center gap-2 cursor-pointer bg-white p-2 rounded border border-blue-200">
+                        <input
+                          type="radio"
+                          name="mergeStrategy"
+                          checked={mergeStrategy === 'skip'}
+                          onChange={() => setMergeStrategy('skip')}
+                        />
+                        <div className="text-[11px]">
+                          <span className="font-bold text-surface-800">Omitir (Recomendado)</span>
+                          <p className="text-[10px] text-surface-500">Conserva tus datos locales sin sobreescribirlos.</p>
+                        </div>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer bg-white p-2 rounded border border-blue-200">
+                        <input
+                          type="radio"
+                          name="mergeStrategy"
+                          checked={mergeStrategy === 'overwrite'}
+                          onChange={() => setMergeStrategy('overwrite')}
+                        />
+                        <div className="text-[11px]">
+                          <span className="font-bold text-amber-800">Sobrescribir</span>
+                          <p className="text-[10px] text-surface-500">Actualiza los registros locales con los del backup.</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
 
                 {restoreMode === 'replace' && (
                   <div className="bg-red-50 p-3 rounded border border-red-200 text-xs space-y-3">

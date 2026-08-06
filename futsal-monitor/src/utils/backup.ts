@@ -6,14 +6,34 @@ import { getWeekId, getTodayLocalISO } from '@/domain/dates/dates'
 
 const BACKUP_KEY = 'futsal_backup'
 const LAST_EXTERNAL_BACKUP_KEY = 'futsal_last_external_backup'
-const BACKUP_INTERVAL_MS = 5 * 60 * 1000 // 5 minutos
-const AUTO_BACKUP_ENABLED_KEY = 'futsal_autobackup'
+const _BACKUP_INTERVAL_MS = 5 * 60 * 1000 // 5 minutos
+const _AUTO_BACKUP_ENABLED_KEY = 'futsal_autobackup'
 
-let backupTimer: ReturnType<typeof setInterval> | null = null
+let _backupTimer: ReturnType<typeof setInterval> | null = null
 
 export const BACKUP_FORMAT_VERSION = 1
 export const DATABASE_SCHEMA_VERSION = 15
 export const APP_VERSION = '1.0.0'
+
+export const createBackup = createBackupData
+
+export function startAutoBackup(): void {
+  if (_backupTimer) return
+  _backupTimer = setInterval(async () => {
+    try {
+      await createBackupData()
+    } catch {
+      // Autobackup silencioso
+    }
+  }, _BACKUP_INTERVAL_MS)
+}
+
+export function stopAutoBackup(): void {
+  if (_backupTimer) {
+    clearInterval(_backupTimer)
+    _backupTimer = null
+  }
+}
 
 export const CRITICAL_TABLES = [
   'jugadoras',
@@ -78,6 +98,20 @@ export interface RestoreResult {
   mode: 'merge' | 'replace'
   stats: Record<string, { inserted: number; updated: number; skipped: number }>
   conflicts: Array<{ table: string; key: string; description: string }>
+}
+
+export interface MergePreviewAnalysis {
+  tables: Record<string, {
+    incomingCount: number
+    newCount: number
+    conflictCount: number
+    orphanCount: number
+  }>
+  totalNew: number
+  totalConflicts: number
+  totalOrphans: number
+  canMerge: boolean
+  orphanDetails: Array<{ table: string; key: string; description: string }>
 }
 
 /**
@@ -160,30 +194,17 @@ export async function createBackupData() {
       plantillas_fuerza,
       sesiones_fuerza_individual,
       plantillas_importacion
-    },
+    }
   }
 }
 
-export async function createBackup(): Promise<void> {
-  try {
-    const backup = await createBackupData()
-    localStorage.setItem(BACKUP_KEY, JSON.stringify(backup))
-  } catch {
-    // Backup silencioso
-  }
-}
-
-/**
- * Generación manual con registro en base de datos.
- */
 export async function forceExternalBackup(tipo: TipoCopia = 'manual'): Promise<string> {
   const backup = await createBackupData()
-  const raw = JSON.stringify(backup)
+  const dateStr = getTodayLocalISO()
+  const filename = `futsal_backup_${tipo}_${dateStr}_v${DATABASE_SCHEMA_VERSION}.json`
 
-  const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16)
-  const filename = `futsal-monitor-backup-${dateStr}.json`
-
-  const blob = new Blob([raw], { type: 'application/json' })
+  const jsonStr = JSON.stringify(backup, null, 2)
+  const blob = new Blob([jsonStr], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
 
   if (typeof document === 'undefined') {
@@ -300,7 +321,11 @@ export function validateBackupData(backupData: any): ValidationResult {
   if (backupVersion !== DATABASE_SCHEMA_VERSION) {
     result.isValid = true
     result.canRestore = false
-    result.error = `Esquema de base de datos (v${backupVersion}) no compatible con la versión v${DATABASE_SCHEMA_VERSION} de la aplicación.`
+    if (backupVersion > DATABASE_SCHEMA_VERSION) {
+      result.error = `El archivo de copia de seguridad fue creado con una versión futura de la aplicación (v${backupVersion}). Se requiere una versión más reciente de la aplicación.`
+    } else {
+      result.error = `Esquema de base de datos (v${backupVersion}) no compatible con la versión v${DATABASE_SCHEMA_VERSION} de la aplicación.`
+    }
     return result
   }
 
@@ -360,6 +385,7 @@ export function validateBackupData(backupData: any): ValidationResult {
       result.error = 'La entidad "jugadoras" debe ser una lista (array).'
       return result
     }
+    const setJugadoras = new Set<string>()
     for (const j of backupData.data.jugadoras) {
       if (!j.id_jugadora || typeof j.nombre !== 'string') {
         result.isValid = false
@@ -367,10 +393,192 @@ export function validateBackupData(backupData: any): ValidationResult {
         result.error = 'Falta id_jugadora o nombre en alguno de los registros de jugadoras.'
         return result
       }
+      setJugadoras.add(j.id_jugadora)
+    }
+
+    // Validar relaciones huérfanas si jugadoras está presente
+    if (backupData.data.sesion_rpe && Array.isArray(backupData.data.sesion_rpe)) {
+      for (const rpe of backupData.data.sesion_rpe) {
+        if (rpe.id_jugadora && !setJugadoras.has(rpe.id_jugadora)) {
+          result.isValid = false
+          result.canRestore = false
+          result.error = `Relación huérfana detectada: la sesión de RPE referencia a la jugadora inexistente "${rpe.id_jugadora}".`
+          return result
+        }
+      }
     }
   }
 
   return result
+}
+
+// Claves lógicas robustas
+export const getLogicalKey = (table: string, item: any): string => {
+  switch (table) {
+    case 'temporadas': return item.id_temporada || ''
+    case 'alias_jugadora': return (item.origen && item.valor) ? `${item.origen}_${item.valor}` : ''
+    case 'jugadoras': return item.id_jugadora || ''
+    case 'sesiones': return item.id_sesion || ''
+    case 'partidos': return item.id_partido || ''
+    case 'lesiones': return item.id_lesion || ''
+    case 'formulario_respuestas':
+    case 'wellness':
+    case 'ciclo_menstrual':
+    case 'hidratacion':
+    case 'test_psicologico':
+      return (item.id_jugadora && item.fecha) ? `${item.id_jugadora}_${item.fecha}` : ''
+    case 'tests_fisicos':
+      return (item.id_jugadora && item.fecha && item.test) ? `${item.id_jugadora}_${item.fecha}_${item.test}_${item.momento || ''}` : ''
+    case 'rpe_partido':
+      return (item.id_jugadora && item.id_partido) ? `${item.id_jugadora}_${item.id_partido}` : ''
+    case 'sesion_rpe':
+      return (item.id_jugadora && item.id_sesion) ? `${item.id_jugadora}_${item.id_sesion}` : ''
+    case 'carga_gps':
+      return (item.id_jugadora && item.fecha) ? `${item.id_jugadora}_${item.fecha}_${item.id_sesion || ''}_${item.id_partido || ''}` : ''
+    case 'rtp_checklist':
+      return item.id_lesion ? `${item.id_lesion}` : ''
+    case 'alertas':
+      return (item.id_jugadora && item.fecha && item.tipo) ? `${item.id_jugadora}_${item.fecha}_${item.tipo}` : ''
+    case 'historial_importaciones':
+    case 'historial_copias':
+      return (item.fechaHora && item.nombreArchivo) ? `${item.fechaHora}_${item.nombreArchivo}` : ''
+    case 'protocolos_cmj':
+      return item.id_protocolo || ''
+    case 'pruebas_cmj':
+      return item.id_medicion || ''
+    case 'ejercicios_fuerza':
+      return item.id_ejercicio || ''
+    case 'trabajos_fuerza':
+      return item.id_trabajo || ''
+    case 'plantillas_fuerza':
+      return item.id_plantilla || ''
+    case 'sesiones_fuerza_individual':
+      return item.id_sesion_fuerza || ''
+    case 'plantillas_importacion':
+      return item.nombre || ''
+    case 'fuerza_vbt':
+      return ''
+    default:
+      return ''
+  }
+}
+
+export async function analyzeBackupMergePreview(backupData: any): Promise<MergePreviewAnalysis> {
+  const analysis: MergePreviewAnalysis = {
+    tables: {},
+    totalNew: 0,
+    totalConflicts: 0,
+    totalOrphans: 0,
+    canMerge: true,
+    orphanDetails: []
+  }
+
+  const vResult = validateBackupData(backupData)
+  if (!vResult.canRestore) {
+    analysis.canMerge = false
+    return analysis
+  }
+
+  const d = backupData.data
+  const tablesToAnalyze = [
+    'temporadas', 'alias_jugadora', 'jugadoras', 'formulario_respuestas', 'wellness', 'sesiones', 'partidos',
+    'lesiones', 'tests_fisicos', 'rpe_partido', 'sesion_rpe', 'alertas',
+    'historial_importaciones', 'ciclo_menstrual', 'carga_gps',
+    'fuerza_vbt', 'hidratacion', 'rtp_checklist', 'test_psicologico',
+    'protocolos_cmj', 'pruebas_cmj', 'ejercicios_fuerza', 'trabajos_fuerza',
+    'plantillas_fuerza', 'sesiones_fuerza_individual', 'plantillas_importacion'
+  ]
+
+  const parentJugadoras = new Set<string>()
+  const parentSesiones = new Set<string>()
+  const parentPartidos = new Set<string>()
+  const parentLesiones = new Set<string>()
+  const parentProtocolos = new Set<string>()
+
+  const [locJ, locS, locP, locL, locProt] = await Promise.all([
+    db.jugadoras.toArray(),
+    db.sesiones.toArray(),
+    db.partidos.toArray(),
+    db.lesiones.toArray(),
+    db.protocolos_cmj.toArray()
+  ])
+  locJ.forEach(j => parentJugadoras.add(j.id_jugadora))
+  locS.forEach(s => parentSesiones.add(s.id_sesion))
+  locP.forEach(p => parentPartidos.add(p.id_partido))
+  locL.forEach(l => parentLesiones.add(l.id_lesion))
+  locProt.forEach(pr => parentProtocolos.add(pr.id_protocolo))
+
+  if (d.jugadoras) (d.jugadoras as any[]).forEach(j => j.id_jugadora && parentJugadoras.add(j.id_jugadora))
+  if (d.sesiones) (d.sesiones as any[]).forEach(s => s.id_sesion && parentSesiones.add(s.id_sesion))
+  if (d.partidos) (d.partidos as any[]).forEach(p => p.id_partido && parentPartidos.add(p.id_partido))
+  if (d.lesiones) (d.lesiones as any[]).forEach(l => l.id_lesion && parentLesiones.add(l.id_lesion))
+  if (d.protocolos_cmj) (d.protocolos_cmj as any[]).forEach(pr => pr.id_protocolo && parentProtocolos.add(pr.id_protocolo))
+
+  for (const table of tablesToAnalyze) {
+    if (!Object.prototype.hasOwnProperty.call(d, table)) continue
+
+    const incomingList = (d[table] || []) as any[]
+    const localList = await (db as any)[table].toArray()
+    let newCount = 0
+    let conflictCount = 0
+    let orphanCount = 0
+
+    const localMap = new Map<string, any>()
+    for (const loc of localList) {
+      const lKey = getLogicalKey(table, loc)
+      if (lKey) localMap.set(lKey, loc)
+    }
+
+    for (const inc of incomingList) {
+      let isOrphan = false
+      if (['wellness', 'formulario_respuestas', 'ciclo_menstrual', 'hidratacion', 'test_psicologico', 'carga_gps', 'tests_fisicos', 'sesiones_fuerza_individual', 'alertas'].includes(table)) {
+        if (inc.id_jugadora && !parentJugadoras.has(inc.id_jugadora)) isOrphan = true
+      } else if (table === 'rpe_partido') {
+        if (!parentJugadoras.has(inc.id_jugadora) || !parentPartidos.has(inc.id_partido)) isOrphan = true
+      } else if (table === 'sesion_rpe') {
+        if (!parentJugadoras.has(inc.id_jugadora) || !parentSesiones.has(inc.id_sesion)) isOrphan = true
+      } else if (table === 'rtp_checklist') {
+        if (!parentLesiones.has(inc.id_lesion)) isOrphan = true
+      } else if (table === 'pruebas_cmj') {
+        if (!parentJugadoras.has(inc.id_jugadora) || (inc.id_protocolo && !parentProtocolos.has(inc.id_protocolo))) isOrphan = true
+      }
+
+      if (isOrphan) {
+        orphanCount++
+        analysis.orphanDetails.push({
+          table,
+          key: inc.id_jugadora || inc.id || 'desconocido',
+          description: `Registro huérfano en ${table}`
+        })
+        continue
+      }
+
+      const key = getLogicalKey(table, inc)
+      if (!key) continue
+
+      const match = localMap.get(key)
+      if (match) {
+        const isDifferent = JSON.stringify(match) !== JSON.stringify(inc)
+        if (isDifferent) {
+          conflictCount++
+        }
+      } else {
+        newCount++
+      }
+    }
+
+    analysis.tables[table] = {
+      incomingCount: incomingList.length,
+      newCount,
+      conflictCount,
+      orphanCount
+    }
+    analysis.totalNew += newCount
+    analysis.totalConflicts += conflictCount
+    analysis.totalOrphans += orphanCount
+  }
+
+  return analysis
 }
 
 /**
@@ -483,59 +691,6 @@ export async function restoreFromData(
       mode,
       stats: {},
       conflicts: []
-    }
-  }
-
-  // Claves lógicas robustas
-  const getLogicalKey = (table: string, item: any): string => {
-    switch (table) {
-      case 'temporadas': return item.id_temporada || ''
-      case 'alias_jugadora': return (item.origen && item.valor) ? `${item.origen}_${item.valor}` : ''
-      case 'jugadoras': return item.id_jugadora || ''
-      case 'sesiones': return item.id_sesion || ''
-      case 'partidos': return item.id_partido || ''
-      case 'lesiones': return item.id_lesion || ''
-      case 'formulario_respuestas':
-      case 'wellness':
-      case 'ciclo_menstrual':
-      case 'hidratacion':
-      case 'test_psicologico':
-        return (item.id_jugadora && item.fecha) ? `${item.id_jugadora}_${item.fecha}` : ''
-      case 'tests_fisicos':
-        return (item.id_jugadora && item.fecha && item.test) ? `${item.id_jugadora}_${item.fecha}_${item.test}_${item.momento || ''}` : ''
-      case 'rpe_partido':
-        return (item.id_jugadora && item.id_partido) ? `${item.id_jugadora}_${item.id_partido}` : ''
-      case 'sesion_rpe':
-        return (item.id_jugadora && item.id_sesion) ? `${item.id_jugadora}_${item.id_sesion}` : ''
-      case 'carga_gps':
-        return (item.id_jugadora && item.fecha) ? `${item.id_jugadora}_${item.fecha}_${item.id_sesion || ''}_${item.id_partido || ''}` : ''
-      case 'rtp_checklist':
-        return item.id_lesion ? `${item.id_lesion}` : ''
-      case 'alertas':
-        // Preservación trazable por jugadora, fecha y tipo
-        return (item.id_jugadora && item.fecha && item.tipo) ? `${item.id_jugadora}_${item.fecha}_${item.tipo}` : ''
-      case 'historial_importaciones':
-      case 'historial_copias':
-        return (item.fechaHora && item.nombreArchivo) ? `${item.fechaHora}_${item.nombreArchivo}` : ''
-      case 'protocolos_cmj':
-        return item.id_protocolo || ''
-      case 'pruebas_cmj':
-        return item.id_medicion || ''
-      case 'ejercicios_fuerza':
-        return item.id_ejercicio || ''
-      case 'trabajos_fuerza':
-        return item.id_trabajo || ''
-      case 'plantillas_fuerza':
-        return item.id_plantilla || ''
-      case 'sesiones_fuerza_individual':
-        return item.id_sesion_fuerza || ''
-      case 'plantillas_importacion':
-        return item.nombre || ''
-      case 'fuerza_vbt':
-        // Clave inestable sin id_registro_vbt explícito por serie
-        return ''
-      default:
-        return ''
     }
   }
 
@@ -654,7 +809,6 @@ export async function restoreFromData(
 
           const key = getLogicalKey(table, inc)
           if (!key) {
-            // Sin clave lógica segura o clave inestable -> Conflicto de revisión obligatorio
             conflicts.push({
               table,
               key: 'Inestable/Desconocido',
@@ -737,8 +891,6 @@ export async function restoreFromData(
   }
 }
 
-
-
 export function getBackupInfo(): { exists: boolean; timestamp: string | null } {
   const raw = localStorage.getItem(BACKUP_KEY)
   if (!raw) return { exists: false, timestamp: null }
@@ -747,28 +899,5 @@ export function getBackupInfo(): { exists: boolean; timestamp: string | null } {
     return { exists: true, timestamp: backup.timestamp || null }
   } catch {
     return { exists: false, timestamp: null }
-  }
-}
-
-export function isAutoBackupEnabled(): boolean {
-  return localStorage.getItem(AUTO_BACKUP_ENABLED_KEY) !== 'false'
-}
-
-export function setAutoBackupEnabled(enabled: boolean): void {
-  localStorage.setItem(AUTO_BACKUP_ENABLED_KEY, String(enabled))
-}
-
-export function startAutoBackup(): void {
-  stopAutoBackup()
-  if (!isAutoBackupEnabled()) return
-  backupTimer = setInterval(() => {
-    createBackup()
-  }, BACKUP_INTERVAL_MS)
-}
-
-export function stopAutoBackup(): void {
-  if (backupTimer) {
-    clearInterval(backupTimer)
-    backupTimer = null
   }
 }

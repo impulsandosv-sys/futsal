@@ -20,10 +20,11 @@ export function Filters({
   const players = jugadoras.filter((j) => j.activa !== false)
 
   return (
-    <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-white rounded-lg border border-surface-200">
+    <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700">
       {showPlayer && (
         <select
-          className="text-xs border border-surface-200 rounded px-2 py-1.5 bg-white text-surface-700"
+          aria-label="Seleccionar jugadora"
+          className="text-xs border border-surface-300 dark:border-surface-700 rounded px-2.5 py-1.5 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-50 font-medium focus:ring-2 focus:ring-primary-500/20"
           value={filters.id_jugadora}
           onChange={(e) => setFilter('id_jugadora', e.target.value)}
         >
@@ -39,14 +40,16 @@ export function Filters({
         <>
           <input
             type="date"
-            className="text-xs border border-surface-200 rounded px-2 py-1.5 bg-white text-surface-700"
+            aria-label="Fecha desde"
+            className="text-xs border border-surface-300 dark:border-surface-700 rounded px-2.5 py-1.5 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-50 font-medium placeholder-surface-500"
             value={filters.fecha_desde}
             onChange={(e) => setFilter('fecha_desde', e.target.value)}
             placeholder="Desde"
           />
           <input
             type="date"
-            className="text-xs border border-surface-200 rounded px-2 py-1.5 bg-white text-surface-700"
+            aria-label="Fecha hasta"
+            className="text-xs border border-surface-300 dark:border-surface-700 rounded px-2.5 py-1.5 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-50 font-medium placeholder-surface-500"
             value={filters.fecha_hasta}
             onChange={(e) => setFilter('fecha_hasta', e.target.value)}
             placeholder="Hasta"
@@ -56,14 +59,16 @@ export function Filters({
       {showWeek && (
         <input
           type="week"
-          className="text-xs border border-surface-200 rounded px-2 py-1.5 bg-white text-surface-700"
+          aria-label="Semana"
+          className="text-xs border border-surface-300 dark:border-surface-700 rounded px-2.5 py-1.5 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-50 font-medium"
           value={filters.semana}
           onChange={(e) => setFilter('semana', e.target.value)}
         />
       )}
       {showSessionType && (
         <select
-          className="text-xs border border-surface-200 rounded px-2 py-1.5 bg-white text-surface-700"
+          aria-label="Tipo de sesión"
+          className="text-xs border border-surface-300 dark:border-surface-700 rounded px-2.5 py-1.5 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-50 font-medium"
           value={filters.tipo_sesion}
           onChange={(e) => setFilter('tipo_sesion', e.target.value)}
         >
@@ -79,7 +84,8 @@ export function Filters({
       )}
       {showStatus && (
         <select
-          className="text-xs border border-surface-200 rounded px-2 py-1.5 bg-white text-surface-700"
+          aria-label="Estado"
+          className="text-xs border border-surface-300 dark:border-surface-700 rounded px-2.5 py-1.5 bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-50 font-medium"
           value={filters.estado}
           onChange={(e) => setFilter('estado', e.target.value)}
         >
@@ -93,7 +99,7 @@ export function Filters({
       )}
       <button
         onClick={resetFilters}
-        className="text-xs text-surface-500 hover:text-surface-700 px-2 py-1.5"
+        className="text-xs text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100 font-medium px-2.5 py-1.5"
       >
         Limpiar filtros
       </button>
