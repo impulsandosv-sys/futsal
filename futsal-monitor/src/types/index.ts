@@ -129,6 +129,8 @@ export interface TestFisico {
   notas: string
 }
 
+export type ParticipacionPartido = 'no_convocada' | 'convocada_sin_minutos' | 'parcial' | 'completa' | 'modificada'
+
 export interface RPE_Partido {
   id?: number
   id_partido: string
@@ -138,7 +140,8 @@ export interface RPE_Partido {
   rpe?: number | null
   fecha: string
   carga_ua?: number | null
-  participacion?: 'completa' | 'parcial' | 'no_participa'
+  participacion?: ParticipacionPartido
+  participacion_inferida?: boolean
   motivo_participacion_reducida?: string
   comentario_staff?: string
 }

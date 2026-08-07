@@ -89,3 +89,62 @@ export function exportarCSVReunionStaff(rows: ExportSemanalStaffRow[], filename 
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
   saveAs(blob, `${filename}.csv`)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plantilla de Exportación Específica para Partidos
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ExportPartidoRow {
+  idPartido: string
+  fecha: string
+  rival: string
+  jugadora: string
+  minutosJugados: number | null
+  rpe: number | null
+  cargaUA: number | null
+  participacion: string | null
+  participacionInferida: string | null
+  motivoParticipacionReducida: string | null
+}
+
+export function generarCSVPartidos(rows: ExportPartidoRow[]): string {
+  const headers = [
+    'ID_Partido',
+    'Fecha',
+    'Rival',
+    'Jugadora',
+    'Minutos_Jugados',
+    'RPE',
+    'Carga_UA',
+    'Participacion',
+    'Participacion_Inferida',
+    'Motivo_Participacion_Reducida'
+  ]
+
+  const lines = [headers.join(',')]
+
+  rows.forEach((r) => {
+    const line = [
+      `"${(r.idPartido || '').replace(/"/g, '""')}"`,
+      `"${r.fecha || ''}"`,
+      `"${(r.rival || '').replace(/"/g, '""')}"`,
+      `"${(r.jugadora || '').replace(/"/g, '""')}"`,
+      `"${r.minutosJugados !== null && r.minutosJugados !== undefined ? r.minutosJugados : ''}"`,
+      `"${r.rpe !== null && r.rpe !== undefined ? r.rpe : ''}"`,
+      `"${r.cargaUA !== null && r.cargaUA !== undefined ? r.cargaUA : ''}"`,
+      `"${(r.participacion || '').replace(/"/g, '""')}"`,
+      `"${(r.participacionInferida || '').replace(/"/g, '""')}"`,
+      `"${(r.motivoParticipacionReducida || '').replace(/"/g, '""')}"`
+    ]
+    lines.push(line.join(','))
+  })
+
+  return lines.join('\n')
+}
+
+export function exportarCSVPartidos(rows: ExportPartidoRow[], filename = 'export_partidos'): void {
+  const csvContent = generarCSVPartidos(rows)
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+  saveAs(blob, `${filename}.csv`)
+}
+

@@ -205,7 +205,8 @@ export function obtenerCargasDiariasJugadora(
     ) {
       cargaPartido = p.rpe * p.minutos_jugados
       tieneRPEValido = true
-    } else if (p.participacion === 'no_participa') {
+    } else if (p.minutos_jugados === 0 || p.participacion === 'no_convocada' || p.participacion === 'convocada_sin_minutos') {
+      // 0 minutos jugados implica carga 0 explícita.
       cargaPartido = 0
       tieneRPEValido = true
     }

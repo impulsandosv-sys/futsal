@@ -15,14 +15,21 @@ export interface InconsistenciaFecha {
   motivo: 'formato_invalido' | 'anterior_a_fecha_alta'
 }
 
+export interface SesionPartidoSinLink {
+  idSesion: string
+  fecha: string
+}
+
 export interface ReporteConsistenciaRelacional {
   tieneInconsistencias: boolean
   huerfanos: RegistroHuerfano[]
   fechasInconsistentes: InconsistenciaFecha[]
+  sesionesPartidoSinLink: SesionPartidoSinLink[]
 }
 
 export interface DatasetIntegridad {
   jugadoras?: Array<{ id_jugadora: string; fecha_alta?: string }>
+  sesiones?: Array<{ id_sesion: string; fecha: string; tipo_sesion?: string; id_partido?: string }>
   sesion_rpe?: Array<{ id?: number | string; id_jugadora: string; fecha?: string }>
   wellness?: Array<{ id?: number | string; id_jugadora: string; fecha?: string }>
   tests_fisicos?: Array<{ id?: number | string; id_jugadora: string; fecha?: string }>
@@ -36,6 +43,18 @@ export function verificarConsistenciaRelacional(data: DatasetIntegridad): Report
 
   const huerfanos: RegistroHuerfano[] = []
   const fechasInconsistentes: InconsistenciaFecha[] = []
+  const sesionesPartidoSinLink: SesionPartidoSinLink[] = []
+
+  if (data.sesiones) {
+    for (const s of data.sesiones) {
+      if (s.tipo_sesion === 'Partido' && (!s.id_partido || !s.id_partido.trim())) {
+        sesionesPartidoSinLink.push({
+          idSesion: s.id_sesion,
+          fecha: s.fecha,
+        })
+      }
+    }
+  }
 
   const verificarColeccion = (coleccion: any[] | undefined, nombreEntidad: string, idKey: string) => {
     if (!coleccion) return
@@ -73,9 +92,10 @@ export function verificarConsistenciaRelacional(data: DatasetIntegridad): Report
   verificarColeccion(data.trabajos_fuerza, 'trabajos_fuerza', 'id_trabajo')
 
   return {
-    tieneInconsistencias: huerfanos.length > 0 || fechasInconsistentes.length > 0,
+    tieneInconsistencias: huerfanos.length > 0 || fechasInconsistentes.length > 0 || sesionesPartidoSinLink.length > 0,
     huerfanos,
     fechasInconsistentes,
+    sesionesPartidoSinLink,
   }
 }
 

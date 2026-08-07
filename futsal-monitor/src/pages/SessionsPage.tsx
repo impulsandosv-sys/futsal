@@ -9,7 +9,6 @@ import { calcularCargaUA, calcularCargaMediaRealizada } from '@/domain/calculati
 import type { Sesion, TipoDia, TipoSesion, SesionRPE } from '@/types'
 import { getTodayLocalISO } from '@/domain/dates/dates'
 import { WeeklyCalendar } from '@/components/planning/WeeklyCalendar'
-
 export function SessionsPage() {
   const { sesiones, partidos, jugadoras, sesion_rpe, filters, addSesion, updateSesion } = useStore()
   const [view, setView] = useState<'plan' | 'historial'>('plan')
@@ -280,6 +279,48 @@ export function SessionsPage() {
               <option value="Readaptacion">Readaptación</option>
             </select>
           </div>
+          {form.tipo_sesion === 'Partido' && (
+            <div className="col-span-2 bg-amber-50 p-2.5 rounded border border-amber-200 space-y-2">
+              <label className="text-[10px] font-semibold text-amber-900 block">
+                Partido vinculado (Obligatorio para evitar doble contabilización) *
+              </label>
+              {partidos.length === 0 ? (
+                <div className="space-y-1">
+                  <p className="text-xs text-amber-800">
+                    ⚠️ No hay partidos registrados en el sistema. Debes crear el partido primero en el catálogo de partidos para poder vincular esta sesión.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalOpen(false)
+                      window.location.href = '/partidos'
+                    }}
+                    className="text-xs text-primary-700 font-semibold underline hover:text-primary-800 block"
+                  >
+                    + Ir a crear partido ahora
+                  </button>
+                </div>
+              ) : (
+                <select
+                  className={`w-full border rounded px-2 py-1.5 text-xs bg-white text-surface-700 ${
+                    !form.id_partido ? 'border-amber-400 focus:border-rose-500' : 'border-emerald-500'
+                  }`}
+                  value={form.id_partido || ''}
+                  onChange={(e) => setForm({ ...form, id_partido: e.target.value })}
+                >
+                  <option value="">-- Seleccionar partido del catálogo --</option>
+                  {partidos.map((p) => (
+                    <option key={p.id_partido} value={p.id_partido}>
+                      {p.fecha} — vs {p.rival} ({p.lugar}) [{p.id_partido}]
+                    </option>
+                  ))}
+                </select>
+              )}
+              {!form.id_partido && partidos.length > 0 && (
+                <p className="text-[10px] text-rose-600 font-medium">Requerido: Selecciona el partido correspondiente.</p>
+              )}
+            </div>
+          )}
           <div>
             <label className="text-[10px] font-medium text-surface-600 block mb-1">Duración Planificada (min)</label>
             <input type="number" className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs text-surface-700 bg-white"
@@ -321,10 +362,14 @@ export function SessionsPage() {
         </div>
         <div className="flex justify-end gap-2 mt-4">
           <button onClick={() => setModalOpen(false)} className="text-xs text-surface-600 px-3 py-1.5 border border-surface-200 rounded">Cancelar</button>
-          <button onClick={async () => {
-            if (editing) await updateSesion(form); else await addSesion(form)
-            setModalOpen(false)
-          }} className="text-xs text-white bg-primary-600 px-3 py-1.5 rounded hover:bg-primary-700">
+          <button
+            onClick={async () => {
+              if (editing) await updateSesion(form); else await addSesion(form)
+              setModalOpen(false)
+            }}
+            disabled={form.tipo_sesion === 'Partido' && (!form.id_partido || partidos.length === 0)}
+            className="text-xs text-white bg-primary-600 px-3 py-1.5 rounded hover:bg-primary-700 disabled:opacity-50"
+          >
             {editing ? 'Guardar' : 'Crear sesión'}
           </button>
         </div>

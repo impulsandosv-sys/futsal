@@ -12,7 +12,7 @@ import type { FiltrosCarga } from '@/domain/monitoring/monitoring'
 import { 
   validateJugadora,
   validateWellness, validateSesion, validatePartido, validateLesion, 
-  validateTest, validateRPE_Partido, 
+  validateTest, validateRPE_Partido, inferirParticipacionPartido,
   formatValidationErrors,
   validateSesionRPE
 } from '@/utils/validation'
@@ -1107,6 +1107,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addRPE_Partido: async (r) => {
+    inferirParticipacionPartido(r)
     const errors = validateRPE_Partido(r)
     if (errors.length > 0) {
       throw new Error(formatValidationErrors(errors))
