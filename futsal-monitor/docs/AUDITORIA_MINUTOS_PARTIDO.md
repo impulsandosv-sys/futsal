@@ -24,7 +24,8 @@ Este documento traza el ciclo de vida de los datos de `RPE_Partido`, los `minuto
 El nodo central que une la carga de un partido con el ecosistema de la jugadora es `src/domain/calculations/dailyLoad.ts` (específicamente, `calculateDailyLoad`).
 
 - **Carga Diaria (`dailyLoad.ts`)**: Recolecta todos los registros del día para una jugadora (Sesiones de entrenamiento + Partidos).
-  - **Semántica del Cero Real**: Si un registro de partido tiene `minutos_jugados === 0` (o estado "no_convocada"/"convocada_sin_minutos"), el sistema genera explícitamente un objeto de carga con `carga: 0` y `tieneDato: true`. Esto evita que un día de partido sin participación se confunda con un día de ausencia de reporte.
+  - **Semántica del Cero Real**: Si un registro de partido tiene `minutos_jugados === 0` **y** la participación está explícitamente declarada como "no_convocada" o "convocada_sin_minutos", el sistema genera explícitamente un objeto de carga con `carga: 0` y `tieneDato: true`. Esto evita que un día de partido sin participación se confunda con un día de ausencia de reporte.
+  - **Atención a Legacy**: Un registro antiguo (legacy) con `minutos_jugados === 0` pero sin `participacion` explícita se mantiene como un dato ambiguo (se considera `tieneDato: false` y `carga: null`). **No se infiere convocatoria ni participación desde 0 minutos.**
 - **Resumen Semanal (`resumenSemanal.ts`)**: Suma las cargas diarias. Como las cargas a cero tienen `tieneDato: true`, cuentan a favor de la completitud de la semana (aumentando la fidelidad de los datos semanales).
 - **Readiness (`readiness.ts`)**: Utiliza la carga agregada de los últimos días para proyectar fatiga.
 - **Monitorización y Ratios (ACWR/EWMA)**: Se apoyan en el flujo de `dailyLoad.ts` para extraer cargas crudas e integrarlas en los modelos exponenciales (EWMA) y de ratio de carga aguda-crónica (ACWR) calculados en `loadCalculations.ts`.

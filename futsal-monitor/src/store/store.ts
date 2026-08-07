@@ -1292,6 +1292,12 @@ export const useStore = create<AppState>((set, get) => ({
     if (errors.length > 0) {
       throw new Error(formatValidationErrors(errors))
     }
+    if (s.tipo_sesion === 'Partido' && s.id_partido) {
+      const matchExists = get().partidos.some(p => p.id_partido === s.id_partido)
+      if (!matchExists) {
+        throw new Error(`El partido referenciado no existe: ${s.id_partido}`)
+      }
+    }
     await db.sesiones.put(s)
     set((state) => ({ sesiones: [s, ...state.sesiones] }))
   },
@@ -1300,6 +1306,12 @@ export const useStore = create<AppState>((set, get) => ({
     const errors = validateSesion(s)
     if (errors.length > 0) {
       throw new Error(formatValidationErrors(errors))
+    }
+    if (s.tipo_sesion === 'Partido' && s.id_partido) {
+      const matchExists = get().partidos.some(p => p.id_partido === s.id_partido)
+      if (!matchExists) {
+        throw new Error(`El partido referenciado no existe: ${s.id_partido}`)
+      }
     }
     await db.sesiones.put(s)
     set((state) => ({ sesiones: state.sesiones.map(r => (r.id_sesion === s.id_sesion ? s : r)).sort((a, b) => b.fecha.localeCompare(a.fecha)) }))
