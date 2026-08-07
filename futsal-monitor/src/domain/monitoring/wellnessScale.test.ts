@@ -9,6 +9,12 @@ import { validarFilaWellness, diagnosticarRegistrosWellnessFueraDeEscala } from 
 import { UMBRALES } from '@/config/monitoringThresholds'
 import { construirDecisionDiaria } from '@/domain/dailyDecision/dailyDecisionEngine'
 import type { Jugadora, Wellness } from '@/types'
+import {
+  calcularIndiceDiario,
+  calcularIndiceSemanal,
+  normalizarSintomasMenstruales,
+  normalizarValor
+} from './wellnessScale'
 
 describe('Bloque D - Escala única de wellness 1-10 vs readiness 0-100', () => {
   let db: FutsalDB
@@ -16,6 +22,42 @@ describe('Bloque D - Escala única de wellness 1-10 vs readiness 0-100', () => {
   beforeEach(async () => {
     const dbName = `futsal_scale_test_${Date.now()}_${Math.random().toString(36).slice(2)}`
     db = new FutsalDB(dbName)
+  })
+
+  describe('Normalización de escalas wellness (diario/semanal)', () => {
+    it('normaliza correctamente escalas POSITIVE y NEGATIVE', () => {
+      expect(normalizarValor(8, 'POSITIVE')).toBe(8)
+      expect(normalizarValor(3, 'NEGATIVE')).toBe(8)
+    })
+
+    it('normaliza síntomas menstruales 1-5 a 2-10 invertido', () => {
+      expect(normalizarSintomasMenstruales(1)).toBe(10)
+      expect(normalizarSintomasMenstruales(5)).toBe(2)
+    })
+
+    it('calcula índice diario con métricas disponibles', () => {
+      const indice = calcularIndiceDiario({
+        'Calidad de sueño': { normalizado: 8 },
+        Fatiga: { normalizado: 7 },
+        'Dolor muscular': { normalizado: 6 },
+        'Estrés': { normalizado: null },
+        'Estado de ánimo': { normalizado: 9 }
+      })
+      expect(indice).toBe(7.5)
+    })
+
+    it('calcula índice semanal con métricas disponibles', () => {
+      const indice = calcularIndiceSemanal({
+        '¿Cómo valorarías tu recuperación general esta semana?': { normalizado: 8 },
+        '¿Cómo ha sido la calidad de tu sueño esta semana?': { normalizado: 7 },
+        '¿Cómo ha sido tu nivel de estrés fuera del fútbol sala?': { normalizado: 6 },
+        '¿Cómo ha sido tu energía durante los entrenamientos y el partido?': { normalizado: 9 },
+        '¿Cómo valorarías tu estado de ánimo esta semana?': { normalizado: null },
+        '¿Como de preparada te sientes para la próxima semana de entrenamiento y competición?': { normalizado: 8 },
+        '¿Tus síntomas menstruales han afectado a tu recuperación, entrenamiento o bienestar esta semana? (opcional)': { normalizado: 10 }
+      })
+      expect(indice).toBe(8)
+    })
   })
 
   afterEach(async () => {

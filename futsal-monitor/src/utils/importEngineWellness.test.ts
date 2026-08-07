@@ -12,6 +12,11 @@ import {
 import { crearTemporada } from '@/domain/temporadas/temporadas'
 import { agregarAliasJugadora } from '@/domain/alias/aliasJugadora'
 import type { ColumnMapping, RawImportRow, Temporada } from '@/types'
+import {
+  detectarTipoCuestionario,
+  importarCSVWellnessGoogleForms,
+  procesarFilaWellness
+} from './importEngineWellness'
 
 describe('T-02A — Integración Completa de Importación Wellness (Identidad y Temporada)', () => {
   let db: FutsalDB
@@ -53,12 +58,112 @@ describe('T-02A — Integración Completa de Importación Wellness (Identidad y 
       activo: true,
       fecha_alta: '2026-01-01'
     })
+
     await agregarAliasJugadora(db, {
       id_jugadora: 'J2',
       origen: 'google_forms',
       valor: 'GF-002',
       activo: true,
       fecha_alta: '2026-01-01'
+    })
+  })
+
+  describe('Importación automática CSV wellness diario/semanal', () => {
+    it('detecta correctamente cuestionarios diario y semanal por cabeceras', () => {
+      const headersDiario = ['ID jugadora', 'Fecha', 'Calidad de sueño', 'Fatiga', 'Dolor muscular', 'Estrés', 'Estado de ánimo']
+      const headersSemanal = [
+        'ID jugadora',
+        'Fecha',
+        '¿Cómo valorarías tu recuperación general esta semana?',
+        '¿Cómo ha sido la calidad de tu sueño esta semana?',
+        '¿Cómo ha sido tu nivel de estrés fuera del fútbol sala?',
+        '¿Cómo ha sido tu energía durante los entrenamientos y el partido?',
+        '¿Cómo valorarías tu estado de ánimo esta semana?',
+        '¿Como de preparada te sientes para la próxima semana de entrenamiento y competición?',
+        '¿Tus síntomas menstruales han afectado a tu recuperación, entrenamiento o bienestar esta semana? (opcional)'
+      ]
+
+      expect(detectarTipoCuestionario(headersDiario)).toBe('DIARIO')
+      expect(detectarTipoCuestionario(headersSemanal)).toBe('SEMANAL')
+    })
+
+    it('procesa una fila semanal con normalización y cálculo de índice', () => {
+      const row: RawImportRow = {
+        '¿Cómo valorarías tu recuperación general esta semana?': '8',
+        '¿Cómo ha sido la calidad de tu sueño esta semana?': '7',
+        '¿Cómo ha sido tu nivel de estrés fuera del fútbol sala?': '5',
+        '¿Cómo ha sido tu energía durante los entrenamientos y el partido?': '8',
+        '¿Cómo valorarías tu estado de ánimo esta semana?': '9',
+        '¿Como de preparada te sientes para la próxima semana de entrenamiento y competición?': '8',
+        '¿Tus síntomas menstruales han afectado a tu recuperación, entrenamiento o bienestar esta semana? (opcional)': '2'
+      }
+
+      const salida = procesarFilaWellness('SEMANAL', row, 'J1', '2026-07-20', 'TEMP-2026-2027', 'GF-001')
+      expect(salida.metricas['¿Cómo ha sido tu nivel de estrés fuera del fútbol sala?'].normalizado).toBe(6)
+      expect(salida.metricas['¿Tus síntomas menstruales han afectado a tu recuperación, entrenamiento o bienestar esta semana? (opcional)'].normalizado).toBe(8)
+      expect(salida.indice).toBe(7.7)
+    })
+
+    it('importa CSV diario y semanal persistiendo trazabilidad', async () => {
+      const dbName = `test_csv_auto_${Date.now()}_${Math.random().toString(36).slice(2)}`
+      const db = new FutsalDB(dbName)
+      await db.open()
+
+      await db.jugadoras.put({ id_jugadora: 'J1', nombre: 'Ana', posicion: 'Ala', activa: true })
+      await crearTemporada(db, {
+        id_temporada: 'TEMP-2026-2027',
+        nombre: 'Temporada 26/27',
+        fecha_inicio: '2026-01-01',
+        fecha_fin: '2026-12-31',
+        activa: true
+      })
+      await agregarAliasJugadora(db, {
+        id_jugadora: 'J1',
+        origen: 'google_forms',
+        valor: 'GF-001',
+        activo: true,
+        fecha_alta: '2026-01-01'
+      })
+
+      const csvDiario = [
+        'ID jugadora,Fecha,Calidad de sueño,Fatiga,Dolor muscular,Estrés,Estado de ánimo,Dolor especifico o nota importante (opcional)',
+        'GF-001,2026-07-20,8,3,4,5,9,Tobillo cargado'
+      ].join('\n')
+      const headersSemanalCSV = [
+        'ID jugadora',
+        'Fecha',
+        '¿Cómo valorarías tu recuperación general esta semana?',
+        '¿Cómo ha sido la calidad de tu sueño esta semana?',
+        '¿Cómo ha sido tu nivel de estrés fuera del fútbol sala?',
+        '¿Cómo ha sido tu energía durante los entrenamientos y el partido?',
+        '¿Cómo valorarías tu estado de ánimo esta semana?',
+        '¿Como de preparada te sientes para la próxima semana de entrenamiento y competición?',
+        '¿Tus síntomas menstruales han afectado a tu recuperación, entrenamiento o bienestar esta semana? (opcional)',
+        'Indica que dolor o molestia has tenido'
+      ].map((h) => `"${h}"`).join(',')
+      const csvSemanal = [
+        headersSemanalCSV,
+        'GF-001,2026-07-21,8,7,5,8,9,8,2,Cuádriceps izquierdo'
+      ].join('\n')
+
+      const outDiario = await importarCSVWellnessGoogleForms(csvDiario, db)
+      const outSemanal = await importarCSVWellnessGoogleForms(csvSemanal, db)
+
+      expect(outDiario.importadas).toBe(1)
+      expect(outSemanal.importadas).toBe(1)
+
+      const diarios = await db.wellness_diario_importado.toArray()
+      const semanales = await db.wellness_semanal_importado.toArray()
+      const wellness = await db.wellness.toArray()
+
+      expect(diarios).toHaveLength(1)
+      expect(semanales).toHaveLength(1)
+      expect(wellness).toHaveLength(1)
+      expect(diarios[0].metricas['Fatiga'].normalizado).toBe(8)
+      expect(semanales[0].metricas['¿Tus síntomas menstruales han afectado a tu recuperación, entrenamiento o bienestar esta semana? (opcional)'].normalizado).toBe(8)
+
+      db.close()
+      await db.delete()
     })
   })
 

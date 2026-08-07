@@ -12,7 +12,7 @@ const _AUTO_BACKUP_ENABLED_KEY = 'futsal_autobackup'
 let _backupTimer: ReturnType<typeof setInterval> | null = null
 
 export const BACKUP_FORMAT_VERSION = 1
-export const DATABASE_SCHEMA_VERSION = 15
+export const DATABASE_SCHEMA_VERSION = 16
 export const APP_VERSION = '1.0.0'
 
 export const createBackup = createBackupData
@@ -53,6 +53,8 @@ export const DERIVED_TABLES = [
 export const OPTIONAL_TABLES = [
   'formulario_respuestas',
   'wellness',
+  'wellness_diario_importado',
+  'wellness_semanal_importado',
   'tests_fisicos',
   'rpe_partido',
   'sesion_rpe',
@@ -119,7 +121,7 @@ export interface MergePreviewAnalysis {
  */
 export async function createBackupData() {
   const [
-    temporadas, alias_jugadora, jugadoras, formulario_respuestas, wellness, sesiones, partidos,
+    temporadas, alias_jugadora, jugadoras, formulario_respuestas, wellness, wellness_diario_importado, wellness_semanal_importado, sesiones, partidos,
     lesiones, tests_fisicos, rpe_partido, resumen_semanal, alertas,
     sesion_rpe, readiness, historial_importaciones, historial_copias,
     ciclo_menstrual, carga_gps, fuerza_vbt, hidratacion,
@@ -132,6 +134,8 @@ export async function createBackupData() {
     db.jugadoras.toArray(),
     db.formulario_respuestas.toArray(),
     db.wellness.toArray(),
+    db.wellness_diario_importado.toArray(),
+    db.wellness_semanal_importado.toArray(),
     db.sesiones.toArray(),
     db.partidos.toArray(),
     db.lesiones.toArray(),
@@ -170,6 +174,8 @@ export async function createBackupData() {
       jugadoras,
       formulario_respuestas,
       wellness,
+      wellness_diario_importado,
+      wellness_semanal_importado,
       sesiones,
       partidos,
       lesiones,
@@ -427,6 +433,9 @@ export const getLogicalKey = (table: string, item: any): string => {
     case 'hidratacion':
     case 'test_psicologico':
       return (item.id_jugadora && item.fecha) ? `${item.id_jugadora}_${item.fecha}` : ''
+    case 'wellness_diario_importado':
+    case 'wellness_semanal_importado':
+      return (item.id_jugadora && item.fecha) ? `${item.id_jugadora}_${item.fecha}` : ''
     case 'tests_fisicos':
       return (item.id_jugadora && item.fecha && item.test) ? `${item.id_jugadora}_${item.fecha}_${item.test}_${item.momento || ''}` : ''
     case 'rpe_partido':
@@ -481,7 +490,7 @@ export async function analyzeBackupMergePreview(backupData: any): Promise<MergeP
 
   const d = backupData.data
   const tablesToAnalyze = [
-    'temporadas', 'alias_jugadora', 'jugadoras', 'formulario_respuestas', 'wellness', 'sesiones', 'partidos',
+    'temporadas', 'alias_jugadora', 'jugadoras', 'formulario_respuestas', 'wellness', 'wellness_diario_importado', 'wellness_semanal_importado', 'sesiones', 'partidos',
     'lesiones', 'tests_fisicos', 'rpe_partido', 'sesion_rpe', 'alertas',
     'historial_importaciones', 'ciclo_menstrual', 'carga_gps',
     'fuerza_vbt', 'hidratacion', 'rtp_checklist', 'test_psicologico',
@@ -531,7 +540,7 @@ export async function analyzeBackupMergePreview(backupData: any): Promise<MergeP
 
     for (const inc of incomingList) {
       let isOrphan = false
-      if (['wellness', 'formulario_respuestas', 'ciclo_menstrual', 'hidratacion', 'test_psicologico', 'carga_gps', 'tests_fisicos', 'sesiones_fuerza_individual', 'alertas'].includes(table)) {
+      if (['wellness', 'wellness_diario_importado', 'wellness_semanal_importado', 'formulario_respuestas', 'ciclo_menstrual', 'hidratacion', 'test_psicologico', 'carga_gps', 'tests_fisicos', 'sesiones_fuerza_individual', 'alertas'].includes(table)) {
         if (inc.id_jugadora && !parentJugadoras.has(inc.id_jugadora)) isOrphan = true
       } else if (table === 'rpe_partido') {
         if (!parentJugadoras.has(inc.id_jugadora) || !parentPartidos.has(inc.id_partido)) isOrphan = true
@@ -695,7 +704,7 @@ export async function restoreFromData(
   }
 
   const tablesToRestore = [
-    'temporadas', 'alias_jugadora', 'jugadoras', 'formulario_respuestas', 'wellness', 'sesiones', 'partidos',
+    'temporadas', 'alias_jugadora', 'jugadoras', 'formulario_respuestas', 'wellness', 'wellness_diario_importado', 'wellness_semanal_importado', 'sesiones', 'partidos',
     'lesiones', 'tests_fisicos', 'rpe_partido', 'sesion_rpe', 'alertas',
     'historial_importaciones', 'ciclo_menstrual', 'carga_gps',
     'fuerza_vbt', 'hidratacion', 'rtp_checklist', 'test_psicologico',
@@ -716,7 +725,7 @@ export async function restoreFromData(
     }
 
     await db.transaction('rw', [
-      db.temporadas, db.alias_jugadora, db.jugadoras, db.formulario_respuestas, db.wellness, db.sesiones, db.partidos,
+      db.temporadas, db.alias_jugadora, db.jugadoras, db.formulario_respuestas, db.wellness, db.wellness_diario_importado, db.wellness_semanal_importado, db.sesiones, db.partidos,
       db.lesiones, db.tests_fisicos, db.rpe_partido, db.resumen_semanal, db.alertas,
       db.sesion_rpe, db.readiness, db.historial_importaciones, db.historial_copias,
       db.ciclo_menstrual, db.carga_gps, db.fuerza_vbt, db.hidratacion,

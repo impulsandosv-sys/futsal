@@ -48,6 +48,35 @@ export interface Wellness {
   alias_origen?: string
 }
 
+export interface WellnessPreguntaValor {
+  original: number | null
+  normalizado: number | null
+}
+
+export interface WellnessDiarioImportado {
+  id?: number
+  id_jugadora: string
+  fecha: string
+  id_temporada?: string
+  origen_alias?: OrigenAlias
+  alias_origen?: string
+  metricas: Record<string, WellnessPreguntaValor>
+  textos: Record<string, string>
+  indice_diario: number | null
+}
+
+export interface WellnessSemanalImportado {
+  id?: number
+  id_jugadora: string
+  fecha: string
+  id_temporada?: string
+  origen_alias?: OrigenAlias
+  alias_origen?: string
+  metricas: Record<string, WellnessPreguntaValor>
+  textos: Record<string, string>
+  indice_semanal: number | null
+}
+
 export interface Sesion {
   id_sesion: string
   fecha: string

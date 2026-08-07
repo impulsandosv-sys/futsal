@@ -6,7 +6,7 @@ import type {
   CicloMenstrual, CargaGPS, FuerzaVBT, Hidratacion,
   RTPChecklist, TestPsicologico, HistorialCopia, PlantillaImportacion,
   ProtocoloCMJ, MedicionCMJ, EjercicioFuerza, TrabajoFuerzaIndividual, PlantillaFuerza, SesionFuerzaIndividual,
-  Temporada, AliasJugadora
+  Temporada, AliasJugadora, WellnessDiarioImportado, WellnessSemanalImportado
 } from '@/types'
 
 // ============================================================================
@@ -29,6 +29,8 @@ export class FutsalDB extends Dexie {
   
   // Registros de wellness diarios por jugadora – necesitamos consultas rápidas por jugador + fecha
   wellness!: Dexie.Table<Wellness, number>
+  wellness_diario_importado!: Dexie.Table<WellnessDiarioImportado, number>
+  wellness_semanal_importado!: Dexie.Table<WellnessSemanalImportado, number>
   
   // Sesiones de entrenamiento y datos grupales
   sesiones!: Dexie.Table<Sesion, string>
@@ -256,6 +258,12 @@ export class FutsalDB extends Dexie {
     this.version(15).stores({
       temporadas:     'id_temporada, activa, fecha_inicio, fecha_fin',
       alias_jugadora: '++id_alias, [origen+valor], id_jugadora, origen, valor, activo'
+    })
+
+    // Versión 16.0 - Persistencia detallada de importaciones wellness diario/semanal
+    this.version(16).stores({
+      wellness_diario_importado: '++id, [id_jugadora+fecha], id_jugadora, fecha',
+      wellness_semanal_importado: '++id, [id_jugadora+fecha], id_jugadora, fecha'
     })
 
     this.on('populate', async (tx) => {
