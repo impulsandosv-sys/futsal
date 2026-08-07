@@ -378,5 +378,39 @@ describe('BLOQUE C — Fuente única de carga individual (dailyLoad.ts)', () => 
     expect(entry.tieneDato).toBe(false)
     expect(entry.carga).toBeNull()
   })
+
+  it('19. Registro con participacion no_convocada pero minutos > 0, sin RPE, no produce tieneDato true ni carga 0', () => {
+    const rpePartidos: RPE_Partido[] = [
+      { id: 1, id_partido: 'P1', id_jugadora: J1, fecha: '2026-08-19', participacion: 'no_convocada', minutos_jugados: 10 } as any
+    ]
+    const map = obtenerCargasDiariasJugadora({
+      jugadoraId: J1,
+      fechaDesde: '2026-08-19',
+      fechaHasta: '2026-08-19',
+      sesiones: [],
+      sesionesRPE: [],
+      rpePartidos
+    })
+    const entry = map.get('2026-08-19')!
+    expect(entry.tieneDato).toBe(false)
+    expect(entry.carga).toBeNull()
+  })
+
+  it('20. Registro con participacion convocada_sin_minutos pero minutos > 0, sin RPE, no produce tieneDato true ni carga 0', () => {
+    const rpePartidos: RPE_Partido[] = [
+      { id: 1, id_partido: 'P1', id_jugadora: J1, fecha: '2026-08-20', participacion: 'convocada_sin_minutos', minutos_jugados: 10 } as any
+    ]
+    const map = obtenerCargasDiariasJugadora({
+      jugadoraId: J1,
+      fechaDesde: '2026-08-20',
+      fechaHasta: '2026-08-20',
+      sesiones: [],
+      sesionesRPE: [],
+      rpePartidos
+    })
+    const entry = map.get('2026-08-20')!
+    expect(entry.tieneDato).toBe(false)
+    expect(entry.carga).toBeNull()
+  })
 })
 

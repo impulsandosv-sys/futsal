@@ -24,7 +24,7 @@ export function MatchesPage() {
     motivo_participacion_reducida: string;
   }>({ id_jugadora: '', minutos_jugados: 0, rpe: 5, participacion: '', motivo_participacion_reducida: '' })
   
-  const [confirmClearData, setConfirmClearData] = useState<{ pendingParticipacion: ParticipacionPartido } | null>(null)
+  const [confirmClearData, setConfirmClearData] = useState<{ pendingParticipacion?: ParticipacionPartido, pendingMinutos?: number | '' } | null>(null)
 
   const filtered = partidos.filter((p) => {
     if (filters.fecha_desde && p.fecha < filters.fecha_desde) return false
@@ -61,6 +61,24 @@ export function MatchesPage() {
     } else {
       applyParticipacion(nuevaPart)
     }
+  }
+
+  const handleMinutosChange = (val: string) => {
+    const min = val === '' ? '' : Number(val)
+    if (rpeForm.participacion === 'modificada' && min === 0 && rpeForm.minutos_jugados !== 0 && rpeForm.rpe !== '' && rpeForm.rpe !== null) {
+      setConfirmClearData({ pendingMinutos: min })
+    } else {
+      applyMinutos(min)
+    }
+  }
+
+  const applyMinutos = (min: number | '') => {
+    setConfirmClearData(null)
+    const newForm = { ...rpeForm, minutos_jugados: min }
+    if (rpeForm.participacion === 'modificada' && min === 0) {
+      newForm.rpe = ''
+    }
+    setRpeForm(newForm)
   }
 
   const applyParticipacion = (part: ParticipacionPartido) => {
@@ -179,7 +197,10 @@ export function MatchesPage() {
               <p>Cambiar a este estado borrará los minutos y el RPE actuales. ¿Estás seguro?</p>
               <div className="flex gap-2">
                 <button onClick={() => setConfirmClearData(null)} className="px-2 py-1 bg-white border border-red-200 rounded">Cancelar</button>
-                <button onClick={() => applyParticipacion(confirmClearData.pendingParticipacion)} className="px-2 py-1 bg-red-600 text-white rounded">Sí, borrar</button>
+                <button onClick={() => {
+                  if (confirmClearData.pendingParticipacion) applyParticipacion(confirmClearData.pendingParticipacion)
+                  else if (confirmClearData.pendingMinutos !== undefined) applyMinutos(confirmClearData.pendingMinutos)
+                }} className="px-2 py-1 bg-red-600 text-white rounded">Sí, borrar</button>
               </div>
             </div>
           )}
@@ -219,15 +240,17 @@ export function MatchesPage() {
             <>
               <div>
                 <label className="text-[10px] font-medium text-surface-600 block mb-1">Minutos jugados</label>
-                <input type="number" min={0} max={40} className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs disabled:bg-surface-100"
+                <input type="number" min={0} max={rpeForm.participacion === 'modificada' ? 39 : 40} className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs disabled:bg-surface-100"
                   value={rpeForm.minutos_jugados} disabled={rpeForm.participacion === 'completa'}
-                  onChange={(e) => setRpeForm({ ...rpeForm, minutos_jugados: e.target.value === '' ? '' : Number(e.target.value) })} />
+                  onChange={(e) => handleMinutosChange(e.target.value)} />
               </div>
-              <div>
-                <label className="text-[10px] font-medium text-surface-600 block mb-1">RPE (1-10)</label>
-                <input type="number" min={1} max={10} className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"
-                  value={rpeForm.rpe} onChange={(e) => setRpeForm({ ...rpeForm, rpe: e.target.value === '' ? '' : Number(e.target.value) })} />
-              </div>
+              {!(rpeForm.participacion === 'modificada' && rpeForm.minutos_jugados === 0) && (
+                <div>
+                  <label className="text-[10px] font-medium text-surface-600 block mb-1">RPE (1-10)</label>
+                  <input type="number" min={1} max={10} className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"
+                    value={rpeForm.rpe} onChange={(e) => setRpeForm({ ...rpeForm, rpe: e.target.value === '' ? '' : Number(e.target.value) })} />
+                </div>
+              )}
             </>
           )}
 

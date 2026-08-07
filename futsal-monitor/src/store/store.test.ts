@@ -855,5 +855,18 @@ describe('useStore', () => {
 
       await expect(useStore.getState().addSesion(s)).rejects.toThrow('El partido referenciado no existe: P_NO_EXISTE')
     })
+
+    it('Actualizar Sesión Partido con id_partido inexistente rechazada desde el store', async () => {
+      const s: any = {
+        id_sesion: 'S_PARTIDO',
+        fecha: '2026-08-01',
+        tipo_sesion: 'Partido',
+        estado: 'completada',
+        id_partido: 'P_NO_EXISTE',
+        duracion_min: 90
+      }
+
+      await expect(useStore.getState().updateSesion(s)).rejects.toThrow('El partido referenciado no existe: P_NO_EXISTE')
+    })
   })
 })
