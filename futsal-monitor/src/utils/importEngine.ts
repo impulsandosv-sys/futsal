@@ -353,20 +353,39 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
 
   let resolvedIdJugadora: string
 
-  if (context.aliasesGoogleForms && context.aliasesGoogleForms.size > 0) {
+  const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim()
+  const aliasNormalizado = normalizar(rawAliasValue)
+  
+  // 1. Exact ID match
+  if (context.jugadorasIds.includes(rawAliasValue)) {
+    resolvedIdJugadora = rawAliasValue
+  }
+  // 2. Alias match
+  else if (context.aliasesGoogleForms && context.aliasesGoogleForms.size > 0 && context.aliasesGoogleForms.has(rawAliasValue)) {
     const aliasInfo = context.aliasesGoogleForms.get(rawAliasValue)
-    if (!aliasInfo) {
-      return { isValid: false, errorMsg: `ID externo '${rawAliasValue}' no reconocido para el origen 'google_forms'` }
-    }
-    if (!aliasInfo.activo) {
+    if (!aliasInfo!.activo) {
       return { isValid: false, errorMsg: `Alias '${rawAliasValue}' inactivo para el origen 'google_forms'` }
     }
-    resolvedIdJugadora = aliasInfo.id_jugadora
-  } else {
-    // Fallback if aliases map is not provided in context (e.g. legacy test contexts)
-    resolvedIdJugadora = rawAliasValue.toUpperCase()
+    resolvedIdJugadora = aliasInfo!.id_jugadora
+  }
+  // 3. Normalized Name Match
+  else {
+    const jugadorasActivas = Object.entries(context.jugadorasMap || {})
+    const coincidentes = jugadorasActivas.filter(([id, nombre]) => {
+      const n = normalizar(nombre)
+      return n === aliasNormalizado || n.startsWith(aliasNormalizado + ' ') || n.includes(' ' + aliasNormalizado)
+    })
+
+    if (coincidentes.length === 1) {
+      resolvedIdJugadora = coincidentes[0][0]
+    } else if (coincidentes.length > 1) {
+      return { isValid: false, errorMsg: `Ambigüedad: Múltiples jugadoras coinciden con el nombre '${rawAliasValue}'. Corrige el nombre o usa un alias.` }
+    } else {
+      return { isValid: false, errorMsg: `Jugadora no registrada. Añádela a la plantilla o configura un alias para '${rawAliasValue}'` }
+    }
   }
 
+  // Double check existence (should be guaranteed by above, but safe to keep)
   if (!context.jugadorasIds.includes(resolvedIdJugadora)) {
     return { isValid: false, errorMsg: `La jugadora '${resolvedIdJugadora}' no existe en la base de datos` }
   }

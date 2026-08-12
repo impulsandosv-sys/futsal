@@ -16,9 +16,10 @@ export interface ValidacionTemporadaWellness {
 }
 
 /**
- * Resuelve la identidad de una fila de importación exclusivamente por alias activo de origen 'google_forms'.
- * Rechaza IDs vacíos, alias inexistentes, alias inactivos y jugadoras borradas de la DB.
- * NO realiza coincidencia por nombre ni fallbacks por texto.
+ * Resuelve la identidad de una fila de importación mediante una estrategia de prioridad:
+ * 1. ID interno exacto.
+ * 2. Alias activo de origen especificado (ej: 'google_forms').
+ * 3. Nombre normalizado no ambiguo (ignorando mayúsculas, tildes y espacios).
  */
 export async function resolverIdentidadFilaWellness(
   db: FutsalDB,
@@ -34,40 +35,75 @@ export async function resolverIdentidadFilaWellness(
     return { exito: false, mensajeError: 'ID_Jugadora vacío' }
   }
 
+  // 1. Prioridad 1: ID interno exacto
+  const jugadoraPorId = await db.jugadoras.get(aliasValor)
+  if (jugadoraPorId && jugadoraPorId.activa) {
+    return {
+      exito: true,
+      id_jugadora: jugadoraPorId.id_jugadora,
+      alias_origen: aliasValor
+    }
+  }
+
+  // 2. Prioridad 2: Alias explícito activo
   const candidatos = await db.alias_jugadora
     .where('origen')
     .equals(origen)
     .toArray()
 
   const candidatosValor = candidatos.filter((a) => a.valor.trim() === aliasValor)
+  
+  if (candidatosValor.length > 0) {
+    const aliasActivo = candidatosValor.find((a) => a.activo === true)
+    if (!aliasActivo) {
+      return {
+        exito: false,
+        mensajeError: `Alias '${aliasValor}' inactivo para el origen '${origen}'`
+      }
+    }
 
-  if (candidatosValor.length === 0) {
+    const jugadora = await db.jugadoras.get(aliasActivo.id_jugadora)
+    if (!jugadora) {
+      return {
+        exito: false,
+        mensajeError: `La jugadora '${aliasActivo.id_jugadora}' no existe en la base de datos`
+      }
+    }
+
     return {
-      exito: false,
-      mensajeError: `ID externo '${aliasValor}' no reconocido para el origen '${origen}'`
+      exito: true,
+      id_jugadora: aliasActivo.id_jugadora,
+      alias_origen: aliasValor
     }
   }
 
-  const aliasActivo = candidatosValor.find((a) => a.activo === true)
-  if (!aliasActivo) {
+  // 3. Prioridad 3: Nombre normalizado no ambiguo
+  const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim()
+  const aliasNormalizado = normalizar(aliasValor)
+  
+  const jugadorasActivas = await db.jugadoras.filter(j => j.activa === true).toArray()
+  const jugadorasCoincidentes = jugadorasActivas.filter(j => {
+    const n = normalizar(j.nombre)
+    return n === aliasNormalizado || n.startsWith(aliasNormalizado + ' ') || n.includes(' ' + aliasNormalizado)
+  })
+
+  if (jugadorasCoincidentes.length === 1) {
+    return {
+      exito: true,
+      id_jugadora: jugadorasCoincidentes[0].id_jugadora,
+      alias_origen: aliasValor
+    }
+  } else if (jugadorasCoincidentes.length > 1) {
     return {
       exito: false,
-      mensajeError: `Alias '${aliasValor}' inactivo para el origen '${origen}'`
+      mensajeError: `Ambigüedad: Múltiples jugadoras coinciden con el nombre '${aliasValor}'. Corrige el nombre o usa un alias.`
     }
   }
 
-  const jugadora = await db.jugadoras.get(aliasActivo.id_jugadora)
-  if (!jugadora) {
-    return {
-      exito: false,
-      mensajeError: `La jugadora '${aliasActivo.id_jugadora}' no existe en la base de datos`
-    }
-  }
-
+  // Fallback final
   return {
-    exito: true,
-    id_jugadora: aliasActivo.id_jugadora,
-    alias_origen: aliasValor
+    exito: false,
+    mensajeError: `Jugadora no registrada. Añádela a la plantilla o configura un alias para '${aliasValor}'`
   }
 }
 
