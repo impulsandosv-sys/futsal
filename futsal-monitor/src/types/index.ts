@@ -285,6 +285,7 @@ export interface MappedWellnessRow {
   estres: number | null
   estado_animo: number | null
   dolor_especifico: string | null
+  comentario_sesion: string | null
   marca_temporal?: string | null
 }
 

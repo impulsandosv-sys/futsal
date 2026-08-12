@@ -10,13 +10,12 @@ import {
   calcularIndiceDiario,
   calcularIndiceSemanal,
   normalizarSintomasMenstruales,
-  normalizarValor,
-  normalizarCabecera
+  normalizarValor
 } from '@/domain/monitoring/wellnessScale'
 import { getWeekId } from '@/domain/dates/dates'
 import { resolverIdentidadFilaWellness, validarRangoTemporadaWellness } from '@/domain/imports/wellnessIdentity'
 import { obtenerTemporadaActiva } from '@/domain/temporadas/temporadas'
-import { normalizarFecha, parseCSVString, extraerEscala } from '@/utils/importEngine'
+import { normalizarFecha, parseCSVString, extraerEscala, normalizarEncabezado } from '@/utils/importEngine'
 import * as readinessService from '@/services/readiness'
 import * as resumenSemanalService from '@/services/resumenSemanal'
 
@@ -56,23 +55,13 @@ function leerCampo(row: RawImportRow, candidatos: string[]): RawCellValue {
   return undefined
 }
 
-export function detectarTipoCuestionario(headers: string[]): TipoCuestionarioWellness {
-  const normHeaders = headers.map(normalizarCabecera)
-  
-  const dailyHeaders = Object.keys(DAILY_WELLNESS_FIELDS).map(normalizarCabecera)
-  const weeklyHeaders = Object.keys(WELLNESS_WEEKLY_FIELD_MAP).map(normalizarCabecera)
-  
-  const tieneDiario = dailyHeaders.every((k) => normHeaders.includes(k))
-  const tieneSemanal = weeklyHeaders.some((k) => normHeaders.includes(k))
-  
-  if (tieneDiario && tieneSemanal) {
-    throw new Error('CSV ambiguo: mezcla cabeceras de cuestionario diario y semanal')
-  }
-  
+export function detectarTipoCuestionario(headers: string[]): TipoCuestionarioWellness | null {
+  const normHeaders = headers.map(h => normalizarEncabezado(h))
+  const tieneDiario = Object.keys(DAILY_WELLNESS_FIELDS).every((k) => normHeaders.includes(normalizarEncabezado(k)))
+  const tieneSemanal = Object.keys(WELLNESS_WEEKLY_FIELD_MAP).every((k) => normHeaders.includes(normalizarEncabezado(k)))
   if (tieneDiario) return 'DIARIO'
   if (tieneSemanal) return 'SEMANAL'
-  
-  throw new Error('Formato de cuestionario no reconocido (cabeceras: ' + headers.join(', ') + ')')
+  return null
 }
 
 export function procesarFilaWellness(
@@ -153,153 +142,156 @@ export async function importarCSVWellnessGoogleForms(
 
   const headers = Object.keys(rows[0])
   const tipo = detectarTipoCuestionario(headers)
+  if (!tipo) {
+    throw new Error('No se pudo detectar el tipo de cuestionario wellness (diario o semanal)')
+  }
 
   const detallesErrores: string[] = []
-  let importadas = 0
+  const filasValidas: FilaWellnessProcesada[] = []
 
-  try {
-    await dbInstance.transaction(
-      'rw',
-      [
-        dbInstance.jugadoras,
-        dbInstance.alias_jugadora,
-        dbInstance.temporadas,
-        dbInstance.wellness_diario_importado,
-        dbInstance.wellness_semanal_importado,
-        dbInstance.wellness,
-        dbInstance.readiness,
-        dbInstance.resumen_semanal,
-        dbInstance.alertas,
-        dbInstance.lesiones,
-        dbInstance.partidos,
-        dbInstance.sesiones,
-        dbInstance.rpe_partido,
-        dbInstance.sesion_rpe,
-        dbInstance.tests_fisicos,
-        dbInstance.carga_gps,
-        dbInstance.fuerza_vbt,
-        dbInstance.ciclo_menstrual,
-        dbInstance.hidratacion
-      ],
-      async () => {
-        for (let idx = 0; idx < rows.length; idx++) {
-          const row = rows[idx]
-          const fila = idx + 2
-          try {
-            const idRaw = leerCampo(row, ['ID jugadora', 'ID_Jugadora', 'id_jugadora'])
-            const identidad = await resolverIdentidadFilaWellness(dbInstance, idRaw, 'google_forms')
-            if (!identidad.exito || !identidad.id_jugadora) {
-              throw new Error(identidad.mensajeError || 'No se pudo resolver la identidad de la jugadora')
-            }
+  const temporadaActiva = await obtenerTemporadaActiva(dbInstance)
 
-            const fechaRaw = leerCampo(row, ['Fecha', 'fecha', 'Marca temporal', 'marca_temporal'])
-            const fecha = normalizarFecha(fechaRaw)
-            if (!fecha) {
-              throw new Error(`Fecha inválida en fila ${fila}`)
-            }
+  // Fase A: Prevalidación de todo el lote
+  for (let idx = 0; idx < rows.length; idx++) {
+    const row = rows[idx]
+    const fila = idx + 2
+    try {
+      const idRaw = leerCampo(row, ['ID jugadora', 'ID_Jugadora', 'id_jugadora'])
+      const identidad = await resolverIdentidadFilaWellness(dbInstance, idRaw, 'google_forms')
+      if (!identidad.exito || !identidad.id_jugadora) {
+        throw new Error(identidad.mensajeError || 'No se pudo resolver la identidad de la jugadora')
+      }
 
-            const temporadaActiva = await obtenerTemporadaActiva(dbInstance)
-            const validacionTemporada = validarRangoTemporadaWellness(fecha, temporadaActiva || null)
-            if (!validacionTemporada.exito) {
-              throw new Error(validacionTemporada.mensajeError || 'Fecha fuera de temporada')
-            }
+      const fechaRaw = leerCampo(row, ['Fecha', 'fecha', 'Marca temporal', 'marca_temporal'])
+      const fecha = normalizarFecha(fechaRaw)
+      if (!fecha) {
+        throw new Error(`Fecha inválida en fila ${fila}`)
+      }
 
-            const procesada = procesarFilaWellness(
-              tipo,
-              row,
-              identidad.id_jugadora,
-              fecha,
-              validacionTemporada.id_temporada,
-              identidad.alias_origen
-            )
+      const validacionTemporada = validarRangoTemporadaWellness(fecha, temporadaActiva || null)
+      if (!validacionTemporada.exito) {
+        throw new Error(validacionTemporada.mensajeError || 'Fecha fuera de temporada')
+      }
 
-            if (tipo === 'DIARIO') {
-              const diario: WellnessDiarioImportado = {
-                id_jugadora: procesada.id_jugadora,
-                fecha: procesada.fecha,
-                id_temporada: procesada.id_temporada,
-                origen_alias: 'google_forms',
-                alias_origen: procesada.alias_origen,
-                metricas: procesada.metricas,
-                textos: procesada.textos,
-                indice_diario: procesada.indice
-              }
-              await dbInstance.wellness_diario_importado.put(diario)
+      const procesada = procesarFilaWellness(
+        tipo,
+        row,
+        identidad.id_jugadora,
+        fecha,
+        validacionTemporada.id_temporada,
+        identidad.alias_origen
+      )
 
-              const calidadSueno = procesada.metricas['Calidad de sueño']?.original
-              const fatiga = procesada.metricas['Fatiga']?.original
-              const dolorMuscular = procesada.metricas['Dolor muscular']?.original
-              const estres = procesada.metricas['Estrés']?.original
-              const estadoAnimo = procesada.metricas['Estado de ánimo']?.original
+      filasValidas.push(procesada)
+    } catch (error: any) {
+      detallesErrores.push(`Fila ${fila}: ${error?.message || 'Error no identificado'}`)
+    }
+  }
 
-              if (
-                calidadSueno !== null &&
-                fatiga !== null &&
-                dolorMuscular !== null &&
-                estres !== null &&
-                estadoAnimo !== null &&
-                procesada.indice !== null
-              ) {
-                await dbInstance.wellness.put({
-                  id_jugadora: procesada.id_jugadora,
-                  fecha: procesada.fecha,
-                  calidad_sueno: calidadSueno,
-                  fatiga,
-                  dolor_muscular: dolorMuscular,
-                  estres,
-                  estado_animo: estadoAnimo,
-                  dolor_especifico: procesada.textos['Dolor especifico o nota importante (opcional)'] || '',
-                  score_wellness: procesada.indice,
-                  id_temporada: procesada.id_temporada,
-                  origen_alias: 'google_forms',
-                  alias_origen: procesada.alias_origen
-                })
+  // Si hay algún error, abortar sin iniciar escritura en DB (Fase A)
+  if (detallesErrores.length > 0) {
+    return {
+      tipo,
+      totalFilas: rows.length,
+      importadas: 0,
+      errores: detallesErrores.length,
+      detallesErrores
+    }
+  }
 
-                await readinessService.recalcularReadinessJugadora(procesada.id_jugadora, procesada.fecha, dbInstance)
-                await resumenSemanalService.recalcularResumenSemanal(
-                  procesada.id_jugadora,
-                  getWeekId(procesada.fecha),
-                  undefined,
-                  dbInstance
-                )
-              }
-            } else {
-              const semanal: WellnessSemanalImportado = {
-                id_jugadora: procesada.id_jugadora,
-                fecha: procesada.fecha,
-                id_temporada: procesada.id_temporada,
-                origen_alias: 'google_forms',
-                alias_origen: procesada.alias_origen,
-                metricas: procesada.metricas,
-                textos: procesada.textos,
-                indice_semanal: procesada.indice
-              }
-              await dbInstance.wellness_semanal_importado.put(semanal)
-            }
-
-            importadas++
-          } catch (error: any) {
-            detallesErrores.push(`Fila ${fila}: ${error?.message || 'Error no identificado'}`)
+  // Fase B: Inserción atómica en base de datos de las filas validadas
+  await dbInstance.transaction(
+    'rw',
+    [
+      dbInstance.wellness,
+      dbInstance.wellness_diario_importado,
+      dbInstance.wellness_semanal_importado,
+      dbInstance.readiness,
+      dbInstance.resumen_semanal,
+      dbInstance.alertas,
+      dbInstance.historial_importaciones,
+      dbInstance.lesiones,
+      dbInstance.partidos,
+      dbInstance.sesiones,
+      dbInstance.rpe_partido,
+      dbInstance.sesion_rpe,
+      dbInstance.jugadoras,
+      dbInstance.temporadas,
+      dbInstance.alias_jugadora
+    ],
+    async () => {
+      for (const procesada of filasValidas) {
+        if (tipo === 'DIARIO') {
+          const diario: WellnessDiarioImportado = {
+            id_jugadora: procesada.id_jugadora,
+            fecha: procesada.fecha,
+            id_temporada: procesada.id_temporada,
+            origen_alias: 'google_forms',
+            alias_origen: procesada.alias_origen,
+            metricas: procesada.metricas,
+            textos: procesada.textos,
+            indice_diario: procesada.indice
           }
-        }
-        
-        if (detallesErrores.length > 0) {
-          importadas = 0 // Rollback occurs
-          throw new Error('ROLLBACK_DUE_TO_ERRORS')
+          await dbInstance.wellness_diario_importado.put(diario)
+
+          const calidadSueno = procesada.metricas['Calidad de sueño']?.original
+          const fatiga = procesada.metricas['Fatiga']?.original
+          const dolorMuscular = procesada.metricas['Dolor muscular']?.original
+          const estres = procesada.metricas['Estrés']?.original
+          const estadoAnimo = procesada.metricas['Estado de ánimo']?.original
+
+          if (
+            calidadSueno !== null &&
+            fatiga !== null &&
+            dolorMuscular !== null &&
+            estres !== null &&
+            estadoAnimo !== null &&
+            procesada.indice !== null
+          ) {
+            await dbInstance.wellness.put({
+              id_jugadora: procesada.id_jugadora,
+              fecha: procesada.fecha,
+              calidad_sueno: calidadSueno,
+              fatiga,
+              dolor_muscular: dolorMuscular,
+              estres,
+              estado_animo: estadoAnimo,
+              dolor_especifico: procesada.textos['Dolor especifico o nota importante (opcional)'] || '',
+              score_wellness: procesada.indice,
+              id_temporada: procesada.id_temporada,
+              origen_alias: 'google_forms',
+              alias_origen: procesada.alias_origen
+            })
+
+            await readinessService.recalcularReadinessJugadora(procesada.id_jugadora, procesada.fecha, dbInstance)
+            await resumenSemanalService.recalcularResumenSemanal(
+              procesada.id_jugadora,
+              getWeekId(procesada.fecha),
+              undefined,
+              dbInstance
+            )
+          }
+        } else {
+          const semanal: WellnessSemanalImportado = {
+            id_jugadora: procesada.id_jugadora,
+            fecha: procesada.fecha,
+            id_temporada: procesada.id_temporada,
+            origen_alias: 'google_forms',
+            alias_origen: procesada.alias_origen,
+            metricas: procesada.metricas,
+            textos: procesada.textos,
+            indice_semanal: procesada.indice
+          }
+          await dbInstance.wellness_semanal_importado.put(semanal)
         }
       }
-    )
-  } catch (err: any) {
-    if (err.message !== 'ROLLBACK_DUE_TO_ERRORS' && detallesErrores.length === 0) {
-      throw err
     }
-    // Si fue ROLLBACK_DUE_TO_ERRORS, los errores ya están en detallesErrores y se devuelve el resultado normal
-  }
+  )
 
   return {
     tipo,
     totalFilas: rows.length,
-    importadas,
+    importadas: filasValidas.length,
     errores: detallesErrores.length,
     detallesErrores
   }

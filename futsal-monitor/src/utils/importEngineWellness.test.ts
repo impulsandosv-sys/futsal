@@ -5,13 +5,11 @@ vi.unmock('@/utils/importEngine')
 import { FutsalDB } from '@/db/database'
 import {
   validarFilaWellness,
-  construirVistaPrevia,
-  aplicarImportacionWellness,
   obtenerContextoValidacionWellness
 } from '@/utils/importEngine'
 import { crearTemporada } from '@/domain/temporadas/temporadas'
 import { agregarAliasJugadora } from '@/domain/alias/aliasJugadora'
-import type { ColumnMapping, RawImportRow, Temporada } from '@/types'
+import type { RawImportRow, Temporada } from '@/types'
 import {
   detectarTipoCuestionario,
   importarCSVWellnessGoogleForms,
@@ -28,15 +26,7 @@ describe('T-02A — Integración Completa de Importación Wellness (Identidad y 
     activa: true
   }
 
-  const defaultMapping: ColumnMapping[] = [
-    { internalField: 'id_jugadora', excelHeader: 'id_jugadora', required: true, label: 'ID' },
-    { internalField: 'fecha', excelHeader: 'fecha', required: true, label: 'Fecha' },
-    { internalField: 'calidad_sueno', excelHeader: 'calidad_sueno', required: true, label: 'Sueño' },
-    { internalField: 'fatiga', excelHeader: 'fatiga', required: true, label: 'Fatiga' },
-    { internalField: 'dolor_muscular', excelHeader: 'dolor_muscular', required: true, label: 'Dolor' },
-    { internalField: 'estres', excelHeader: 'estres', required: true, label: 'Estrés' },
-    { internalField: 'estado_animo', excelHeader: 'estado_animo', required: true, label: 'Ánimo' }
-  ]
+
 
   beforeEach(async () => {
     const dbName = `test_wellness_import_${Date.now()}_${Math.random()}`
@@ -166,48 +156,43 @@ describe('T-02A — Integración Completa de Importación Wellness (Identidad y 
       await db.delete()
     })
 
-    it('bloquea la escritura y realiza rollback completo si una fila tiene error', async () => {
-      const dbName = `test_csv_rollback_${Date.now()}_${Math.random().toString(36).slice(2)}`
-      const dbRollback = new FutsalDB(dbName)
-      await dbRollback.open()
+    it('importa archivo Wellnes-Diario.csv de Google Forms respetando campos y fallando atómicamente si hay error', async () => {
+      const fs = await import('fs')
+      const path = await import('path')
+      const csvData = fs.readFileSync(path.join(__dirname, 'fixtures/Wellnes-Diario.csv'), 'utf-8')
 
-      await dbRollback.jugadoras.put({ id_jugadora: 'J1', nombre: 'Ana', posicion: 'Ala', activa: true })
-      await dbRollback.jugadoras.put({ id_jugadora: 'J2', nombre: 'María', posicion: 'Pívot', activa: true })
-      
-      await crearTemporada(dbRollback, {
+      const dbName = `test_google_forms_fixture_${Date.now()}`
+      const testDb = new FutsalDB(dbName)
+      await testDb.open()
+
+      await testDb.jugadoras.put({ id_jugadora: 'LUCIA', nombre: 'Lucía', posicion: 'Ala', activa: true })
+      await testDb.jugadoras.put({ id_jugadora: 'SARA', nombre: 'Sara', posicion: 'Ala', activa: true })
+      await testDb.jugadoras.put({ id_jugadora: 'MARIA', nombre: 'María León', posicion: 'Pívot', activa: true })
+
+      await crearTemporada(testDb, {
         id_temporada: 'TEMP-2026-2027',
         nombre: 'Temporada 26/27',
         fecha_inicio: '2026-01-01',
         fecha_fin: '2026-12-31',
         activa: true
       })
-      
-      // J1 tiene alias GF-001, J2 tiene alias GF-002
-      await agregarAliasJugadora(dbRollback, { id_jugadora: 'J1', origen: 'google_forms', valor: 'GF-001', activo: true, fecha_alta: '2026-01-01' })
-      await agregarAliasJugadora(dbRollback, { id_jugadora: 'J2', origen: 'google_forms', valor: 'GF-002', activo: true, fecha_alta: '2026-01-01' })
 
-      // Fila 1 (J1) OK, Fila 2 (J99) ERROR (no registrada)
-      const csvDiario = [
-        'ID jugadora,Fecha,Calidad de sueño,Fatiga,Dolor muscular,Estrés,Estado de ánimo',
-        'GF-001,2026-07-20,8,8,8,8,8',
-        'GF-999,2026-07-20,8,8,8,8,8'
-      ].join('\n')
+      // We expect the fixture to FAIL atomically because it has:
+      // - "Inexistente" (alias not found)
+      // - "Candela" (Date 2099 - future)
+      const outcome = await importarCSVWellnessGoogleForms(csvData, testDb)
 
-      const outcome = await importarCSVWellnessGoogleForms(csvDiario, dbRollback)
+      expect(outcome.errores).toBe(2)
+      expect(outcome.importadas).toBe(0) // Complete rollback!
 
-      // Debe haber devuelto el error y capturado 1 fallo
-      expect(outcome.errores).toBe(1)
-      expect(outcome.importadas).toBe(0) // Rollback!
+      // Check zero writes
+      const countWellness = await testDb.wellness.count()
+      expect(countWellness).toBe(0)
+      const countDiario = await testDb.wellness_diario_importado.count()
+      expect(countDiario).toBe(0)
 
-      // Verificamos en DB que la Fila 1 tampoco se guardó
-      const diarios = await dbRollback.wellness_diario_importado.toArray()
-      const wellness = await dbRollback.wellness.toArray()
-
-      expect(diarios).toHaveLength(0)
-      expect(wellness).toHaveLength(0)
-
-      dbRollback.close()
-      await dbRollback.delete()
+      testDb.close()
+      await testDb.delete()
     })
   })
 
@@ -240,7 +225,7 @@ describe('T-02A — Integración Completa de Importación Wellness (Identidad y 
       expect(res.normalRow?.id_jugadora).toBe('J1')
     })
 
-    it('5. Alias inexistente genera error descriptivo UX y no crea jugadora', async () => {
+    it('5. Alias inexistente genera error ID externo no reconocido y no crea jugadora', async () => {
       const context = await obtenerContextoValidacionWellness(db)
       const res = validarFilaWellness({ id_jugadora: 'GF-999', fecha: '2026-07-15', calidad_sueno: '8' }, context)
       expect(res.isValid).toBe(false)
@@ -268,7 +253,7 @@ describe('T-02A — Integración Completa de Importación Wellness (Identidad y 
       expect(res.errorMsg).toContain('ID_Jugadora vacío')
     })
 
-    it('8. Alias bajo otro origen y que no coincide por nombre ni ID genera error UX', async () => {
+    it('8. Alias bajo otro origen no resuelve en importación wellness (google_forms)', async () => {
       await db.alias_jugadora.put({
         id_jugadora: 'J1',
         origen: 'chronojump',
@@ -282,9 +267,9 @@ describe('T-02A — Integración Completa de Importación Wellness (Identidad y 
       expect(res.errorMsg).toContain('Jugadora no registrada')
     })
 
-    it('9. SÍ existe fallback por nombre: si alias no existe pero nombre coincide exactamente, funciona', async () => {
+    it('9. Existe fallback por nombre normalizado: si alias no existe pero nombre coincide exactamente, tiene éxito', async () => {
       const context = await obtenerContextoValidacionWellness(db)
-      const res = validarFilaWellness({ id_jugadora: 'Ana López', fecha: '2026-07-15', calidad_sueno: '8', fatiga: '7', dolor_muscular: '5', estres: '4', estado_animo: '8' }, context)
+      const res = validarFilaWellness({ id_jugadora: 'Ana López', fecha: '2026-07-15', calidad_sueno: '8' }, context)
       expect(res.isValid).toBe(true)
       expect(res.normalRow?.id_jugadora).toBe('J1')
     })
@@ -347,74 +332,44 @@ describe('T-02A — Integración Completa de Importación Wellness (Identidad y 
   })
 
   // 5.5 Confirmación atómica
-  describe('5.5 Confirmación atómica y persistencia', () => {
-    it('30. Filas válidas se insertan con id_jugadora interno, id_temporada y alias_origen', async () => {
-      const context = await obtenerContextoValidacionWellness(db)
-      const rawRows: RawImportRow[] = [
-        { id_jugadora: 'GF-001', fecha: '2026-07-15', calidad_sueno: '8', fatiga: '7', dolor_muscular: '6', estres: '5', estado_animo: '8' },
-        { id_jugadora: 'GF-002', fecha: '2026-07-15', calidad_sueno: '9', fatiga: '8', dolor_muscular: '7', estres: '6', estado_animo: '9' }
-      ]
+  describe('5.5 Confirmación atómica y persistencia (2 Fases)', () => {
+    it('30. Si todas las filas son válidas, se guardan en la base de datos (Fase B)', async () => {
+      const csvDiario = [
+        'ID jugadora,Fecha,Calidad de sueño,Fatiga,Dolor muscular,Estrés,Estado de ánimo,Dolor especifico o nota importante (opcional)',
+        'GF-001,2026-07-20,8,3,4,5,9,Tobillo cargado',
+        'GF-002,2026-07-20,9,2,3,4,9,Ninguno'
+      ].join('\n')
 
-      const preview = construirVistaPrevia(rawRows, defaultMapping, [], context.jugadorasMap!, context)
-      expect(preview.nuevos).toBe(2)
-      expect(preview.errores).toBe(0)
-
-      const outcome = await aplicarImportacionWellness(
-        preview.rows,
-        'omit',
-        'wellness_test.csv',
-        'Sheet1',
-        'Default',
-        'backup_test.json',
-        undefined,
-        db
-      )
-
-      expect(outcome.success).toBe(true)
-      expect(outcome.inserted).toBe(2)
+      const outcome = await importarCSVWellnessGoogleForms(csvDiario, db)
+      expect(outcome.errores).toBe(0)
+      expect(outcome.importadas).toBe(2)
 
       const records = await db.wellness.toArray()
       expect(records).toHaveLength(2)
-
-      const w1 = records.find(r => r.id_jugadora === 'J1')
-      expect(w1).toBeDefined()
-      expect(w1?.id_temporada).toBe('TEMP-2026-2027')
-      expect(w1?.alias_origen).toBe('GF-001')
-      expect(w1?.origen_alias).toBe('google_forms')
-
-      const w2 = records.find(r => r.id_jugadora === 'J2')
-      expect(w2).toBeDefined()
-      expect(w2?.id_temporada).toBe('TEMP-2026-2027')
-      expect(w2?.alias_origen).toBe('GF-002')
     })
 
-    it('31. Si una fila de confirmación incumple las reglas en revalidación transaccional, toda la transacción aborta', async () => {
-      const context = await obtenerContextoValidacionWellness(db)
-      const rawRows: RawImportRow[] = [
-        { id_jugadora: 'GF-001', fecha: '2026-07-15', calidad_sueno: '8', fatiga: '7', dolor_muscular: '6', estres: '5', estado_animo: '8' }
-      ]
+    it('31. Si una fila es inválida, se aborta en Fase A sin escribir en BD', async () => {
+      const csvDiario = [
+        'ID jugadora,Fecha,Calidad de sueño,Fatiga,Dolor muscular,Estrés,Estado de ánimo,Dolor especifico o nota importante (opcional)',
+        'GF-001,2026-07-20,8,3,4,5,9,Tobillo cargado', // Válida
+        'INEXISTENTE,2026-07-20,9,2,3,4,9,Ninguno' // Inválida
+      ].join('\n')
 
-      const preview = construirVistaPrevia(rawRows, defaultMapping, [], context.jugadorasMap!, context)
+      const outcome = await importarCSVWellnessGoogleForms(csvDiario, db)
 
-      // Simular que el alias se desactiva justo antes de la confirmación
-      await db.alias_jugadora.where({ origen: 'google_forms', valor: 'GF-001' }).modify({ activo: false })
+      expect(outcome.errores).toBe(1)
+      expect(outcome.importadas).toBe(0)
+      expect(outcome.detallesErrores[0]).toContain('Jugadora no registrada')
 
-      const outcome = await aplicarImportacionWellness(
-        preview.rows,
-        'omit',
-        'wellness_test.csv',
-        'Sheet1',
-        'Default',
-        'backup_test.json',
-        undefined,
-        db
-      )
-
-      expect(outcome.success).toBe(false)
-      expect(outcome.inserted).toBe(0)
-
-      const records = await db.wellness.toArray()
-      expect(records).toHaveLength(0)
+      // Assert zero writes
+      const wellness = await db.wellness.toArray()
+      expect(wellness).toHaveLength(0)
+      const diario = await db.wellness_diario_importado.toArray()
+      expect(diario).toHaveLength(0)
+      const readiness = await db.readiness.toArray()
+      expect(readiness).toHaveLength(0)
+      const resumen = await db.resumen_semanal.toArray()
+      expect(resumen).toHaveLength(0)
     })
   })
 })

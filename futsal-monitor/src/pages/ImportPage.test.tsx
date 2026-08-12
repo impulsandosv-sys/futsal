@@ -95,10 +95,10 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
     warnSpy.mockRestore()
   })
 
-  describe('BLOQUE A — Contadores reales de previsualización', () => {
-    it('Caso 1 — Fila NUEVO: verifica contadores iniciales (1/1/0), exclusión (0/1/OMITIDA) y restauración (1/0/NUEVO) sin escrituras Dexie', async () => {
+  describe('BLOCK A — Preview counters', () => {
+    it('Case 1 — Row NEW: check initial counters (1/1/0), exclusion (0/1/OMITIDA) and restoration (1/0/NUEVO) without Dexie writes', async () => {
       const csvContent = [
-        'ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo',
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
         'J001,2026-01-15,8,3,4,2,9'
       ].join('\n')
 
@@ -163,7 +163,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       expect(await db.historial_importaciones.count()).toBe(0)
     })
 
-    it('Caso 2 — Fila ACTUALIZACION_POSIBLE: verifica contadores (Act:1, Omit:0, CONFLICTO), exclusión (Act:0, Omit:1) y restauración', async () => {
+    it('Case 2 — Row POSSIBLE_UPDATE: check counters (Act:1, Omit:0, CONFLICT), exclusion (Act:0, Omit:1) and restoration', async () => {
       await db.wellness.add({
         id_jugadora: 'J001',
         fecha: '2026-01-15',
@@ -181,7 +181,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       })
 
       const csvContent = [
-        'ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo',
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
         'J001,2026-01-15,7,4,5,3,8'
       ].join('\n')
 
@@ -243,9 +243,9 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       expect(await db.wellness.count()).toBe(1)
     })
 
-    it('Caso 3 — Fila ERROR: verifica contadores (Nuevos:1, Errores:1), bloqueo del paso 3, exclusión de error y desbloqueo', async () => {
+    it('Case 3 — Row ERROR: check counters (New:1, Errors:1), block step 3, error exclusion and unblock', async () => {
       const csvContent = [
-        'ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo',
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
         'J001,2026-01-15,8,3,4,2,9',
         'INVALID_ID,2099-01-01,1,1,1,1,1'
       ].join('\n')
@@ -303,11 +303,11 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
     })
   })
 
-  describe('BLOQUE B — Paginación real (51 filas)', () => {
-    it('Demuestra paginación real (>50 filas), navegación a pág 2, exclusión en pág 2, filtrado OMITIDA y restauración', async () => {
+  describe('BLOCK B — Real pagination (51 rows)', () => {
+    it('Demonstrates real pagination (>50 rows), navigation to page 2, exclusion on page 2, filtering OMITIDA and restoration', async () => {
       // 1. Genera 51 filas válidas para J001 con fechas únicas en temporada 2025-2026
-      const csvLines = ['ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo']
-      
+      const csvLines = ['ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo']
+
       const startDate = new Date('2026-01-01')
       for (let i = 0; i < 51; i++) {
         const current = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000)
@@ -395,6 +395,113 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       // Pureza Dexie: 0 escrituras
       expect(await db.wellness.count()).toBe(0)
       expect(await db.historial_importaciones.count()).toBe(0)
+    })
+  })
+
+  describe('BLOCK C — Flujo real de Importación (Google Forms)', () => {
+    it('Case 4 — Mapea fechas y textos correctamente, bloquea con ERROR y desblquea al omitir', async () => {
+      // 1. Configuramos plantilla parecida a la que se genera en la app real
+      useStore.setState({
+        plantillas_importacion: [
+          {
+            id: 2,
+            nombre: 'Google Forms',
+            tipoImportacion: 'wellness',
+            mapeoColumnas: [
+              { excelHeader: 'ID_Jugadora', internalField: 'id_jugadora', required: true, label: 'ID Jugadora' },
+              { excelHeader: 'Fecha del entreno', internalField: 'fecha', required: true, label: 'Fecha' },
+              { excelHeader: 'Calidad de sueno', internalField: 'calidad_sueno', required: false, label: 'Calidad de sueño' },
+              { excelHeader: 'Fatiga', internalField: 'fatiga', required: false, label: 'Fatiga' },
+              { excelHeader: 'Dolor muscular', internalField: 'dolor_muscular', required: false, label: 'Dolor muscular' },
+              { excelHeader: 'Estres', internalField: 'estres', required: false, label: 'Estrés' },
+              { excelHeader: 'Estado de animo', internalField: 'estado_animo', required: false, label: 'Estado de ánimo' },
+              { excelHeader: 'Dolor especifico o nota importante (opcional)', internalField: 'dolor_especifico', required: false, label: 'Dolor específico' },
+              { excelHeader: 'Comentario sobre la sesion (opcional)', internalField: 'comentario_sesion', required: false, label: 'Comentario de sesión' }
+            ],
+            creadaEn: '2025-08-01T00:00:00Z',
+            actualizadaEn: '2025-08-01T00:00:00Z',
+            esPredeterminada: false
+          }
+        ]
+      })
+
+      const csvContent = [
+        'Marca temporal,ID_Jugadora,Fecha del entreno,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo,Dolor especifico o nota importante (opcional),Comentario sobre la sesion (opcional)',
+        '2026-02-01 10:00:00,J001,2026-02-01,8,3,4,2,9,Rodilla derecha,Buen entreno', // Válida
+        '2026-02-02 10:00:00,J001,2099-01-01,1,1,1,1,1,,', // Inválida (fecha futura)
+      ].join('\n')
+
+      const file = new File([csvContent], 'Wellnes-Diario.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+
+      // Debe haber error
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-errores')).toHaveTextContent('1')
+        expect(screen.getByText(/Asistente bloqueado/i)).toBeInTheDocument()
+      })
+
+      // Omitir la fila con error
+      const checkboxes = screen.getAllByRole('checkbox')
+      const errorCheckbox = checkboxes[checkboxes.length - 1] as HTMLInputElement
+      fireEvent.click(errorCheckbox)
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /siguiente/i })).not.toBeDisabled()
+      })
+
+      // Avanzar al paso de confirmación
+      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+
+      // Simular copia de seguridad
+      const downloadBtn = await screen.findByRole('button', { name: /descargar copia de seguridad/i })
+      fireEvent.click(downloadBtn)
+
+      const confirmBackupCb = await screen.findByRole('checkbox', { name: /confirmo que he guardado/i })
+      fireEvent.click(confirmBackupCb)
+
+      // Mock window.alert to see if an error is thrown
+      const alertMock = vi.spyOn(window, 'alert').mockImplementation((msg) => {
+        console.error('WINDOW ALERT CALLED WITH:', msg)
+        console.error('ALL CONSOLE ERRORS:', errorSpy.mock.calls)
+      })
+
+      // Confirmar importación
+      const applyBtn = await screen.findByRole('button', { name: /aplicar importación/i })
+      fireEvent.click(applyBtn)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Importación aplicada/i)).toBeInTheDocument()
+      }, { timeout: 3000 })
+
+      // Verificar DB
+      const dbWellness = await db.wellness.toArray()
+      expect(dbWellness).toHaveLength(1)
+      expect(dbWellness[0].fecha).toBe('2026-02-01')
+      expect(dbWellness[0].dolor_especifico).toBe('Rodilla derecha')
+
+      const dbImportado = await db.wellness_diario_importado.toArray()
+      expect(dbImportado).toHaveLength(1)
+      expect(dbImportado[0].textos['Comentario sobre la sesión (opcional)']).toBe('Buen entreno')
+      expect(dbImportado[0].textos['Marca temporal']).toBe('46054.41615740741')
+
+      alertMock.mockRestore()
     })
   })
 })

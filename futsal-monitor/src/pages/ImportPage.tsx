@@ -20,6 +20,11 @@ import {
   confirmarYEjecutarImportacion,
   obtenerContextoValidacionWellness
 } from '@/utils/importEngine'
+import {
+  detectarTipoCuestionario,
+  importarCSVWellnessGoogleForms,
+  type TipoCuestionarioWellness
+} from '@/utils/importEngineWellness'
 import { getWeekId } from '@/domain/dates/dates'
 import { recalcularReadinessJugadora } from '@/services/readiness'
 import { recalcularResumenSemanal } from '@/services/resumenSemanal'
@@ -53,6 +58,9 @@ export function ImportPage() {
   const [selectedSheet, setSelectedSheet] = useState<string>('')
   const [fileHeaders, setFileHeaders] = useState<string[]>([])
   const [parsedRawRows, setParsedRawRows] = useState<RawImportRow[]>([])
+  const [tipoCuestionario, setTipoCuestionario] = useState<TipoCuestionarioWellness | null>(null)
+  const [cuestionarioError, setCuestionarioError] = useState<string | null>(null)
+  const [rawCsvString, setRawCsvString] = useState<string | null>(null)
 
   // Step 2: Mappings and Mapped Preview
   const [selectedPlantillaId, setSelectedPlantillaId] = useState<number | string>('default')
@@ -265,14 +273,27 @@ export function ImportPage() {
     }
     const headers = headersRaw[0] as string[]
     setFileHeaders(headers)
+    setCuestionarioError(null)
+    setTipoCuestionario(null)
+    setRawCsvString(XLSX.utils.sheet_to_csv(ws))
 
-    const rawRows = XLSX.utils.sheet_to_json(ws, { defval: null }) as RawImportRow[]
-    setParsedRawRows(rawRows)
+    try {
+      const tipo = detectarTipoCuestionario(headers)
+      setTipoCuestionario(tipo)
+      const rawRows = XLSX.utils.sheet_to_json(ws, { defval: null }) as RawImportRow[]
+      setParsedRawRows(rawRows)
 
-    // Detect automatic mapping
-    const auto = detectarMapeoWellness(headers)
-    setActiveMappings(auto)
-    setSelectedPlantillaId('default')
+      if (tipo === 'DIARIO') {
+        const auto = detectarMapeoWellness(headers)
+        setActiveMappings(auto)
+        setSelectedPlantillaId('default')
+      } else {
+        setActiveMappings([])
+      }
+    } catch (err: any) {
+      setCuestionarioError(err.message)
+      setParsedRawRows([])
+    }
   }
 
   const resetFileState = () => {
@@ -281,6 +302,9 @@ export function ImportPage() {
     setSelectedSheet('')
     setFileHeaders([])
     setParsedRawRows([])
+    setTipoCuestionario(null)
+    setCuestionarioError(null)
+    setRawCsvString(null)
     if (importFileRef.current) importFileRef.current.value = ''
   }
 
@@ -409,6 +433,28 @@ export function ImportPage() {
 
   const executeImport = async () => {
     setRecalcError(null)
+
+    if (tipoCuestionario === 'SEMANAL') {
+      if (!rawCsvString) return
+      setImporting(true)
+      try {
+        const outcome = await importarCSVWellnessGoogleForms(rawCsvString)
+        setImportOutcome({
+          success: true,
+          inserted: outcome.importadas,
+          updated: 0,
+          skipped: outcome.totalFilas - outcome.importadas - outcome.errores,
+          errors: outcome.errores,
+          recalculoExitoso: true
+        })
+        setStep(4)
+      } catch (err: any) {
+        alert('Error en importación semanal: ' + err.message)
+      } finally {
+        setImporting(false)
+      }
+      return
+    }
 
     await confirmarYEjecutarImportacion({
       downloadedBackupName: downloadedImportBackupName,
@@ -675,10 +721,20 @@ export function ImportPage() {
                 <div className="bg-surface-50 p-4 rounded border border-surface-200 text-xs space-y-3">
                   <div>
                     <span className="font-bold text-surface-750 block">Tipo de importación:</span>
-                    <select disabled className="w-full text-xs border border-surface-300 rounded p-1.5 bg-surface-100 text-surface-500 mt-1 cursor-not-allowed">
-                      <option value="wellness">Wellness Diario</option>
-                    </select>
-                    <span className="text-[10px] text-surface-450 mt-1 block">Otras opciones (GPS, sRPE, menstrual) bloqueadas para fases futuras.</span>
+                    {cuestionarioError ? (
+                      <div className="mt-2 p-2 bg-red-50 border border-red-200 text-red-700 rounded text-xs font-semibold">
+                        {cuestionarioError}
+                      </div>
+                    ) : tipoCuestionario ? (
+                      <select disabled className="w-full text-xs border border-green-300 rounded p-1.5 bg-green-50 text-green-700 mt-1 cursor-not-allowed font-semibold">
+                        <option>Wellness {tipoCuestionario === 'DIARIO' ? 'Diario' : 'Semanal'}</option>
+                      </select>
+                    ) : (
+                      <select disabled className="w-full text-xs border border-surface-300 rounded p-1.5 bg-surface-100 text-surface-500 mt-1 cursor-not-allowed">
+                        <option>Pendiente de archivo...</option>
+                      </select>
+                    )}
+                    <span className="text-[10px] text-surface-450 mt-1 block">La detección (Diario/Semanal) se realiza automáticamente a partir de las cabeceras.</span>
                   </div>
                 </div>
               </div>
@@ -686,8 +742,14 @@ export function ImportPage() {
               <div className="flex justify-end gap-3 pt-4 border-t border-surface-150">
                 <button
                   type="button"
-                  disabled={!importFile || parsedRawRows.length === 0}
-                  onClick={() => setStep(2)}
+                  disabled={!importFile || parsedRawRows.length === 0 || !!cuestionarioError}
+                  onClick={() => {
+                    if (tipoCuestionario === 'SEMANAL') {
+                      setStep(3)
+                    } else {
+                      setStep(2)
+                    }
+                  }}
                   className="bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold py-2 px-4 rounded shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Siguiente &rarr;

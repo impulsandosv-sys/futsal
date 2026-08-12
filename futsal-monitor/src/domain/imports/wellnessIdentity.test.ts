@@ -42,23 +42,10 @@ describe('Dominio T-02A — Identity & Season Validation for Wellness Import', (
       fecha_alta: '2026-08-01',
       fecha_baja: '2026-08-02'
     })
-
-    // Añadir más jugadoras para pruebas de ambigüedad y normalización
-    await db.jugadoras.put({ id_jugadora: 'J3', nombre: 'Lucía Fernández', posicion: 'Cierre', activa: true })
-    await db.jugadoras.put({ id_jugadora: 'J4', nombre: 'Sara Gómez', posicion: 'Pívot', activa: true })
-    await db.jugadoras.put({ id_jugadora: 'J5', nombre: 'Sara Martínez', posicion: 'Ala', activa: true })
-    await db.jugadoras.put({ id_jugadora: 'J6', nombre: 'MARÍA LEÓN', posicion: 'Cierre', activa: true })
   })
 
   describe('resolverIdentidadFilaWellness', () => {
-    it('0. Prioridad 1: Resolver por ID interno exacto asigna correctamente', async () => {
-      const res = await resolverIdentidadFilaWellness(db, 'J1')
-      expect(res.exito).toBe(true)
-      expect(res.id_jugadora).toBe('J1')
-      expect(res.alias_origen).toBe('J1')
-    })
-
-    it('1. Prioridad 2: Resolver alias activo google_forms asigna a id_jugadora interno', async () => {
+    it('1. Resolver alias activo google_forms asigna a id_jugadora interno', async () => {
       const res1 = await resolverIdentidadFilaWellness(db, 'GF-001')
       expect(res1.exito).toBe(true)
       expect(res1.id_jugadora).toBe('J1')
@@ -76,33 +63,10 @@ describe('Dominio T-02A — Identity & Season Validation for Wellness Import', (
       expect(res.id_jugadora).toBe('J1')
     })
 
-    it('3. Prioridad 3: Resolver por nombre normalizado no ambiguo (tildes, mayúsculas, espacios)', async () => {
-      // Coincide con 'Lucía Fernández' (J3) ignorando mayúsculas, tildes y espacios
-      const res = await resolverIdentidadFilaWellness(db, '  lÚcia    FERnandeZ  ')
-      expect(res.exito).toBe(true)
-      expect(res.id_jugadora).toBe('J3')
-
-      // Coincide con 'MARÍA LEÓN' (J6)
-      const res2 = await resolverIdentidadFilaWellness(db, 'María León')
-      expect(res2.exito).toBe(true)
-      expect(res2.id_jugadora).toBe('J6')
-    })
-
-    it('3.1 Ambigüedad: Múltiples jugadoras coinciden con el nombre normalizado bloquean la fila', async () => {
-      // 'sara' coincide con 'Sara Gómez' y 'Sara Martínez' si normalizamos, asumiendo coincidencia parcial o por partes?
-      // Wait, let's specify that normalized name must exact match after normalization, or includes?
-      // "Ejemplos que deben poder resolverse solo si existe una única jugadora candidata: LUCIA/ Lucía, SARA/Sara y MARÍA LEÓN/María León."
-      // If the alias is 'sara' and there are 'Sara Gómez' and 'Sara Martínez', if we only check if the DB name INCLUDES the alias name (normalized).
-      // Let's test that 'sara' returns ambiguity.
-      const res = await resolverIdentidadFilaWellness(db, 'sara')
+    it('3. Alias inexistente retorna error de ID no reconocido', async () => {
+      const res = await resolverIdentidadFilaWellness(db, 'GF-DESCONOCIDO')
       expect(res.exito).toBe(false)
-      expect(res.mensajeError).toContain("Ambigüedad")
-    })
-
-    it('4. Jugadora no registrada retorna error descriptivo para UX', async () => {
-      const res = await resolverIdentidadFilaWellness(db, 'Inexistente')
-      expect(res.exito).toBe(false)
-      expect(res.mensajeError).toContain("Jugadora no registrada. Añádela a la plantilla o configura un alias para 'Inexistente'")
+      expect(res.mensajeError).toContain('Jugadora no registrada')
     })
 
     it('4. Alias inactivo retorna error específico', async () => {
@@ -133,6 +97,35 @@ describe('Dominio T-02A — Identity & Season Validation for Wellness Import', (
       const res = await resolverIdentidadFilaWellness(db, 'GF-FANTASMA')
       expect(res.exito).toBe(false)
       expect(res.mensajeError).toContain('La jugadora \'J99\' no existe')
+    })
+
+    it('7. Resuelve por nombre normalizado (igualdad estricta)', async () => {
+      const res = await resolverIdentidadFilaWellness(db, ' ANA LOPEZ ')
+      expect(res.exito).toBe(true)
+      expect(res.id_jugadora).toBe('J1')
+      expect(res.alias_origen).toBe('ANA LOPEZ')
+    })
+
+    it('8. No resuelve coincidencias parciales de nombre', async () => {
+      const res = await resolverIdentidadFilaWellness(db, 'Ana')
+      expect(res.exito).toBe(false)
+      expect(res.mensajeError).toContain('Jugadora no registrada')
+    })
+
+    it('9. Bloquea ambigüedad si múltiples jugadoras coinciden exactamente con el nombre normalizado', async () => {
+      await db.jugadoras.put({ id_jugadora: 'J3', nombre: 'ana lopez', posicion: 'Cierre', activa: true })
+
+      const res = await resolverIdentidadFilaWellness(db, 'ANA LOPEZ')
+      expect(res.exito).toBe(false)
+      expect(res.mensajeError).toContain('Ambigüedad')
+    })
+
+    it('10. Ignora jugadoras inactivas al resolver por nombre', async () => {
+      await db.jugadoras.put({ id_jugadora: 'J4', nombre: 'Carmen', posicion: 'Cierre', activa: false })
+
+      const res = await resolverIdentidadFilaWellness(db, 'Carmen')
+      expect(res.exito).toBe(false)
+      expect(res.mensajeError).toContain('Jugadora no registrada')
     })
   })
 

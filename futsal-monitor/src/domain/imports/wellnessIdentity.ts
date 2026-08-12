@@ -19,7 +19,7 @@ export interface ValidacionTemporadaWellness {
  * Resuelve la identidad de una fila de importación mediante una estrategia de prioridad:
  * 1. ID interno exacto.
  * 2. Alias activo de origen especificado (ej: 'google_forms').
- * 3. Nombre normalizado no ambiguo (ignorando mayúsculas, tildes y espacios).
+ * 3. Nombre normalizado no ambiguo (Igualdad exacta ignorando mayúsculas, tildes y espacios extra).
  */
 export async function resolverIdentidadFilaWellness(
   db: FutsalDB,
@@ -77,15 +77,12 @@ export async function resolverIdentidadFilaWellness(
     }
   }
 
-  // 3. Prioridad 3: Nombre normalizado no ambiguo
+  // 3. Prioridad 3: Nombre normalizado no ambiguo (Igualdad exacta)
   const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim()
   const aliasNormalizado = normalizar(aliasValor)
   
   const jugadorasActivas = await db.jugadoras.filter(j => j.activa === true).toArray()
-  const jugadorasCoincidentes = jugadorasActivas.filter(j => {
-    const n = normalizar(j.nombre)
-    return n === aliasNormalizado || n.startsWith(aliasNormalizado + ' ') || n.includes(' ' + aliasNormalizado)
-  })
+  const jugadorasCoincidentes = jugadorasActivas.filter(j => normalizar(j.nombre) === aliasNormalizado)
 
   if (jugadorasCoincidentes.length === 1) {
     return {
@@ -96,7 +93,7 @@ export async function resolverIdentidadFilaWellness(
   } else if (jugadorasCoincidentes.length > 1) {
     return {
       exito: false,
-      mensajeError: `Ambigüedad: Múltiples jugadoras coinciden con el nombre '${aliasValor}'. Corrige el nombre o usa un alias.`
+      mensajeError: `Ambigüedad: Múltiples jugadoras coinciden exactamente con el nombre '${aliasValor}'. Corrige el nombre o usa un alias.`
     }
   }
 

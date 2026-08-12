@@ -93,7 +93,7 @@ export function parseCSVString(csvContent: string, delimiter?: string): RawImpor
 export function calcularVentanaPropagacion(affectedDates: string[], referenceTodayStr?: string): string[] {
   const propagatedDates = new Set<string>()
   const todayStr = referenceTodayStr || new Date().toISOString().split('T')[0]
-  
+
   affectedDates.forEach(dateStr => {
     try {
       const startDate = parseISO(dateStr)
@@ -158,13 +158,14 @@ export function normalizarEncabezado(header: string): string {
 export function detectarMapeoWellness(headers: string[]): ColumnMapping[] {
   const ALIASES: Record<string, string[]> = {
     id_jugadora: ['id jugadora', 'id', 'codigo jugadora', 'codigo'],
-    fecha: ['fecha', 'dia', 'fecha de registro', 'fecha respuesta', 'marca temporal', 'timestamp'],
+    fecha: ['fecha del entreno', 'fecha de entreno', 'fecha de la sesion', 'fecha', 'dia', 'fecha de registro', 'fecha respuesta', 'marca temporal', 'timestamp'],
     calidad_sueno: ['calidad de sueno', 'calidad sueño', 'sueno', 'sueño', 'calidad_sueño', 'sueño (1-10)', 'sueno (1-10)'],
     fatiga: ['fatiga', 'nivel de fatiga', 'cansancio'],
     dolor_muscular: ['dolor muscular', 'dolor_muscular', 'doms', 'molestias musculares'],
     estres: ['estres', 'estrés', 'nivel de estres', 'nivel de estrés'],
     estado_animo: ['estado de animo', 'estado de ánimo', 'animo', 'ánimo', 'mood'],
-    dolor_especifico: ['dolor especifico', 'dolor específico', '¿tienes dolor?', 'tienes dolor', 'molestia', 'comentarios', 'observaciones']
+    dolor_especifico: ['dolor especifico o nota importante (opcional)', 'dolor especifico', 'dolor específico', '¿tienes dolor?', 'tienes dolor', 'molestia'],
+    comentario_sesion: ['comentario sobre la sesion (opcional)', 'comentario sobre la sesión (opcional)', 'comentarios', 'observaciones']
   }
 
   const mapped: ColumnMapping[] = [
@@ -176,6 +177,7 @@ export function detectarMapeoWellness(headers: string[]): ColumnMapping[] {
     { internalField: 'estres', excelHeader: null, required: true, label: 'Estrés (1-10)' },
     { internalField: 'estado_animo', excelHeader: null, required: true, label: 'Estado de Ánimo (1-10)' },
     { internalField: 'dolor_especifico', excelHeader: null, required: false, label: 'Dolor Específico' },
+    { internalField: 'comentario_sesion', excelHeader: null, required: false, label: 'Comentario' },
     { internalField: 'marca_temporal', excelHeader: null, required: false, label: 'Marca temporal' }
   ]
 
@@ -185,9 +187,12 @@ export function detectarMapeoWellness(headers: string[]): ColumnMapping[] {
     // 1. Check exact match
     let match = normalizedHeaders.find(h => h.normalized === normalizarEncabezado(m.internalField))
     if (!match && ALIASES[m.internalField]) {
-      // 2. Check aliases
+      // 2. Check aliases in order of priority
       const allowedAliases = ALIASES[m.internalField].map(a => normalizarEncabezado(a))
-      match = normalizedHeaders.find(h => allowedAliases.includes(h.normalized))
+      for (const alias of allowedAliases) {
+        match = normalizedHeaders.find(h => h.normalized === alias)
+        if (match) break
+      }
     }
     if (match) {
       m.excelHeader = match.original
@@ -353,39 +358,42 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
 
   let resolvedIdJugadora: string
 
-  const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim()
-  const aliasNormalizado = normalizar(rawAliasValue)
-  
-  // 1. Exact ID match
+  // Priority 1: Exact internal ID (active)
   if (context.jugadorasIds.includes(rawAliasValue)) {
     resolvedIdJugadora = rawAliasValue
   }
-  // 2. Alias match
-  else if (context.aliasesGoogleForms && context.aliasesGoogleForms.size > 0 && context.aliasesGoogleForms.has(rawAliasValue)) {
-    const aliasInfo = context.aliasesGoogleForms.get(rawAliasValue)
-    if (!aliasInfo!.activo) {
+  // Priority 2: Active Alias
+  else if (context.aliasesGoogleForms && context.aliasesGoogleForms.has(rawAliasValue)) {
+    const aliasInfo = context.aliasesGoogleForms.get(rawAliasValue)!
+    if (!aliasInfo.activo) {
       return { isValid: false, errorMsg: `Alias '${rawAliasValue}' inactivo para el origen 'google_forms'` }
     }
-    resolvedIdJugadora = aliasInfo!.id_jugadora
+    resolvedIdJugadora = aliasInfo.id_jugadora
   }
-  // 3. Normalized Name Match
+  // Priority 3: Exact Normalized Name Match
   else {
-    const jugadorasActivas = Object.entries(context.jugadorasMap || {})
-    const coincidentes = jugadorasActivas.filter(([id, nombre]) => {
-      const n = normalizar(nombre)
-      return n === aliasNormalizado || n.startsWith(aliasNormalizado + ' ') || n.includes(' ' + aliasNormalizado)
-    })
+    const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim()
+    const aliasNormalizado = normalizar(rawAliasValue)
 
-    if (coincidentes.length === 1) {
-      resolvedIdJugadora = coincidentes[0][0]
-    } else if (coincidentes.length > 1) {
-      return { isValid: false, errorMsg: `Ambigüedad: Múltiples jugadoras coinciden con el nombre '${rawAliasValue}'. Corrige el nombre o usa un alias.` }
+    // Check in jugadorasMap
+    const matches: string[] = []
+    if (context.jugadorasMap) {
+      for (const [id, nombre] of Object.entries(context.jugadorasMap)) {
+        if (normalizar(nombre) === aliasNormalizado) {
+          matches.push(id)
+        }
+      }
+    }
+
+    if (matches.length === 1) {
+      resolvedIdJugadora = matches[0]
+    } else if (matches.length > 1) {
+      return { isValid: false, errorMsg: `Ambigüedad: Múltiples jugadoras coinciden exactamente con el nombre '${rawAliasValue}'. Corrige el nombre o usa un alias.` }
     } else {
       return { isValid: false, errorMsg: `Jugadora no registrada. Añádela a la plantilla o configura un alias para '${rawAliasValue}'` }
     }
   }
 
-  // Double check existence (should be guaranteed by above, but safe to keep)
   if (!context.jugadorasIds.includes(resolvedIdJugadora)) {
     return { isValid: false, errorMsg: `La jugadora '${resolvedIdJugadora}' no existe en la base de datos` }
   }
@@ -428,6 +436,7 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
     estres: null,
     estado_animo: null,
     dolor_especifico: row.dolor_especifico ? String(row.dolor_especifico).trim() : null,
+    comentario_sesion: row.comentario_sesion ? String(row.comentario_sesion).trim() : null,
     marca_temporal: row.marca_temporal ? String(row.marca_temporal).trim() : null
   }
 
@@ -458,10 +467,10 @@ export function clasificarFilaImportacion(row: MappedWellnessRow, existingWellne
   const match = existingWellness.find(w => w.id_jugadora === row.id_jugadora && w.fecha === row.fecha)
   if (!match) return 'NUEVO'
 
-  const fields: (keyof MappedWellnessRow)[] = ['calidad_sueno', 'fatiga', 'dolor_muscular', 'estres', 'estado_animo', 'dolor_especifico']
+  const fields: (keyof MappedWellnessRow)[] = ['calidad_sueno', 'fatiga', 'dolor_muscular', 'estres', 'estado_animo', 'dolor_especifico', 'comentario_sesion']
   const isIdentical = fields.every(f => {
     let incomingVal = row[f]
-    let localVal = match[f as keyof Wellness]
+    let localVal = (match as any)[f] // comentario_sesion might not be in Wellness but we check
 
     // Normalizar nulos, undefined y cadenas vacías a vacío
     if (incomingVal === null || incomingVal === undefined) incomingVal = ''
@@ -511,7 +520,7 @@ export function construirVistaPrevia(
 
   rawRows.forEach((rawRow, idx) => {
     const filaOriginal = idx + 2 // Assuming header is row 1
-    
+
     // Map raw row fields
     const mappedRow: RawImportRow = {}
     mapping.forEach(m => {
@@ -523,7 +532,7 @@ export function construirVistaPrevia(
     })
 
     const val = validarFilaWellness(mappedRow, context)
-    
+
     if (!val.isValid) {
       result.errores++
       result.rows.push({
@@ -540,9 +549,10 @@ export function construirVistaPrevia(
         estres: null,
         estado_animo: null,
         dolor_especifico: mappedRow.dolor_especifico ? String(mappedRow.dolor_especifico) : null,
+        comentario_sesion: mappedRow.comentario_sesion ? String(mappedRow.comentario_sesion) : null,
         mensaje: val.errorMsg || 'Error de validación',
         rowOriginal: rawRow
-      })
+      } as PreviewRow)
       return
     }
 
@@ -565,10 +575,11 @@ export function construirVistaPrevia(
         estres: normRow.estres,
         estado_animo: normRow.estado_animo,
         dolor_especifico: normRow.dolor_especifico,
+        comentario_sesion: normRow.comentario_sesion,
         mensaje: 'Duplicado dentro del archivo (misma fecha y jugadora)',
         rowOriginal: rawRow,
         normalRow: normRow
-      })
+      } as PreviewRow)
       return
     }
 
@@ -593,12 +604,13 @@ export function construirVistaPrevia(
       estres: normRow.estres,
       estado_animo: normRow.estado_animo,
       dolor_especifico: normRow.dolor_especifico,
+      comentario_sesion: normRow.comentario_sesion,
       mensaje: clasificacion === 'NUEVO' ? 'Registro nuevo listo para importar' :
                clasificacion === 'ACTUALIZACION_POSIBLE' ? 'Conflicto: ya existe un registro con datos diferentes' :
                'Duplicado idéntico (se omitirá automáticamente)',
       rowOriginal: rawRow,
       normalRow: normRow
-    })
+    } as PreviewRow)
   })
 
   return result
@@ -669,6 +681,7 @@ export async function aplicarImportacionWellness(
     // Executing transaction on all affected tables for complete atomicity
     await dbInstance.transaction('rw', [
       dbInstance.wellness,
+      dbInstance.wellness_diario_importado,
       dbInstance.historial_importaciones,
       dbInstance.jugadoras,
       dbInstance.temporadas,
@@ -678,7 +691,9 @@ export async function aplicarImportacionWellness(
       dbInstance.sesiones,
       dbInstance.partidos,
       dbInstance.rpe_partido,
-      dbInstance.resumen_semanal
+      dbInstance.resumen_semanal,
+      dbInstance.alertas,
+      dbInstance.lesiones
     ], async () => {
       // Re-query active season inside transaction
       const temporadaActiva = await obtenerTemporadaActiva(dbInstance)
@@ -694,18 +709,6 @@ export async function aplicarImportacionWellness(
         const norm = row.normalRow!
         if (temporadaActiva && (norm.fecha < temporadaActiva.fecha_inicio || norm.fecha > temporadaActiva.fecha_fin)) {
           throw new Error(`Fecha '${norm.fecha}' fuera del rango de la temporada activa (${temporadaActiva.fecha_inicio} a ${temporadaActiva.fecha_fin})`)
-        }
-
-        if (norm.alias_origen && dbInstance.alias_jugadora && typeof dbInstance.alias_jugadora.where === 'function') {
-          const todosAlias = await dbInstance.alias_jugadora.where('origen').equals('google_forms').toArray()
-          const candidatos = todosAlias.filter((a: AliasJugadora) => a.valor.trim() === norm.alias_origen!.trim())
-          const aliasActivo = candidatos.find((a: AliasJugadora) => a.activo === true)
-          if (!aliasActivo) {
-            throw new Error(`El alias '${norm.alias_origen}' ya no está activo o no existe`)
-          }
-          if (aliasActivo.id_jugadora !== norm.id_jugadora) {
-            throw new Error(`Inconsistencia: El alias '${norm.alias_origen}' pertenece a '${aliasActivo.id_jugadora}', no a '${norm.id_jugadora}'`)
-          }
         }
       }
 
@@ -759,6 +762,31 @@ export async function aplicarImportacionWellness(
         if (row.estado === 'NUEVO') {
           const norm = row.normalRow!
           const score = calcularScoreWellness(norm)
+
+          const textos: Record<string, string> = {}
+          if (norm.dolor_especifico) textos['Dolor especifico o nota importante (opcional)'] = norm.dolor_especifico
+          if (norm.comentario_sesion) textos['Comentario sobre la sesión (opcional)'] = norm.comentario_sesion
+          if (norm.marca_temporal) textos['Marca temporal'] = norm.marca_temporal
+
+          const metricas: Record<string, any> = {
+            'Calidad de sueño': { original: norm.calidad_sueno, normalizado: norm.calidad_sueno },
+            'Fatiga': { original: norm.fatiga, normalizado: norm.fatiga },
+            'Dolor muscular': { original: norm.dolor_muscular, normalizado: norm.dolor_muscular },
+            'Estrés': { original: norm.estres, normalizado: norm.estres },
+            'Estado de ánimo': { original: norm.estado_animo, normalizado: norm.estado_animo }
+          }
+
+          await dbInstance.wellness_diario_importado.put({
+            id_jugadora: norm.id_jugadora,
+            fecha: norm.fecha,
+            id_temporada: temporadaActiva?.id_temporada,
+            origen_alias: 'google_forms',
+            alias_origen: norm.alias_origen,
+            metricas,
+            textos,
+            indice_diario: score
+          })
+
           await dbInstance.wellness.put({
             id_jugadora: norm.id_jugadora,
             fecha: norm.fecha,
@@ -780,6 +808,20 @@ export async function aplicarImportacionWellness(
           } else if (strategy === 'update') {
             const norm = row.normalRow!
             const score = calcularScoreWellness(norm)
+
+            const textos: Record<string, string> = {}
+            if (norm.dolor_especifico) textos['Dolor especifico o nota importante (opcional)'] = norm.dolor_especifico
+            if (norm.comentario_sesion) textos['Comentario sobre la sesión (opcional)'] = norm.comentario_sesion
+            if (norm.marca_temporal) textos['Marca temporal'] = norm.marca_temporal
+
+            const metricas: Record<string, any> = {
+              'Calidad de sueño': { original: norm.calidad_sueno, normalizado: norm.calidad_sueno },
+              'Fatiga': { original: norm.fatiga, normalizado: norm.fatiga },
+              'Dolor muscular': { original: norm.dolor_muscular, normalizado: norm.dolor_muscular },
+              'Estrés': { original: norm.estres, normalizado: norm.estres },
+              'Estado de ánimo': { original: norm.estado_animo, normalizado: norm.estado_animo }
+            }
+
             const existing = await dbInstance.wellness.where({ id_jugadora: norm.id_jugadora, fecha: norm.fecha }).first()
             if (existing) {
               await dbInstance.wellness.put({
@@ -796,6 +838,19 @@ export async function aplicarImportacionWellness(
                 id_temporada: temporadaActiva?.id_temporada,
                 origen_alias: 'google_forms',
                 alias_origen: norm.alias_origen
+              })
+
+              const existingImportado = await dbInstance.wellness_diario_importado.where({ id_jugadora: norm.id_jugadora, fecha: norm.fecha }).first()
+              await dbInstance.wellness_diario_importado.put({
+                id: existingImportado?.id,
+                id_jugadora: norm.id_jugadora,
+                fecha: norm.fecha,
+                id_temporada: temporadaActiva?.id_temporada,
+                origen_alias: 'google_forms',
+                alias_origen: norm.alias_origen,
+                metricas,
+                textos,
+                indice_diario: score
               })
               updated++
             } else {
