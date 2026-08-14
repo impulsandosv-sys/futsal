@@ -4,7 +4,7 @@ import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { Modal } from '@/components/shared/Modal'
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal'
 import { registrarCambioAuditoria } from '@/services/auditService'
-import { generarAlertas } from '@/utils/alerts'
+import { generarAlertas, getEstadoEfectivo } from '@/utils/alerts'
 import { useNavigate } from 'react-router-dom'
 import type { Alerta } from '@/types'
 
@@ -76,6 +76,28 @@ export function AlertsPage() {
     }
   }
 
+  const handleDirectDismiss = async (alerta: Alerta) => {
+    if (alerta.id !== undefined) {
+      try {
+        const estadoAnterior = getEstadoEfectivo(alerta)
+        await updateAlertaEstado(alerta.id, 'descartada')
+        registrarCambioAuditoria({
+          usuario: 'Preparador Físico',
+          entidad: 'alerta',
+          idEntidad: String(alerta.id),
+          idJugadora: alerta.id_jugadora,
+          campoModificado: 'estado',
+          valorAnterior: estadoAnterior,
+          valorNuevo: 'descartada',
+          motivo: 'ALERTA_DESCARTADA_MANUALMENTE'
+        })
+      } catch (error) {
+        console.error('Error descartando alerta:', error)
+        alert('Hubo un error al descartar la alerta. Inténtalo de nuevo.')
+      }
+    }
+  }
+
   const handleGenerate = async () => {
     setGenerating(true)
     try {
@@ -97,7 +119,7 @@ export function AlertsPage() {
     if (selectedAlerta && selectedAlerta.id !== undefined) {
       await registrarAlertaDecision(selectedAlerta.id, responsable, notaDecision)
       // Automatically transition to "en_revision" if it was "abierta"
-      const currentEstado = selectedAlerta.estado || (selectedAlerta.leida ? 'resuelta' : 'abierta')
+      const currentEstado = getEstadoEfectivo(selectedAlerta)
       if (currentEstado === 'abierta') {
         await updateAlertaEstado(selectedAlerta.id, 'en_revision')
       }
@@ -149,7 +171,7 @@ export function AlertsPage() {
 
   // Filter logic
   const filteredAlertas = alertas.filter((a) => {
-    const aEstado = a.estado || (a.leida ? 'resuelta' : 'abierta')
+    const aEstado = getEstadoEfectivo(a)
     const aPrioridad = a.prioridad || a.nivel || 'bajo'
 
     if (filterEstado !== 'todas' && aEstado !== filterEstado) return false
@@ -176,7 +198,7 @@ export function AlertsPage() {
     >
       {tableAlertas.map((a) => {
         const jug = jugadoras.find((j) => j.id_jugadora === a.id_jugadora)
-        const aEstado = a.estado || (a.leida ? 'resuelta' : 'abierta')
+        const aEstado = getEstadoEfectivo(a)
         const aPrioridad = a.prioridad || a.nivel || 'bajo'
         const aFecha = a.fecha_creacion?.slice(0, 10) || a.fecha
 
@@ -235,6 +257,11 @@ export function AlertsPage() {
                   {a.nota_decision && <p className="text-surface-700 italic">"{a.nota_decision}"</p>}
                   {a.responsable && <p className="text-surface-500 text-[9px] font-medium">Resp: {a.responsable}</p>}
                 </div>
+              ) : aEstado === 'descartada' ? (
+                <div className="text-[10px] space-y-1 bg-surface-50 p-1.5 rounded border border-surface-200">
+                  <p className="text-surface-700 font-medium">Descartada manualmente</p>
+                  {a.fecha_resolucion && <p className="text-surface-500 text-[9px]">{a.fecha_resolucion}</p>}
+                </div>
               ) : (
                 <span className="text-surface-400 italic text-[10px]">Sin revisar</span>
               )}
@@ -269,7 +296,7 @@ export function AlertsPage() {
 
                 {aEstado !== 'descartada' && (
                   <button
-                    onClick={() => handleTriggerStateChange(a, 'descartada')}
+                    onClick={() => handleDirectDismiss(a)}
                     className="text-[9px] bg-surface-50 text-surface-700 border border-surface-200 hover:bg-surface-100 px-1 py-0.5 rounded"
                   >
                     Descartar
