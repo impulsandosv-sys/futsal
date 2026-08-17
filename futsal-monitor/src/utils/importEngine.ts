@@ -363,7 +363,10 @@ export function extraerEscala(value: RawCellValue): number | null {
 /**
  * Fetches existing jugadoras, active season, and google_forms aliases directly from Dexie for validation context.
  */
-export async function obtenerContextoValidacionWellness(dbInstance: FutsalDB = db): Promise<ValidationContext> {
+export async function obtenerContextoValidacionWellness(
+  dbInstance: FutsalDB = db,
+  tipoCuestionario?: 'DIARIO' | 'SEMANAL'
+): Promise<ValidationContext> {
   const jugadoras = await dbInstance.jugadoras.toArray()
   const jugadorasIds = jugadoras.map((j: Jugadora) => j.id_jugadora)
   const jugadorasMap: Record<string, string> = {}
@@ -381,11 +384,18 @@ export async function obtenerContextoValidacionWellness(dbInstance: FutsalDB = d
     aliasesGoogleForms.set(a.valor.trim(), { id_jugadora: a.id_jugadora, activo: a.activo })
   })
 
+  let existingSemanal: WellnessSemanalImportado[] | undefined = undefined
+  if (tipoCuestionario === 'SEMANAL') {
+    existingSemanal = await dbInstance.wellness_semanal_importado.toArray()
+  }
+
   return {
     jugadorasIds,
     jugadorasMap,
     temporadaActiva,
-    aliasesGoogleForms
+    aliasesGoogleForms,
+    tipoCuestionario,
+    existingSemanal
   }
 }
 
@@ -529,26 +539,37 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
       const val = row[f]
       if (val !== null && val !== undefined && String(val).trim() !== '') {
         const score = extraerEscala(val)
-        if (score !== null && (score >= 1 && score <= 10)) {
-          ;(normalRow as any)[f] = score
-          hasAnyWellness = true
+        if (score === null || score < 1 || score > 10) {
+          return { isValid: false, errorMsg: `Valor '${val}' fuera de rango 1-10 o no válido en ${f}` }
         }
+        ;(normalRow as any)[f] = score
+        hasAnyWellness = true
       }
     }
 
-    const parseBooleanLocal = (v: unknown) => {
-      const s = String(v ?? '').trim().toLowerCase()
-      if (s === 'si' || s === 'sí' || s === 'true' || s === '1' || s === 'yes') return true
-      if (s === 'no' || s === 'false' || s === '0') return false
-      return null
+    const parseBooleanStrict = (v: unknown, fieldName: string) => {
+      const valStr = String(v ?? '').trim()
+      if (!valStr) return null
+      const s = valStr.toLowerCase()
+      if (s === 'si' || s === 'sí' || s === 'true') return true
+      if (s === 'no' || s === 'false') return false
+      return { error: `Valor '${valStr}' no reconocido como Sí/No en ${fieldName}` }
     }
 
-    normalRow.dolor_sn = parseBooleanLocal(row.dolor_sn)
+    const dolorParsed = parseBooleanStrict(row.dolor_sn, 'dolor_sn')
+    if (dolorParsed && typeof dolorParsed === 'object' && 'error' in dolorParsed) {
+      return { isValid: false, errorMsg: dolorParsed.error }
+    }
+    normalRow.dolor_sn = dolorParsed as boolean | null
     if (normalRow.dolor_sn !== null) hasAnyWellness = true
     
     normalRow.dolor_texto_semana = row.dolor_texto_semana ? String(row.dolor_texto_semana).trim() : null
     
-    normalRow.actividad_sn = parseBooleanLocal(row.actividad_sn)
+    const actividadParsed = parseBooleanStrict(row.actividad_sn, 'actividad_sn')
+    if (actividadParsed && typeof actividadParsed === 'object' && 'error' in actividadParsed) {
+      return { isValid: false, errorMsg: actividadParsed.error }
+    }
+    normalRow.actividad_sn = actividadParsed as boolean | null
     if (normalRow.actividad_sn !== null) hasAnyWellness = true
     
     normalRow.actividad_texto_semana = row.actividad_texto_semana ? String(row.actividad_texto_semana).trim() : null
@@ -575,7 +596,20 @@ export function clasificarFilaImportacion(
     const match = context.existingSemanal?.find(w => w.id_jugadora === row.id_jugadora && getWeekId(w.fecha) === semana)
     if (!match) return 'NUEVO'
 
-    return 'ACTUALIZACION_POSIBLE'
+    const fieldsSemanal: (keyof MappedWellnessRow)[] = [
+      'recuperacion_semana', 'sueno_semana', 'estres_fuera', 'energia_semana', 
+      'animo_semana', 'preparada_semana', 'sintomas_menstruales', 
+      'dolor_sn', 'dolor_texto_semana', 'actividad_sn', 'actividad_texto_semana'
+    ]
+    const isIdentical = fieldsSemanal.every(f => {
+      let incomingVal = row[f]
+      let localVal = (match as any)[f]
+      if (incomingVal === undefined) incomingVal = null
+      if (localVal === undefined) localVal = null
+      return incomingVal === localVal
+    })
+
+    return isIdentical ? 'DUPLICADO_IDENTICO' : 'ACTUALIZACION_POSIBLE'
   }
   
   const match = existingWellness.find(w => w.id_jugadora === row.id_jugadora && w.fecha === row.fecha)
@@ -675,7 +709,9 @@ export function construirVistaPrevia(
     }
 
     const normRow = val.normalRow!
-    const fileKey = `${normRow.id_jugadora}_${normRow.fecha}`
+    const fileKey = context.tipoCuestionario === 'SEMANAL' 
+      ? `${normRow.id_jugadora}::${getWeekId(normRow.fecha)}`
+      : `${normRow.id_jugadora}::${normRow.fecha}`
 
     if (fileKeys.has(fileKey)) {
       result.errores++
@@ -698,7 +734,18 @@ export function construirVistaPrevia(
         estado_animo: normRow.estado_animo,
         dolor_especifico: normRow.dolor_especifico,
         comentario_sesion: normRow.comentario_sesion,
-        mensaje: finalEstado === 'OMITIDA' ? 'Excluido manualmente por el usuario' : 'Duplicado dentro del archivo (misma fecha y jugadora)',
+        recuperacion_semana: normRow.recuperacion_semana,
+        sueno_semana: normRow.sueno_semana,
+        estres_fuera: normRow.estres_fuera,
+        energia_semana: normRow.energia_semana,
+        animo_semana: normRow.animo_semana,
+        preparada_semana: normRow.preparada_semana,
+        sintomas_menstruales: normRow.sintomas_menstruales,
+        dolor_sn: normRow.dolor_sn,
+        dolor_texto_semana: normRow.dolor_texto_semana,
+        actividad_sn: normRow.actividad_sn,
+        actividad_texto_semana: normRow.actividad_texto_semana,
+        mensaje: finalEstado === 'OMITIDA' ? 'Excluido manualmente por el usuario' : 'Duplicado dentro del archivo',
         rowOriginal: rawRow,
         normalRow: normRow
       } as any)
@@ -707,7 +754,7 @@ export function construirVistaPrevia(
 
     fileKeys.add(fileKey)
 
-    const clasificacion = clasificarFilaImportacion(normRow, existingWellness)
+    const clasificacion = clasificarFilaImportacion(normRow, existingWellness, context)
     const finalEstado = omittedRowIndices?.has(filaOriginal) ? 'OMITIDA' : clasificacion
     if (finalEstado === 'OMITIDA') result.omitidos++
     else if (clasificacion === 'NUEVO') result.nuevos++
@@ -730,6 +777,17 @@ export function construirVistaPrevia(
       estado_animo: normRow.estado_animo,
       dolor_especifico: normRow.dolor_especifico,
       comentario_sesion: normRow.comentario_sesion,
+      recuperacion_semana: normRow.recuperacion_semana,
+      sueno_semana: normRow.sueno_semana,
+      estres_fuera: normRow.estres_fuera,
+      energia_semana: normRow.energia_semana,
+      animo_semana: normRow.animo_semana,
+      preparada_semana: normRow.preparada_semana,
+      sintomas_menstruales: normRow.sintomas_menstruales,
+      dolor_sn: normRow.dolor_sn,
+      dolor_texto_semana: normRow.dolor_texto_semana,
+      actividad_sn: normRow.actividad_sn,
+      actividad_texto_semana: normRow.actividad_texto_semana,
       mensaje: finalEstado === 'OMITIDA' ? 'Excluido manualmente por el usuario' :
                clasificacion === 'NUEVO' ? 'Registro nuevo listo para importar' :
                clasificacion === 'ACTUALIZACION_POSIBLE' ? 'Conflicto: ya existe un registro con datos diferentes' :

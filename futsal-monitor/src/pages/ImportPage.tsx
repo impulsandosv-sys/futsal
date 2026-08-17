@@ -125,14 +125,14 @@ export function ImportPage() {
   useEffect(() => {
     let isMounted = true
     if (parsedRawRows.length > 0 && activeMappings.length > 0) {
-      obtenerContextoValidacionWellness().then(context => {
+      obtenerContextoValidacionWellness(undefined, tipoCuestionario || undefined).then(context => {
         if (!isMounted) return
         const summary = construirVistaPrevia(parsedRawRows, activeMappings, wellness, context.jugadorasMap || {}, context, omittedRows)
         setPreviewData(summary.rows)
       })
     }
     return () => { isMounted = false }
-  }, [parsedRawRows, activeMappings, wellness, omittedRows])
+  }, [parsedRawRows, activeMappings, wellness, omittedRows, tipoCuestionario])
 
   // --- Handlers Backup ---
   const handleCreateBackup = async () => {
@@ -419,7 +419,18 @@ export function ImportPage() {
       estres: row.estres ?? '',
       estado_animo: row.estado_animo ?? '',
       dolor_especifico: row.dolor_especifico ?? '',
-      comentario_sesion: row.comentario_sesion ?? ''
+      comentario_sesion: row.comentario_sesion ?? '',
+      recuperacion_semana: row.recuperacion_semana ?? '',
+      sueno_semana: row.sueno_semana ?? '',
+      estres_fuera: row.estres_fuera ?? '',
+      energia_semana: row.energia_semana ?? '',
+      animo_semana: row.animo_semana ?? '',
+      preparada_semana: row.preparada_semana ?? '',
+      sintomas_menstruales: row.sintomas_menstruales ?? '',
+      dolor_sn: row.dolor_sn,
+      dolor_texto_semana: row.dolor_texto_semana ?? '',
+      actividad_sn: row.actividad_sn,
+      actividad_texto_semana: row.actividad_texto_semana ?? ''
     })
   }
 
@@ -919,12 +930,28 @@ export function ImportPage() {
                         <th className="p-2 w-24">ID</th>
                         <th className="p-2">Jugadora</th>
                         <th className="p-2 w-24">Fecha</th>
-                        <th className="p-2 w-10 text-center">Sue</th>
-                        <th className="p-2 w-10 text-center">Fat</th>
-                        <th className="p-2 w-10 text-center">Mus</th>
-                        <th className="p-2 w-10 text-center">Est</th>
-                        <th className="p-2 w-10 text-center">Áni</th>
-                        <th className="p-2">Dolor Esp.</th>
+                        {tipoCuestionario === 'SEMANAL' ? (
+                          <>
+                            <th className="p-2 w-8 text-center" title="Recuperación">Rec</th>
+                            <th className="p-2 w-8 text-center" title="Sueño">Sue</th>
+                            <th className="p-2 w-8 text-center" title="Estrés">Est</th>
+                            <th className="p-2 w-8 text-center" title="Energía">Ene</th>
+                            <th className="p-2 w-8 text-center" title="Ánimo">Áni</th>
+                            <th className="p-2 w-8 text-center" title="Preparada">Pre</th>
+                            <th className="p-2 w-10 text-center" title="Dolor">Dolor</th>
+                            <th className="p-2 w-10 text-center" title="Actividad">Act</th>
+                            <th className="p-2" title="Síntomas">Sín</th>
+                          </>
+                        ) : (
+                          <>
+                            <th className="p-2 w-10 text-center">Sue</th>
+                            <th className="p-2 w-10 text-center">Fat</th>
+                            <th className="p-2 w-10 text-center">Mus</th>
+                            <th className="p-2 w-10 text-center">Est</th>
+                            <th className="p-2 w-10 text-center">Áni</th>
+                            <th className="p-2">Dolor Esp.</th>
+                          </>
+                        )}
                         <th className="p-2 w-12 text-center">Omitir</th>
                       </tr>
                     </thead>
@@ -975,26 +1002,67 @@ export function ImportPage() {
                                         className="w-full text-xs border border-primary-300 rounded p-1 bg-white focus:outline-none focus:border-primary-500"
                                       />
                                     </td>
-                                    {['calidad_sueno', 'fatiga', 'dolor_muscular', 'estres', 'estado_animo'].map(metric => (
-                                      <td key={metric} className="p-1 text-center">
-                                        <input
-                                          type="number"
-                                          min="1" max="10"
-                                          value={draftEditData[metric]}
-                                          onChange={e => setDraftEditData({ ...draftEditData, [metric]: e.target.value })}
-                                          className="w-10 text-xs border border-primary-300 rounded p-1 text-center bg-white focus:outline-none focus:border-primary-500"
-                                        />
-                                      </td>
-                                    ))}
-                                    <td className="p-1">
-                                      <input
-                                        type="text"
-                                        value={draftEditData.dolor_especifico}
-                                        onChange={e => setDraftEditData({ ...draftEditData, dolor_especifico: e.target.value })}
-                                        className="w-full text-xs border border-primary-300 rounded p-1 bg-white focus:outline-none focus:border-primary-500"
-                                        placeholder="Dolor..."
-                                      />
-                                    </td>
+                                    {tipoCuestionario === 'SEMANAL' ? (
+                                      <>
+                                        {['recuperacion_semana', 'sueno_semana', 'estres_fuera', 'energia_semana', 'animo_semana', 'preparada_semana'].map(metric => (
+                                          <td key={metric} className="p-1 text-center">
+                                            <input
+                                              type="number"
+                                              min="1" max="10"
+                                              value={draftEditData[metric]}
+                                              onChange={e => setDraftEditData({ ...draftEditData, [metric]: e.target.value })}
+                                              className="w-8 text-xs border border-primary-300 rounded p-1 text-center bg-white focus:outline-none focus:border-primary-500"
+                                            />
+                                          </td>
+                                        ))}
+                                        <td className="p-1 text-center">
+                                          <select 
+                                            value={draftEditData.dolor_sn === true ? 'si' : draftEditData.dolor_sn === false ? 'no' : ''} 
+                                            onChange={e => setDraftEditData({ ...draftEditData, dolor_sn: e.target.value === 'si' ? true : e.target.value === 'no' ? false : null })}
+                                            className="w-12 text-xs border border-primary-300 rounded p-1"
+                                          >
+                                            <option value="">-</option><option value="si">Sí</option><option value="no">No</option>
+                                          </select>
+                                          <input type="text" value={draftEditData.dolor_texto_semana} onChange={e => setDraftEditData({ ...draftEditData, dolor_texto_semana: e.target.value })} className="w-full text-[10px] mt-1 border border-primary-300 rounded p-0.5" placeholder="Desc..." />
+                                        </td>
+                                        <td className="p-1 text-center">
+                                          <select 
+                                            value={draftEditData.actividad_sn === true ? 'si' : draftEditData.actividad_sn === false ? 'no' : ''} 
+                                            onChange={e => setDraftEditData({ ...draftEditData, actividad_sn: e.target.value === 'si' ? true : e.target.value === 'no' ? false : null })}
+                                            className="w-12 text-xs border border-primary-300 rounded p-1"
+                                          >
+                                            <option value="">-</option><option value="si">Sí</option><option value="no">No</option>
+                                          </select>
+                                          <input type="text" value={draftEditData.actividad_texto_semana} onChange={e => setDraftEditData({ ...draftEditData, actividad_texto_semana: e.target.value })} className="w-full text-[10px] mt-1 border border-primary-300 rounded p-0.5" placeholder="Desc..." />
+                                        </td>
+                                        <td className="p-1 text-center">
+                                          <input type="number" min="1" max="10" value={draftEditData.sintomas_menstruales} onChange={e => setDraftEditData({ ...draftEditData, sintomas_menstruales: e.target.value })} className="w-8 text-xs border border-primary-300 rounded p-1 text-center bg-white" placeholder="-" />
+                                        </td>
+                                      </>
+                                    ) : (
+                                      <>
+                                        {['calidad_sueno', 'fatiga', 'dolor_muscular', 'estres', 'estado_animo'].map(metric => (
+                                          <td key={metric} className="p-1 text-center">
+                                            <input
+                                              type="number"
+                                              min="1" max="10"
+                                              value={draftEditData[metric]}
+                                              onChange={e => setDraftEditData({ ...draftEditData, [metric]: e.target.value })}
+                                              className="w-10 text-xs border border-primary-300 rounded p-1 text-center bg-white focus:outline-none focus:border-primary-500"
+                                            />
+                                          </td>
+                                        ))}
+                                        <td className="p-1">
+                                          <input
+                                            type="text"
+                                            value={draftEditData.dolor_especifico}
+                                            onChange={e => setDraftEditData({ ...draftEditData, dolor_especifico: e.target.value })}
+                                            className="w-full text-xs border border-primary-300 rounded p-1 bg-white focus:outline-none focus:border-primary-500"
+                                            placeholder="Dolor..."
+                                          />
+                                        </td>
+                                      </>
+                                    )}
                                     <td className="p-1 text-center">
                                       <div className="flex flex-col gap-1">
                                         <button onClick={() => handleSaveRow(row.filaOriginal)} className="text-[10px] bg-primary-600 text-white font-medium px-2 py-0.5 rounded hover:bg-primary-700">Revalidar</button>
@@ -1007,12 +1075,34 @@ export function ImportPage() {
                                     <td className="p-2 font-semibold font-mono text-surface-800">{row.id_jugadora}</td>
                                     <td className="p-2 text-surface-800">{row.nombreJugadora}</td>
                                     <td className="p-2 font-mono text-surface-700">{row.fecha}</td>
-                                    <td className="p-2 text-center font-semibold">{row.calidad_sueno ?? '-'}</td>
-                                    <td className="p-2 text-center font-semibold">{row.fatiga ?? '-'}</td>
-                                    <td className="p-2 text-center font-semibold">{row.dolor_muscular ?? '-'}</td>
-                                    <td className="p-2 text-center font-semibold">{row.estres ?? '-'}</td>
-                                    <td className="p-2 text-center font-semibold">{row.estado_animo ?? '-'}</td>
-                                    <td className="p-2 text-surface-600 truncate max-w-[150px]" title={row.dolor_especifico || ''}>{row.dolor_especifico || <span className="text-surface-300 italic">Ninguno</span>}</td>
+                                    {tipoCuestionario === 'SEMANAL' ? (
+                                      <>
+                                        <td className="p-2 text-center font-semibold">{row.recuperacion_semana ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.sueno_semana ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.estres_fuera ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.energia_semana ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.animo_semana ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.preparada_semana ?? '-'}</td>
+                                        <td className="p-2 text-center">
+                                          <span className="font-semibold">{row.dolor_sn === true ? 'Sí' : row.dolor_sn === false ? 'No' : '-'}</span>
+                                          {row.dolor_texto_semana && <div className="text-[9px] text-surface-500 truncate max-w-[60px]" title={row.dolor_texto_semana}>{row.dolor_texto_semana}</div>}
+                                        </td>
+                                        <td className="p-2 text-center">
+                                          <span className="font-semibold">{row.actividad_sn === true ? 'Sí' : row.actividad_sn === false ? 'No' : '-'}</span>
+                                          {row.actividad_texto_semana && <div className="text-[9px] text-surface-500 truncate max-w-[60px]" title={row.actividad_texto_semana}>{row.actividad_texto_semana}</div>}
+                                        </td>
+                                        <td className="p-2 text-center font-semibold">{row.sintomas_menstruales ?? '-'}</td>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <td className="p-2 text-center font-semibold">{row.calidad_sueno ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.fatiga ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.dolor_muscular ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.estres ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.estado_animo ?? '-'}</td>
+                                        <td className="p-2 text-surface-600 truncate max-w-[150px]" title={row.dolor_especifico || ''}>{row.dolor_especifico || <span className="text-surface-300 italic">Ninguno</span>}</td>
+                                      </>
+                                    )}
                                     <td className="p-2 text-center">
                                       <div className="flex flex-col items-center gap-1">
                                         {row.estado !== 'DUPLICADO_IDENTICO' && (
