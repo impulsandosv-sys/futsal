@@ -583,6 +583,35 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
 }
 
 /**
+ * Extrae los valores parseados desde el modelo de persistencia semanal.
+ */
+export function extraerValoresSemanalPersistidos(registro: import('@/types').WellnessSemanalImportado): Pick<MappedWellnessRow, 'recuperacion_semana' | 'sueno_semana' | 'estres_fuera' | 'energia_semana' | 'animo_semana' | 'preparada_semana' | 'sintomas_menstruales' | 'dolor_sn' | 'dolor_texto_semana' | 'actividad_sn' | 'actividad_texto_semana'> {
+  const metricas = registro.metricas || {}
+  const textos = registro.textos || {}
+
+  const getValue = (key: string) => metricas[key]?.normalizado ?? null
+
+  const dolorSnRaw = getValue('¿Has tenido dolor, molestia o rigidez que haya limitado algo esta semana?') as unknown as boolean | null
+  const actividadSnRaw = getValue('¿Has realizado actividad física importante adicional al trabajo con el equipo?') as unknown as boolean | null
+
+  return {
+    recuperacion_semana: getValue('¿Cómo valorarías tu recuperación general esta semana?'),
+    sueno_semana: getValue('¿Cómo ha sido la calidad de tu sueño esta semana?'),
+    estres_fuera: getValue('¿Cómo ha sido tu nivel de estrés fuera del fútbol sala?'),
+    energia_semana: getValue('¿Cómo ha sido tu energía durante los entrenamientos y el partido?'),
+    animo_semana: getValue('¿Cómo valorarías tu estado de ánimo esta semana?'),
+    preparada_semana: getValue('¿Cómo de preparada te sientes para competir la próxima semana?'),
+    sintomas_menstruales: getValue('Si eres mujer, ¿los síntomas menstruales han afectado tu rendimiento o bienestar esta semana?'),
+    
+    dolor_sn: dolorSnRaw === true ? true : dolorSnRaw === false ? false : null,
+    actividad_sn: actividadSnRaw === true ? true : actividadSnRaw === false ? false : null,
+    
+    dolor_texto_semana: textos['¿Has tenido dolor, molestia o rigidez que haya limitado algo esta semana?'] || null,
+    actividad_texto_semana: textos['Indica qué tipo de actividad e intensidad (si has respondido Sí a la anterior)'] || null,
+  }
+}
+
+/**
  * Classifies a valid row against the existing Dexie records.
  */
 export function clasificarFilaImportacion(
@@ -601,11 +630,22 @@ export function clasificarFilaImportacion(
       'animo_semana', 'preparada_semana', 'sintomas_menstruales', 
       'dolor_sn', 'dolor_texto_semana', 'actividad_sn', 'actividad_texto_semana'
     ]
+    const persistedVals = extraerValoresSemanalPersistidos(match)
+    
     const isIdentical = fieldsSemanal.every(f => {
       let incomingVal = row[f]
-      let localVal = (match as any)[f]
-      if (incomingVal === undefined) incomingVal = null
-      if (localVal === undefined) localVal = null
+      let localVal = persistedVals[f as keyof typeof persistedVals]
+
+      const isTexto = f === 'dolor_texto_semana' || f === 'actividad_texto_semana'
+      if (isTexto) {
+        const incText = incomingVal ? String(incomingVal).trim() : ''
+        const locText = localVal ? String(localVal).trim() : ''
+        return incText === locText
+      }
+
+      if (incomingVal === undefined || incomingVal === '') incomingVal = null
+      if (localVal === undefined || localVal === '') localVal = null
+      
       return incomingVal === localVal
     })
 
