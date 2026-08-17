@@ -287,6 +287,20 @@ export interface MappedWellnessRow {
   dolor_especifico: string | null
   comentario_sesion: string | null
   marca_temporal?: string | null
+  metodo_resolucion_identidad?: string
+
+  // Semanal
+  recuperacion_semana?: number | null
+  sueno_semana?: number | null
+  estres_fuera?: number | null
+  energia_semana?: number | null
+  animo_semana?: number | null
+  preparada_semana?: number | null
+  sintomas_menstruales?: number | null
+  dolor_sn?: boolean | null
+  dolor_texto_semana?: string | null
+  actividad_sn?: boolean | null
+  actividad_texto_semana?: string | null
 }
 
 export interface PreviewRow {
@@ -303,7 +317,9 @@ export interface PreviewRow {
   estres: number | null
   estado_animo: number | null
   dolor_especifico: string | null
+  comentario_sesion?: string | null
   mensaje: string
+  metodo_resolucion_identidad?: string
   rowOriginal: RawImportRow
   normalRow?: MappedWellnessRow
 }

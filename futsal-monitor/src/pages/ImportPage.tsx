@@ -18,13 +18,11 @@ import {
   crearInformeValidacion,
   calcularVentanaPropagacion,
   confirmarYEjecutarImportacion,
-  obtenerContextoValidacionWellness
-} from '@/utils/importEngine'
-import {
+  obtenerContextoValidacionWellness,
+  detectarMapeoWellnessSemanal,
   detectarTipoCuestionario,
-  importarCSVWellnessGoogleForms,
   type TipoCuestionarioWellness
-} from '@/utils/importEngineWellness'
+} from '@/utils/importEngine'
 import { getWeekId } from '@/domain/dates/dates'
 import { recalcularReadinessJugadora } from '@/services/readiness'
 import { recalcularResumenSemanal } from '@/services/resumenSemanal'
@@ -36,7 +34,8 @@ export function ImportPage() {
     plantillas_importacion,
     addPlantillaImportacion,
     evaluarSeguimientoJugadora,
-    loadAll
+    loadAll,
+    jugadoras
   } = useStore()
 
   // States for Backup
@@ -60,13 +59,15 @@ export function ImportPage() {
   const [parsedRawRows, setParsedRawRows] = useState<RawImportRow[]>([])
   const [tipoCuestionario, setTipoCuestionario] = useState<TipoCuestionarioWellness | null>(null)
   const [cuestionarioError, setCuestionarioError] = useState<string | null>(null)
-  const [rawCsvString, setRawCsvString] = useState<string | null>(null)
 
   // Step 2: Mappings and Mapped Preview
   const [selectedPlantillaId, setSelectedPlantillaId] = useState<number | string>('default')
   const [activeMappings, setActiveMappings] = useState<ColumnMapping[]>([])
   const [newTemplateName, setNewTemplateName] = useState<string>('')
   const [previewData, setPreviewData] = useState<PreviewRow[]>([])
+  const [omittedRows, setOmittedRows] = useState<Set<number>>(new Set())
+  const [editingRowId, setEditingRowId] = useState<number | null>(null)
+  const [draftEditData, setDraftEditData] = useState<Record<string, any> | null>(null)
 
   // Derivación pura del resumen de previsualización (React State Pure Rule)
   const previewSummary = useMemo(() => {
@@ -126,13 +127,12 @@ export function ImportPage() {
     if (parsedRawRows.length > 0 && activeMappings.length > 0) {
       obtenerContextoValidacionWellness().then(context => {
         if (!isMounted) return
-        const summary = construirVistaPrevia(parsedRawRows, activeMappings, wellness, context.jugadorasMap || {}, context)
+        const summary = construirVistaPrevia(parsedRawRows, activeMappings, wellness, context.jugadorasMap || {}, context, omittedRows)
         setPreviewData(summary.rows)
-        setCurrentPage(1)
       })
     }
     return () => { isMounted = false }
-  }, [parsedRawRows, activeMappings, wellness])
+  }, [parsedRawRows, activeMappings, wellness, omittedRows])
 
   // --- Handlers Backup ---
   const handleCreateBackup = async () => {
@@ -266,25 +266,34 @@ export function ImportPage() {
 
   const readSheetData = (wb: any, sheetName: string, XLSX: any) => {
     const ws = wb.Sheets[sheetName]
-    const headersRaw = XLSX.utils.sheet_to_json(ws, { header: 1 }) as string[][]
-    if (headersRaw.length === 0) {
-      alert('La hoja de cálculo está vacía.')
+    const headersRaw = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][]
+    
+    const esFilaConContenido = (row: unknown[]) =>
+      row.some((cell) => String(cell ?? '').trim() !== '')
+
+    const indiceCabecera = headersRaw.findIndex(esFilaConContenido)
+    if (indiceCabecera === -1) {
+      alert('Error: La hoja de cálculo está completamente vacía o no contiene cabeceras detectables.')
       return
     }
-    const headers = headersRaw[0] as string[]
+    
+    const headers = (headersRaw[indiceCabecera] as unknown[]).map(h => String(h ?? '').trim())
     setFileHeaders(headers)
     setCuestionarioError(null)
     setTipoCuestionario(null)
-    setRawCsvString(XLSX.utils.sheet_to_csv(ws))
 
     try {
       const tipo = detectarTipoCuestionario(headers)
       setTipoCuestionario(tipo)
-      const rawRows = XLSX.utils.sheet_to_json(ws, { defval: null }) as RawImportRow[]
+      const rawRows = XLSX.utils.sheet_to_json(ws, { range: indiceCabecera, defval: null }) as RawImportRow[]
       setParsedRawRows(rawRows)
 
       if (tipo === 'DIARIO') {
         const auto = detectarMapeoWellness(headers)
+        setActiveMappings(auto)
+        setSelectedPlantillaId('default')
+      } else if (tipo === 'SEMANAL') {
+        const auto = detectarMapeoWellnessSemanal(headers)
         setActiveMappings(auto)
         setSelectedPlantillaId('default')
       } else {
@@ -304,7 +313,6 @@ export function ImportPage() {
     setParsedRawRows([])
     setTipoCuestionario(null)
     setCuestionarioError(null)
-    setRawCsvString(null)
     if (importFileRef.current) importFileRef.current.value = ''
   }
 
@@ -389,22 +397,70 @@ export function ImportPage() {
   }
 
   const handleExcludeRow = (filaIndex: number) => {
-    setPreviewData(prevRows => {
-      return prevRows.map(r => {
-        if (r.filaOriginal === filaIndex) {
-          const isOmitida = r.estado === 'OMITIDA'
-          const prevEstado = (r as any).prevEstado || 'NUEVO'
-          const newEstado = isOmitida ? prevEstado : 'OMITIDA'
-          return {
-            ...r,
-            prevEstado: isOmitida ? undefined : r.estado,
-            estado: newEstado,
-            mensaje: newEstado === 'OMITIDA' ? 'Excluido manualmente por el usuario' : 'Habilitado de nuevo'
-          }
-        }
-        return r
-      })
+    setOmittedRows(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(filaIndex)) {
+        newSet.delete(filaIndex)
+      } else {
+        newSet.add(filaIndex)
+      }
+      return newSet
     })
+  }
+
+  const handleEditRow = (row: PreviewRow) => {
+    setEditingRowId(row.filaOriginal)
+    setDraftEditData({
+      id_jugadora: row.id_jugadora,
+      fecha: row.fecha,
+      calidad_sueno: row.calidad_sueno ?? '',
+      fatiga: row.fatiga ?? '',
+      dolor_muscular: row.dolor_muscular ?? '',
+      estres: row.estres ?? '',
+      estado_animo: row.estado_animo ?? '',
+      dolor_especifico: row.dolor_especifico ?? '',
+      comentario_sesion: row.comentario_sesion ?? ''
+    })
+  }
+
+  const handleCancelEdit = () => {
+    setEditingRowId(null)
+    setDraftEditData(null)
+  }
+
+  const handleSaveRow = (filaOriginal: number) => {
+    if (!draftEditData) return
+    setParsedRawRows(prev => {
+      const newRows = [...prev]
+      const idx = filaOriginal - 2
+      const targetRow = { ...newRows[idx] }
+
+      activeMappings.forEach(m => {
+        if (m.excelHeader && draftEditData[m.internalField] !== undefined) {
+          targetRow[m.excelHeader] = draftEditData[m.internalField]
+        }
+      })
+
+      newRows[idx] = targetRow
+      return newRows
+    })
+    setEditingRowId(null)
+    setDraftEditData(null)
+  }
+
+  const handleJumpToNextError = () => {
+    const errorIndex = filteredPreview.findIndex((r, idx) => r.estado === 'ERROR' && idx >= currentPage * pageSize)
+    if (errorIndex !== -1) {
+      const page = Math.floor(errorIndex / pageSize) + 1
+      setCurrentPage(page)
+    } else {
+      // Si no hay más en páginas siguientes, buscar desde el principio
+      const firstError = filteredPreview.findIndex(r => r.estado === 'ERROR')
+      if (firstError !== -1) {
+        const page = Math.floor(firstError / pageSize) + 1
+        setCurrentPage(page)
+      }
+    }
   }
 
   const handleDownloadValidationReport = () => {
@@ -434,29 +490,8 @@ export function ImportPage() {
   const executeImport = async () => {
     setRecalcError(null)
 
-    if (tipoCuestionario === 'SEMANAL') {
-      if (!rawCsvString) return
-      setImporting(true)
-      try {
-        const outcome = await importarCSVWellnessGoogleForms(rawCsvString)
-        setImportOutcome({
-          success: true,
-          inserted: outcome.importadas,
-          updated: 0,
-          skipped: outcome.totalFilas - outcome.importadas - outcome.errores,
-          errors: outcome.errores,
-          recalculoExitoso: true
-        })
-        setStep(4)
-      } catch (err: any) {
-        alert('Error en importación semanal: ' + err.message)
-      } finally {
-        setImporting(false)
-      }
-      return
-    }
-
     await confirmarYEjecutarImportacion({
+      tipoCuestionario: tipoCuestionario as 'DIARIO' | 'SEMANAL',
       downloadedBackupName: downloadedImportBackupName,
       userConfirmedBackup: confirmImportBackup,
       previewData,
@@ -744,11 +779,7 @@ export function ImportPage() {
                   type="button"
                   disabled={!importFile || parsedRawRows.length === 0 || !!cuestionarioError}
                   onClick={() => {
-                    if (tipoCuestionario === 'SEMANAL') {
-                      setStep(3)
-                    } else {
-                      setStep(2)
-                    }
+                    setStep(2)
                   }}
                   className="bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold py-2 px-4 rounded shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -903,41 +934,114 @@ export function ImportPage() {
                           <td colSpan={12} className="p-4 text-center text-surface-500 italic">No hay registros que coincidan con este filtro.</td>
                         </tr>
                       ) : (
-                        paginatedPreview.map((row, idx) => (
-                          <tr key={idx} className={row.estado === 'ERROR' ? 'bg-red-50/30' : row.estado === 'OMITIDA' ? 'opacity-50 bg-surface-50' : ''}>
-                            <td className="p-2 text-center text-surface-500 font-mono">{row.filaOriginal}</td>
-                            <td className="p-2">
-                              <span className={`text-[9px] font-bold py-0.5 px-2.5 rounded-full ${
-                                row.estado === 'NUEVO' ? 'bg-green-100 text-green-700' :
-                                row.estado === 'ACTUALIZACION_POSIBLE' ? 'bg-blue-100 text-blue-700' :
-                                row.estado === 'DUPLICADO_IDENTICO' ? 'bg-surface-200 text-surface-700' :
-                                row.estado === 'ERROR' ? 'bg-red-100 text-red-700' :
-                                'bg-amber-100 text-amber-700'
-                              }`}>
-                                {row.estado === 'ACTUALIZACION_POSIBLE' ? 'CONFLICTO' : row.estado}
-                              </span>
-                            </td>
-                            <td className="p-2 font-semibold font-mono text-surface-800">{row.id_jugadora}</td>
-                            <td className="p-2 text-surface-800">{row.nombreJugadora}</td>
-                            <td className="p-2 font-mono text-surface-700">{row.fecha}</td>
-                            <td className="p-2 text-center font-semibold">{row.calidad_sueno ?? '-'}</td>
-                            <td className="p-2 text-center font-semibold">{row.fatiga ?? '-'}</td>
-                            <td className="p-2 text-center font-semibold">{row.dolor_muscular ?? '-'}</td>
-                            <td className="p-2 text-center font-semibold">{row.estres ?? '-'}</td>
-                            <td className="p-2 text-center font-semibold">{row.estado_animo ?? '-'}</td>
-                            <td className="p-2 text-surface-600 truncate max-w-[150px]" title={row.dolor_especifico || ''}>{row.dolor_especifico || <span className="text-surface-300 italic">Ninguno</span>}</td>
-                            <td className="p-2 text-center">
-                              {row.estado !== 'DUPLICADO_IDENTICO' && (
-                                <input
-                                  type="checkbox"
-                                  checked={row.estado === 'OMITIDA'}
-                                  onChange={() => handleExcludeRow(row.filaOriginal)}
-                                  className="rounded border-surface-350 text-primary-600 focus:ring-primary-500 cursor-pointer"
-                                />
+                        paginatedPreview.map((row, idx) => {
+                          const isEditing = editingRowId === row.filaOriginal
+                          return (
+                            <React.Fragment key={idx}>
+                              <tr className={row.estado === 'ERROR' && !isEditing ? 'bg-red-50/30' : row.estado === 'OMITIDA' ? 'opacity-50 bg-surface-50' : ''}>
+                                <td className="p-2 text-center text-surface-500 font-mono">{row.filaOriginal}</td>
+                                <td className="p-2">
+                                  <span className={`text-[9px] font-bold py-0.5 px-2.5 rounded-full ${
+                                    row.estado === 'NUEVO' ? 'bg-green-100 text-green-700' :
+                                    row.estado === 'ACTUALIZACION_POSIBLE' ? 'bg-blue-100 text-blue-700' :
+                                    row.estado === 'DUPLICADO_IDENTICO' ? 'bg-surface-200 text-surface-700' :
+                                    row.estado === 'ERROR' ? 'bg-red-100 text-red-700' :
+                                    'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {row.estado === 'ACTUALIZACION_POSIBLE' ? 'CONFLICTO' : row.estado}
+                                  </span>
+                                </td>
+                                {isEditing && draftEditData ? (
+                                  <>
+                                    <td colSpan={2} className="p-1">
+                                      <select
+                                        value={draftEditData.id_jugadora}
+                                        onChange={e => setDraftEditData({ ...draftEditData, id_jugadora: e.target.value })}
+                                        className="w-full text-xs border border-primary-300 rounded p-1 bg-white focus:outline-none focus:border-primary-500"
+                                      >
+                                        <option value="">[Seleccionar]</option>
+                                        {jugadoras.map(j => (
+                                          <option key={j.id_jugadora} value={j.id_jugadora}>
+                                            {j.id_jugadora} - {j.nombre}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </td>
+                                    <td className="p-1">
+                                      <input
+                                        type="date"
+                                        value={draftEditData.fecha}
+                                        onChange={e => setDraftEditData({ ...draftEditData, fecha: e.target.value })}
+                                        className="w-full text-xs border border-primary-300 rounded p-1 bg-white focus:outline-none focus:border-primary-500"
+                                      />
+                                    </td>
+                                    {['calidad_sueno', 'fatiga', 'dolor_muscular', 'estres', 'estado_animo'].map(metric => (
+                                      <td key={metric} className="p-1 text-center">
+                                        <input
+                                          type="number"
+                                          min="1" max="10"
+                                          value={draftEditData[metric]}
+                                          onChange={e => setDraftEditData({ ...draftEditData, [metric]: e.target.value })}
+                                          className="w-10 text-xs border border-primary-300 rounded p-1 text-center bg-white focus:outline-none focus:border-primary-500"
+                                        />
+                                      </td>
+                                    ))}
+                                    <td className="p-1">
+                                      <input
+                                        type="text"
+                                        value={draftEditData.dolor_especifico}
+                                        onChange={e => setDraftEditData({ ...draftEditData, dolor_especifico: e.target.value })}
+                                        className="w-full text-xs border border-primary-300 rounded p-1 bg-white focus:outline-none focus:border-primary-500"
+                                        placeholder="Dolor..."
+                                      />
+                                    </td>
+                                    <td className="p-1 text-center">
+                                      <div className="flex flex-col gap-1">
+                                        <button onClick={() => handleSaveRow(row.filaOriginal)} className="text-[10px] bg-primary-600 text-white font-medium px-2 py-0.5 rounded hover:bg-primary-700">Revalidar</button>
+                                        <button onClick={handleCancelEdit} className="text-[10px] bg-surface-200 text-surface-700 font-medium px-2 py-0.5 rounded hover:bg-surface-300">Cancelar</button>
+                                      </div>
+                                    </td>
+                                  </>
+                                ) : (
+                                  <>
+                                    <td className="p-2 font-semibold font-mono text-surface-800">{row.id_jugadora}</td>
+                                    <td className="p-2 text-surface-800">{row.nombreJugadora}</td>
+                                    <td className="p-2 font-mono text-surface-700">{row.fecha}</td>
+                                    <td className="p-2 text-center font-semibold">{row.calidad_sueno ?? '-'}</td>
+                                    <td className="p-2 text-center font-semibold">{row.fatiga ?? '-'}</td>
+                                    <td className="p-2 text-center font-semibold">{row.dolor_muscular ?? '-'}</td>
+                                    <td className="p-2 text-center font-semibold">{row.estres ?? '-'}</td>
+                                    <td className="p-2 text-center font-semibold">{row.estado_animo ?? '-'}</td>
+                                    <td className="p-2 text-surface-600 truncate max-w-[150px]" title={row.dolor_especifico || ''}>{row.dolor_especifico || <span className="text-surface-300 italic">Ninguno</span>}</td>
+                                    <td className="p-2 text-center">
+                                      <div className="flex flex-col items-center gap-1">
+                                        {row.estado !== 'DUPLICADO_IDENTICO' && (
+                                          <input
+                                            type="checkbox"
+                                            checked={row.estado === 'OMITIDA'}
+                                            onChange={() => handleExcludeRow(row.filaOriginal)}
+                                            className="rounded border-surface-350 text-primary-600 focus:ring-primary-500 cursor-pointer mb-1"
+                                            title="Omitir"
+                                          />
+                                        )}
+                                        {!isEditing && (row.estado === 'ERROR' || row.estado === 'ACTUALIZACION_POSIBLE') && (
+                                          <button onClick={() => handleEditRow(row)} className="text-[10px] font-medium text-primary-600 hover:text-primary-800 bg-primary-50 px-2 py-0.5 rounded border border-primary-200">Editar</button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </>
+                                )}
+                              </tr>
+                              {row.estado === 'ERROR' && !isEditing && (
+                                <tr>
+                                  <td colSpan={12} className="p-2 bg-red-50 text-[11px] text-red-700 border-b border-red-100">
+                                    <span className="font-bold">Error:</span> {row.mensaje}
+                                  </td>
+                                </tr>
                               )}
-                            </td>
-                          </tr>
-                        ))
+                            </React.Fragment>
+                          )
+                        })
                       )}
                     </tbody>
                   </table>
@@ -954,7 +1058,7 @@ export function ImportPage() {
                         disabled={currentPage === 1}
                         className="px-2 py-1 text-[10px] font-semibold bg-white border border-surface-300 rounded hover:bg-surface-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        &larr; Anterior
+                        &larr; Pág. anterior
                       </button>
                       <button
                         data-testid="pagination-next"
@@ -962,7 +1066,7 @@ export function ImportPage() {
                         disabled={currentPage === totalPages}
                         className="px-2 py-1 text-[10px] font-semibold bg-white border border-surface-300 rounded hover:bg-surface-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        Siguiente &rarr;
+                        Siguiente pág. &rarr;
                       </button>
                     </div>
                   </div>
@@ -970,8 +1074,18 @@ export function ImportPage() {
               </div>
 
               {cannotGoToStep3 && (
-                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded text-xs leading-relaxed">
-                  ⚠️ <strong>Asistente bloqueado:</strong> Asegúrate de asignar las columnas obligatorias (ID Jugadora y Fecha), tener al menos una fila válida ("Nuevos" o "Actualizaciones") y omitir o corregir todas las filas con estado ERROR para continuar.
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded flex justify-between items-center">
+                  <div className="text-amber-800 text-xs leading-relaxed max-w-3xl">
+                    ⚠️ <strong>Asistente bloqueado:</strong> Hay {previewSummary.errores} fila(s) con ERROR. Asegúrate de asignar las columnas obligatorias, tener al menos una fila válida ("Nuevos" o "Actualizaciones") y omitir o corregir los errores para continuar.
+                  </div>
+                  {previewSummary.errores > 0 && (
+                    <button
+                      onClick={handleJumpToNextError}
+                      className="bg-white hover:bg-amber-100 text-amber-700 text-[11px] font-semibold py-1.5 px-3 border border-amber-300 rounded shadow-sm whitespace-nowrap"
+                    >
+                      Saltar al siguiente error &rarr;
+                    </button>
+                  )}
                 </div>
               )}
 

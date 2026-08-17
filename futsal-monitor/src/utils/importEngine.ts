@@ -12,6 +12,7 @@ import type {
   HistorialImportacion,
   ImportacionEstado,
   Wellness,
+  WellnessSemanalImportado,
   Temporada,
   Jugadora,
   AliasJugadora
@@ -28,6 +29,8 @@ export interface ValidationContext {
   jugadorasMap?: Record<string, string>
   temporadaActiva?: Temporada | null
   aliasesGoogleForms?: Map<string, { id_jugadora: string; activo: boolean }>
+  tipoCuestionario?: 'DIARIO' | 'SEMANAL'
+  existingSemanal?: WellnessSemanalImportado[]
 }
 
 export interface ValidationResult {
@@ -35,6 +38,8 @@ export interface ValidationResult {
   errorMsg?: string
   normalRow?: MappedWellnessRow
 }
+
+export type TipoCuestionarioWellness = 'DIARIO' | 'SEMANAL'
 
 /**
  * Parses raw CSV content with auto-detected or specified separators.
@@ -143,12 +148,15 @@ export async function ensureDefaultImportTemplate(): Promise<void> {
  * Normalizes header names for robust matching (accents, spaces, casing).
  */
 export function normalizarEncabezado(header: string): string {
+  if (!header) return ''
   return header
+    .replace(/^\uFEFF/, '') // Eliminar BOM UTF-8
     .trim()
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // Remove accents
-    .replace(/[_\s]+/g, " ")
+    .replace(/[.,/#!$%^&*;:{}=`~()?¿¡]/g, "") // Remove punctuation except - and _
+    .replace(/[-_\s]+/g, " ") // Normalize spaces, hyphens and underscores
     .trim();
 }
 
@@ -191,6 +199,59 @@ export function detectarMapeoWellness(headers: string[]): ColumnMapping[] {
       const allowedAliases = ALIASES[m.internalField].map(a => normalizarEncabezado(a))
       for (const alias of allowedAliases) {
         match = normalizedHeaders.find(h => h.normalized === alias)
+        if (match) break
+      }
+    }
+    if (match) {
+      m.excelHeader = match.original
+    }
+  })
+
+  return mapped
+}
+
+export function detectarMapeoWellnessSemanal(headers: string[]): ColumnMapping[] {
+  const ALIASES: Record<string, string[]> = {
+    id_jugadora: ['id jugadora', 'id', 'codigo jugadora', 'codigo', 'jugadora', 'nombre'],
+    fecha: ['fecha del entreno', 'fecha de entreno', 'fecha', 'dia', 'marca temporal', 'timestamp'],
+    recuperacion_semana: ['recuperacion general', 'recuperacion', 'valorarias tu recuperacion general esta semana', 'recuperacion general esta semana'],
+    sueno_semana: ['calidad de tu sueno esta semana', 'sueno semana', 'sueno', 'calidad de tu sueño'],
+    estres_fuera: ['estres fuera', 'nivel de estres fuera', 'estres', 'nivel de estres'],
+    energia_semana: ['energia durante los entrenamientos', 'energia', 'energia esta semana'],
+    animo_semana: ['estado de animo esta semana', 'estado de animo', 'animo'],
+    dolor_sn: ['has tenido dolor molestia o rigidez', 'has tenido dolor', 'dolor molestia', 'limitacion'],
+    dolor_texto_semana: ['indica que dolor', 'que dolor o molestia', 'indica que dolor o molestia has tenido'],
+    actividad_sn: ['actividad fisica adicional', 'actividad fisica', 'actividad adicional'],
+    actividad_texto_semana: ['tipo de actividad e intensidad', 'indica que tipo de actividad'],
+    preparada_semana: ['preparada', 'como de preparada te sientes', 'preparada para la proxima semana'],
+    sintomas_menstruales: ['sintomas menstruales', 'sintomas menstruales han afectado']
+  }
+
+  const mapped: ColumnMapping[] = [
+    { internalField: 'id_jugadora', excelHeader: null, required: true, label: 'ID Jugadora' },
+    { internalField: 'fecha', excelHeader: null, required: true, label: 'Fecha' },
+    { internalField: 'recuperacion_semana', excelHeader: null, required: false, label: 'Recuperación General (1-10)' },
+    { internalField: 'sueno_semana', excelHeader: null, required: false, label: 'Sueño Semana (1-10)' },
+    { internalField: 'estres_fuera', excelHeader: null, required: false, label: 'Estrés Fuera (1-10)' },
+    { internalField: 'energia_semana', excelHeader: null, required: false, label: 'Energía (1-10)' },
+    { internalField: 'animo_semana', excelHeader: null, required: false, label: 'Ánimo (1-10)' },
+    { internalField: 'preparada_semana', excelHeader: null, required: false, label: 'Preparada próxima semana (1-10)' },
+    { internalField: 'dolor_sn', excelHeader: null, required: false, label: '¿Dolor/Molestia? (Sí/No)' },
+    { internalField: 'dolor_texto_semana', excelHeader: null, required: false, label: 'Detalle de Dolor' },
+    { internalField: 'actividad_sn', excelHeader: null, required: false, label: '¿Actividad adicional? (Sí/No)' },
+    { internalField: 'actividad_texto_semana', excelHeader: null, required: false, label: 'Detalle actividad adicional' },
+    { internalField: 'sintomas_menstruales', excelHeader: null, required: false, label: 'Síntomas Menstruales (1-10)' },
+    { internalField: 'marca_temporal', excelHeader: null, required: false, label: 'Marca temporal' }
+  ]
+
+  const normalizedHeaders = headers.map(h => ({ original: h, normalized: normalizarEncabezado(h) }))
+
+  mapped.forEach(m => {
+    let match = normalizedHeaders.find(h => h.normalized === normalizarEncabezado(m.internalField))
+    if (!match && ALIASES[m.internalField]) {
+      const allowedAliases = ALIASES[m.internalField].map(a => normalizarEncabezado(a))
+      for (const alias of allowedAliases) {
+        match = normalizedHeaders.find(h => h.normalized.includes(alias))
         if (match) break
       }
     }
@@ -300,9 +361,6 @@ export function extraerEscala(value: RawCellValue): number | null {
 }
 
 /**
- * Fetches existing jugadoras directly from Dexie for validation context.
- */
-/**
  * Fetches existing jugadoras, active season, and google_forms aliases directly from Dexie for validation context.
  */
 export async function obtenerContextoValidacionWellness(dbInstance: FutsalDB = db): Promise<ValidationContext> {
@@ -357,10 +415,12 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
   }
 
   let resolvedIdJugadora: string
+  let metodoResolucion: string = ''
 
   // Priority 1: Exact internal ID (active)
   if (context.jugadorasIds.includes(rawAliasValue)) {
     resolvedIdJugadora = rawAliasValue
+    metodoResolucion = 'ID exacto'
   }
   // Priority 2: Active Alias
   else if (context.aliasesGoogleForms && context.aliasesGoogleForms.has(rawAliasValue)) {
@@ -369,13 +429,13 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
       return { isValid: false, errorMsg: `Alias '${rawAliasValue}' inactivo para el origen 'google_forms'` }
     }
     resolvedIdJugadora = aliasInfo.id_jugadora
+    metodoResolucion = 'Alias activo'
   }
   // Priority 3: Exact Normalized Name Match
   else {
     const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim()
     const aliasNormalizado = normalizar(rawAliasValue)
 
-    // Check in jugadorasMap
     const matches: string[] = []
     if (context.jugadorasMap) {
       for (const [id, nombre] of Object.entries(context.jugadorasMap)) {
@@ -387,6 +447,7 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
 
     if (matches.length === 1) {
       resolvedIdJugadora = matches[0]
+      metodoResolucion = 'Nombre normalizado'
     } else if (matches.length > 1) {
       return { isValid: false, errorMsg: `Ambigüedad: Múltiples jugadoras coinciden exactamente con el nombre '${rawAliasValue}'. Corrige el nombre o usa un alias.` }
     } else {
@@ -424,7 +485,8 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
     }
   }
 
-  const fields = ['calidad_sueno', 'fatiga', 'dolor_muscular', 'estres', 'estado_animo']
+  const isDiario = context.tipoCuestionario !== 'SEMANAL'
+  const fieldsDiario = ['calidad_sueno', 'fatiga', 'dolor_muscular', 'estres', 'estado_animo']
   const normalRow: MappedWellnessRow = {
     id_jugadora: resolvedIdJugadora,
     alias_origen: rawAliasValue,
@@ -437,24 +499,63 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
     estado_animo: null,
     dolor_especifico: row.dolor_especifico ? String(row.dolor_especifico).trim() : null,
     comentario_sesion: row.comentario_sesion ? String(row.comentario_sesion).trim() : null,
-    marca_temporal: row.marca_temporal ? String(row.marca_temporal).trim() : null
+    marca_temporal: row.marca_temporal ? String(row.marca_temporal).trim() : null,
+    metodo_resolucion_identidad: metodoResolucion
   }
 
   let hasAnyWellness = false
-  for (const f of fields) {
-    const val = row[f]
-    if (val !== null && val !== undefined && String(val).trim() !== '') {
-      const score = extraerEscala(val)
-      if (score === null || score < 1 || score > 10) {
-        return { isValid: false, errorMsg: `Valor '${val}' fuera de rango 1-10 en ${f}` }
-      }
-      ;(normalRow as any)[f] = score
-      hasAnyWellness = true
-    }
-  }
 
-  if (!hasAnyWellness) {
-    return { isValid: false, errorMsg: 'Fila sin ningún dato de wellness' }
+  if (isDiario) {
+    for (const f of fieldsDiario) {
+      const val = row[f]
+      if (val !== null && val !== undefined && String(val).trim() !== '') {
+        const score = extraerEscala(val)
+        if (score === null || score < 1 || score > 10) {
+          return { isValid: false, errorMsg: `Valor '${val}' fuera de rango 1-10 en ${f}` }
+        }
+        ;(normalRow as any)[f] = score
+        hasAnyWellness = true
+      }
+    }
+    if (!hasAnyWellness) {
+      return { isValid: false, errorMsg: 'Fila sin ningún dato de wellness diario' }
+    }
+  } else {
+    // SEMANAL
+    const fieldsSemanalScale = [
+      'recuperacion_semana', 'sueno_semana', 'estres_fuera', 'energia_semana', 'animo_semana', 'preparada_semana', 'sintomas_menstruales'
+    ]
+    for (const f of fieldsSemanalScale) {
+      const val = row[f]
+      if (val !== null && val !== undefined && String(val).trim() !== '') {
+        const score = extraerEscala(val)
+        if (score !== null && (score >= 1 && score <= 10)) {
+          ;(normalRow as any)[f] = score
+          hasAnyWellness = true
+        }
+      }
+    }
+
+    const parseBooleanLocal = (v: unknown) => {
+      const s = String(v ?? '').trim().toLowerCase()
+      if (s === 'si' || s === 'sí' || s === 'true' || s === '1' || s === 'yes') return true
+      if (s === 'no' || s === 'false' || s === '0') return false
+      return null
+    }
+
+    normalRow.dolor_sn = parseBooleanLocal(row.dolor_sn)
+    if (normalRow.dolor_sn !== null) hasAnyWellness = true
+    
+    normalRow.dolor_texto_semana = row.dolor_texto_semana ? String(row.dolor_texto_semana).trim() : null
+    
+    normalRow.actividad_sn = parseBooleanLocal(row.actividad_sn)
+    if (normalRow.actividad_sn !== null) hasAnyWellness = true
+    
+    normalRow.actividad_texto_semana = row.actividad_texto_semana ? String(row.actividad_texto_semana).trim() : null
+    
+    if (!hasAnyWellness) {
+      return { isValid: false, errorMsg: 'Fila sin ningún dato de wellness semanal válido' }
+    }
   }
 
   return { isValid: true, normalRow }
@@ -463,16 +564,28 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
 /**
  * Classifies a valid row against the existing Dexie records.
  */
-export function clasificarFilaImportacion(row: MappedWellnessRow, existingWellness: Wellness[]): 'NUEVO' | 'ACTUALIZACION_POSIBLE' | 'DUPLICADO_IDENTICO' {
+export function clasificarFilaImportacion(
+  row: MappedWellnessRow,
+  existingWellness: Wellness[],
+  context?: ValidationContext
+): 'NUEVO' | 'ACTUALIZACION_POSIBLE' | 'DUPLICADO_IDENTICO' {
+  
+  if (context?.tipoCuestionario === 'SEMANAL') {
+    const semana = getWeekId(row.fecha)
+    const match = context.existingSemanal?.find(w => w.id_jugadora === row.id_jugadora && getWeekId(w.fecha) === semana)
+    if (!match) return 'NUEVO'
+
+    return 'ACTUALIZACION_POSIBLE'
+  }
+  
   const match = existingWellness.find(w => w.id_jugadora === row.id_jugadora && w.fecha === row.fecha)
   if (!match) return 'NUEVO'
 
   const fields: (keyof MappedWellnessRow)[] = ['calidad_sueno', 'fatiga', 'dolor_muscular', 'estres', 'estado_animo', 'dolor_especifico', 'comentario_sesion']
   const isIdentical = fields.every(f => {
     let incomingVal = row[f]
-    let localVal = (match as any)[f] // comentario_sesion might not be in Wellness but we check
+    let localVal = (match as any)[f]
 
-    // Normalizar nulos, undefined y cadenas vacías a vacío
     if (incomingVal === null || incomingVal === undefined) incomingVal = ''
     if (localVal === null || localVal === undefined) localVal = ''
 
@@ -500,7 +613,8 @@ export function construirVistaPrevia(
   mapping: ColumnMapping[],
   existingWellness: Wellness[],
   jugadorasMap: Record<string, string>, // id_jugadora -> nombre
-  contextOverrides?: ValidationContext
+  contextOverrides?: ValidationContext,
+  omittedRowIndices?: Set<number>
 ): PreviewResult {
   const result: PreviewResult = {
     total: rawRows.length,
@@ -535,24 +649,28 @@ export function construirVistaPrevia(
 
     if (!val.isValid) {
       result.errores++
+      const baseEstado = 'ERROR'
+      const finalEstado = omittedRowIndices?.has(filaOriginal) ? 'OMITIDA' : baseEstado
+      if (finalEstado === 'OMITIDA') result.omitidos++
       result.rows.push({
         filaOriginal,
-        estado: 'ERROR',
+        estado: finalEstado,
+        prevEstado: baseEstado,
         id_jugadora: mappedRow.id_jugadora ? String(mappedRow.id_jugadora).trim().toUpperCase() : '',
         alias_origen: mappedRow.id_jugadora ? String(mappedRow.id_jugadora).trim() : undefined,
         id_temporada: context.temporadaActiva?.id_temporada,
         nombreJugadora: 'Jugadora no registrada',
-        fecha: mappedRow.fecha ? String(mappedRow.fecha) : '',
-        calidad_sueno: null,
-        fatiga: null,
-        dolor_muscular: null,
-        estres: null,
-        estado_animo: null,
+        fecha: normalizarFecha(mappedRow.fecha) || (mappedRow.fecha ? String(mappedRow.fecha) : ''),
+        calidad_sueno: extraerEscala(mappedRow.calidad_sueno),
+        fatiga: extraerEscala(mappedRow.fatiga),
+        dolor_muscular: extraerEscala(mappedRow.dolor_muscular),
+        estres: extraerEscala(mappedRow.estres),
+        estado_animo: extraerEscala(mappedRow.estado_animo),
         dolor_especifico: mappedRow.dolor_especifico ? String(mappedRow.dolor_especifico) : null,
         comentario_sesion: mappedRow.comentario_sesion ? String(mappedRow.comentario_sesion) : null,
-        mensaje: val.errorMsg || 'Error de validación',
+        mensaje: finalEstado === 'OMITIDA' ? 'Excluido manualmente por el usuario' : (val.errorMsg || 'Error de validación'),
         rowOriginal: rawRow
-      } as PreviewRow)
+      } as any) // Cast as any because prevEstado is not in types
       return
     }
 
@@ -561,9 +679,13 @@ export function construirVistaPrevia(
 
     if (fileKeys.has(fileKey)) {
       result.errores++
+      const baseEstado = 'ERROR'
+      const finalEstado = omittedRowIndices?.has(filaOriginal) ? 'OMITIDA' : baseEstado
+      if (finalEstado === 'OMITIDA') result.omitidos++
       result.rows.push({
         filaOriginal,
-        estado: 'ERROR',
+        estado: finalEstado,
+        prevEstado: baseEstado,
         id_jugadora: normRow.id_jugadora,
         alias_origen: normRow.alias_origen,
         id_temporada: normRow.id_temporada,
@@ -576,23 +698,26 @@ export function construirVistaPrevia(
         estado_animo: normRow.estado_animo,
         dolor_especifico: normRow.dolor_especifico,
         comentario_sesion: normRow.comentario_sesion,
-        mensaje: 'Duplicado dentro del archivo (misma fecha y jugadora)',
+        mensaje: finalEstado === 'OMITIDA' ? 'Excluido manualmente por el usuario' : 'Duplicado dentro del archivo (misma fecha y jugadora)',
         rowOriginal: rawRow,
         normalRow: normRow
-      } as PreviewRow)
+      } as any)
       return
     }
 
     fileKeys.add(fileKey)
 
     const clasificacion = clasificarFilaImportacion(normRow, existingWellness)
-    if (clasificacion === 'NUEVO') result.nuevos++
+    const finalEstado = omittedRowIndices?.has(filaOriginal) ? 'OMITIDA' : clasificacion
+    if (finalEstado === 'OMITIDA') result.omitidos++
+    else if (clasificacion === 'NUEVO') result.nuevos++
     else if (clasificacion === 'ACTUALIZACION_POSIBLE') result.actualizaciones++
     else if (clasificacion === 'DUPLICADO_IDENTICO') result.duplicados++
 
     result.rows.push({
       filaOriginal,
-      estado: clasificacion,
+      estado: finalEstado,
+      prevEstado: clasificacion,
       id_jugadora: normRow.id_jugadora,
       alias_origen: normRow.alias_origen,
       id_temporada: normRow.id_temporada,
@@ -605,15 +730,28 @@ export function construirVistaPrevia(
       estado_animo: normRow.estado_animo,
       dolor_especifico: normRow.dolor_especifico,
       comentario_sesion: normRow.comentario_sesion,
-      mensaje: clasificacion === 'NUEVO' ? 'Registro nuevo listo para importar' :
+      mensaje: finalEstado === 'OMITIDA' ? 'Excluido manualmente por el usuario' :
+               clasificacion === 'NUEVO' ? 'Registro nuevo listo para importar' :
                clasificacion === 'ACTUALIZACION_POSIBLE' ? 'Conflicto: ya existe un registro con datos diferentes' :
                'Duplicado idéntico (se omitirá automáticamente)',
       rowOriginal: rawRow,
       normalRow: normRow
-    } as PreviewRow)
+    } as any)
   })
 
   return result
+}
+
+export function detectarTipoCuestionario(headers: string[]): TipoCuestionarioWellness | null {
+  const mapeoDiario = detectarMapeoWellness(headers)
+  const metricasDiario = mapeoDiario.filter(m => m.excelHeader !== null && !['id_jugadora', 'fecha', 'marca_temporal', 'dolor_especifico', 'comentario_sesion'].includes(m.internalField))
+  if (metricasDiario.length >= 3) return 'DIARIO'
+
+  const mapeoSemanal = detectarMapeoWellnessSemanal(headers)
+  const metricasSemanal = mapeoSemanal.filter(m => m.excelHeader !== null && !['id_jugadora', 'fecha', 'marca_temporal', 'dolor_molestia', 'actividad_adicional'].includes(m.internalField))
+  if (metricasSemanal.length >= 3) return 'SEMANAL'
+
+  return null
 }
 
 /**
@@ -649,6 +787,7 @@ export async function aplicarImportacionWellness(
   sheetName: string,
   mappingName: string,
   backupName: string,
+  tipoCuestionario: 'DIARIO' | 'SEMANAL' = 'DIARIO',
   config?: FiltrosCarga,
   dbInstance: FutsalDB = db
 ): Promise<ImportOutcome> {
@@ -761,52 +900,40 @@ export async function aplicarImportacionWellness(
 
         if (row.estado === 'NUEVO') {
           const norm = row.normalRow!
-          const score = calcularScoreWellness(norm)
+          
+          if (tipoCuestionario === 'SEMANAL') {
+             const textos: Record<string, string> = {}
+             if (norm.dolor_texto_semana) textos['¿Has tenido dolor, molestia o rigidez que haya limitado algo esta semana?'] = norm.dolor_texto_semana
+             if (norm.actividad_texto_semana) textos['Indica qué tipo de actividad e intensidad (si has respondido Sí a la anterior)'] = norm.actividad_texto_semana
+             if (norm.marca_temporal) textos['Marca temporal'] = norm.marca_temporal
 
-          const textos: Record<string, string> = {}
-          if (norm.dolor_especifico) textos['Dolor especifico o nota importante (opcional)'] = norm.dolor_especifico
-          if (norm.comentario_sesion) textos['Comentario sobre la sesión (opcional)'] = norm.comentario_sesion
-          if (norm.marca_temporal) textos['Marca temporal'] = norm.marca_temporal
+             const metricas: Record<string, any> = {
+               '¿Cómo valorarías tu recuperación general esta semana?': { original: norm.recuperacion_semana, normalizado: norm.recuperacion_semana },
+               '¿Cómo ha sido la calidad de tu sueño esta semana?': { original: norm.sueno_semana, normalizado: norm.sueno_semana },
+               '¿Cómo ha sido tu nivel de estrés fuera del fútbol sala?': { original: norm.estres_fuera, normalizado: norm.estres_fuera },
+               '¿Cómo ha sido tu energía durante los entrenamientos y el partido?': { original: norm.energia_semana, normalizado: norm.energia_semana },
+               '¿Cómo valorarías tu estado de ánimo esta semana?': { original: norm.animo_semana, normalizado: norm.animo_semana },
+               '¿Has tenido dolor, molestia o rigidez que haya limitado algo esta semana?': { original: norm.dolor_sn, normalizado: norm.dolor_sn },
+               '¿Has realizado actividad física importante adicional al trabajo con el equipo?': { original: norm.actividad_sn, normalizado: norm.actividad_sn },
+               '¿Cómo de preparada te sientes para competir la próxima semana?': { original: norm.preparada_semana, normalizado: norm.preparada_semana },
+               'Si eres mujer, ¿los síntomas menstruales han afectado tu rendimiento o bienestar esta semana?': { original: norm.sintomas_menstruales, normalizado: norm.sintomas_menstruales }
+             }
 
-          const metricas: Record<string, any> = {
-            'Calidad de sueño': { original: norm.calidad_sueno, normalizado: norm.calidad_sueno },
-            'Fatiga': { original: norm.fatiga, normalizado: norm.fatiga },
-            'Dolor muscular': { original: norm.dolor_muscular, normalizado: norm.dolor_muscular },
-            'Estrés': { original: norm.estres, normalizado: norm.estres },
-            'Estado de ánimo': { original: norm.estado_animo, normalizado: norm.estado_animo }
-          }
-
-          await dbInstance.wellness_diario_importado.put({
-            id_jugadora: norm.id_jugadora,
-            fecha: norm.fecha,
-            id_temporada: temporadaActiva?.id_temporada,
-            origen_alias: 'google_forms',
-            alias_origen: norm.alias_origen,
-            metricas,
-            textos,
-            indice_diario: score
-          })
-
-          await dbInstance.wellness.put({
-            id_jugadora: norm.id_jugadora,
-            fecha: norm.fecha,
-            calidad_sueno: norm.calidad_sueno as number,
-            fatiga: norm.fatiga as number,
-            dolor_muscular: norm.dolor_muscular as number,
-            estres: norm.estres as number,
-            estado_animo: norm.estado_animo as number,
-            dolor_especifico: norm.dolor_especifico || '',
-            score_wellness: score,
-            id_temporada: temporadaActiva?.id_temporada,
-            origen_alias: 'google_forms',
-            alias_origen: norm.alias_origen
-          })
-          inserted++
-        } else if (row.estado === 'ACTUALIZACION_POSIBLE') {
-          if (strategy === 'omit') {
-            skipped++
-          } else if (strategy === 'update') {
-            const norm = row.normalRow!
+             // Semana is implicitly derived from fecha
+             
+             await dbInstance.wellness_semanal_importado.put({
+               id_jugadora: norm.id_jugadora,
+               fecha: norm.fecha,
+               id_temporada: temporadaActiva?.id_temporada,
+               origen_alias: 'google_forms',
+               alias_origen: norm.alias_origen,
+               metricas,
+               textos,
+               indice_semanal: null // Will be recalculated by the derived engine
+             })
+             inserted++
+          } else {
+            // DIARIO
             const score = calcularScoreWellness(norm)
 
             const textos: Record<string, string> = {}
@@ -822,26 +949,65 @@ export async function aplicarImportacionWellness(
               'Estado de ánimo': { original: norm.estado_animo, normalizado: norm.estado_animo }
             }
 
-            const existing = await dbInstance.wellness.where({ id_jugadora: norm.id_jugadora, fecha: norm.fecha }).first()
-            if (existing) {
-              await dbInstance.wellness.put({
-                id: existing.id,
-                id_jugadora: norm.id_jugadora,
-                fecha: norm.fecha,
-                calidad_sueno: norm.calidad_sueno as number,
-                fatiga: norm.fatiga as number,
-                dolor_muscular: norm.dolor_muscular as number,
-                estres: norm.estres as number,
-                estado_animo: norm.estado_animo as number,
-                dolor_especifico: norm.dolor_especifico || '',
-                score_wellness: score,
-                id_temporada: temporadaActiva?.id_temporada,
-                origen_alias: 'google_forms',
-                alias_origen: norm.alias_origen
-              })
+            await dbInstance.wellness_diario_importado.put({
+              id_jugadora: norm.id_jugadora,
+              fecha: norm.fecha,
+              id_temporada: temporadaActiva?.id_temporada,
+              origen_alias: 'google_forms',
+              alias_origen: norm.alias_origen,
+              metricas,
+              textos,
+              indice_diario: score
+            })
 
-              const existingImportado = await dbInstance.wellness_diario_importado.where({ id_jugadora: norm.id_jugadora, fecha: norm.fecha }).first()
-              await dbInstance.wellness_diario_importado.put({
+            await dbInstance.wellness.put({
+              id_jugadora: norm.id_jugadora,
+              fecha: norm.fecha,
+              calidad_sueno: norm.calidad_sueno as number,
+              fatiga: norm.fatiga as number,
+              dolor_muscular: norm.dolor_muscular as number,
+              estres: norm.estres as number,
+              estado_animo: norm.estado_animo as number,
+              dolor_especifico: norm.dolor_especifico || '',
+              score_wellness: score,
+              id_temporada: temporadaActiva?.id_temporada,
+              origen_alias: 'google_forms',
+              alias_origen: norm.alias_origen
+            })
+            inserted++
+          }
+        } else if (row.estado === 'ACTUALIZACION_POSIBLE') {
+          if (strategy === 'omit') {
+            skipped++
+          } else if (strategy === 'update') {
+            const norm = row.normalRow!
+            
+            if (tipoCuestionario === 'SEMANAL') {
+              const textos: Record<string, string> = {}
+              if (norm.dolor_texto_semana) textos['¿Has tenido dolor, molestia o rigidez que haya limitado algo esta semana?'] = norm.dolor_texto_semana
+              if (norm.actividad_texto_semana) textos['Indica qué tipo de actividad e intensidad (si has respondido Sí a la anterior)'] = norm.actividad_texto_semana
+              if (norm.marca_temporal) textos['Marca temporal'] = norm.marca_temporal
+
+              const metricas: Record<string, any> = {
+                '¿Cómo valorarías tu recuperación general esta semana?': { original: norm.recuperacion_semana, normalizado: norm.recuperacion_semana },
+                '¿Cómo ha sido la calidad de tu sueño esta semana?': { original: norm.sueno_semana, normalizado: norm.sueno_semana },
+                '¿Cómo ha sido tu nivel de estrés fuera del fútbol sala?': { original: norm.estres_fuera, normalizado: norm.estres_fuera },
+                '¿Cómo ha sido tu energía durante los entrenamientos y el partido?': { original: norm.energia_semana, normalizado: norm.energia_semana },
+                '¿Cómo valorarías tu estado de ánimo esta semana?': { original: norm.animo_semana, normalizado: norm.animo_semana },
+                '¿Has tenido dolor, molestia o rigidez que haya limitado algo esta semana?': { original: norm.dolor_sn, normalizado: norm.dolor_sn },
+                '¿Has realizado actividad física importante adicional al trabajo con el equipo?': { original: norm.actividad_sn, normalizado: norm.actividad_sn },
+                '¿Cómo de preparada te sientes para competir la próxima semana?': { original: norm.preparada_semana, normalizado: norm.preparada_semana },
+                'Si eres mujer, ¿los síntomas menstruales han afectado tu rendimiento o bienestar esta semana?': { original: norm.sintomas_menstruales, normalizado: norm.sintomas_menstruales }
+              }
+
+              const semana = getWeekId(norm.fecha)
+              // Para encontrar el importado semanal, la primary key de IndexedDB requiere consulta
+              // Necesitaríamos buscar el id del semanal que coicide en semana.
+              // Como Dexie no tiene index simple por semana_deportiva, buscamos todos los de la jugadora y filtramos
+              const allDeJugadora = await dbInstance.wellness_semanal_importado.where({ id_jugadora: norm.id_jugadora }).toArray()
+              const existingImportado = allDeJugadora.find(w => getWeekId(w.fecha) === semana)
+              
+              await dbInstance.wellness_semanal_importado.put({
                 id: existingImportado?.id,
                 id_jugadora: norm.id_jugadora,
                 fecha: norm.fecha,
@@ -850,26 +1016,75 @@ export async function aplicarImportacionWellness(
                 alias_origen: norm.alias_origen,
                 metricas,
                 textos,
-                indice_diario: score
+                indice_semanal: existingImportado?.indice_semanal ?? null
               })
               updated++
             } else {
-              // fallback put if missing
-              await dbInstance.wellness.put({
-                id_jugadora: norm.id_jugadora,
-                fecha: norm.fecha,
-                calidad_sueno: norm.calidad_sueno as number,
-                fatiga: norm.fatiga as number,
-                dolor_muscular: norm.dolor_muscular as number,
-                estres: norm.estres as number,
-                estado_animo: norm.estado_animo as number,
-                dolor_especifico: norm.dolor_especifico || '',
-                score_wellness: score,
-                id_temporada: temporadaActiva?.id_temporada,
-                origen_alias: 'google_forms',
-                alias_origen: norm.alias_origen
-              })
-              inserted++
+              // DIARIO
+              const score = calcularScoreWellness(norm)
+
+              const textos: Record<string, string> = {}
+              if (norm.dolor_especifico) textos['Dolor especifico o nota importante (opcional)'] = norm.dolor_especifico
+              if (norm.comentario_sesion) textos['Comentario sobre la sesión (opcional)'] = norm.comentario_sesion
+              if (norm.marca_temporal) textos['Marca temporal'] = norm.marca_temporal
+
+              const metricas: Record<string, any> = {
+                'Calidad de sueño': { original: norm.calidad_sueno, normalizado: norm.calidad_sueno },
+                'Fatiga': { original: norm.fatiga, normalizado: norm.fatiga },
+                'Dolor muscular': { original: norm.dolor_muscular, normalizado: norm.dolor_muscular },
+                'Estrés': { original: norm.estres, normalizado: norm.estres },
+                'Estado de ánimo': { original: norm.estado_animo, normalizado: norm.estado_animo }
+              }
+
+              const existing = await dbInstance.wellness.where({ id_jugadora: norm.id_jugadora, fecha: norm.fecha }).first()
+              if (existing) {
+                await dbInstance.wellness.put({
+                  id: existing.id,
+                  id_jugadora: norm.id_jugadora,
+                  fecha: norm.fecha,
+                  calidad_sueno: norm.calidad_sueno as number,
+                  fatiga: norm.fatiga as number,
+                  dolor_muscular: norm.dolor_muscular as number,
+                  estres: norm.estres as number,
+                  estado_animo: norm.estado_animo as number,
+                  dolor_especifico: norm.dolor_especifico || '',
+                  score_wellness: score,
+                  id_temporada: temporadaActiva?.id_temporada,
+                  origen_alias: 'google_forms',
+                  alias_origen: norm.alias_origen
+                })
+
+                const existingImportado = await dbInstance.wellness_diario_importado.where({ id_jugadora: norm.id_jugadora, fecha: norm.fecha }).first()
+                await dbInstance.wellness_diario_importado.put({
+                  id: existingImportado?.id,
+                  id_jugadora: norm.id_jugadora,
+                  fecha: norm.fecha,
+                  id_temporada: temporadaActiva?.id_temporada,
+                  origen_alias: 'google_forms',
+                  alias_origen: norm.alias_origen,
+                  metricas,
+                  textos,
+                  indice_diario: score
+                })
+                updated++
+              } else {
+                // fallback put if missing
+                await dbInstance.wellness.put({
+                  id_jugadora: norm.id_jugadora,
+                  fecha: norm.fecha,
+                  calidad_sueno: norm.calidad_sueno as number,
+                  fatiga: norm.fatiga as number,
+                  dolor_muscular: norm.dolor_muscular as number,
+                  estres: norm.estres as number,
+                  estado_animo: norm.estado_animo as number,
+                  dolor_especifico: norm.dolor_especifico || '',
+                  score_wellness: score,
+                  id_temporada: temporadaActiva?.id_temporada,
+                  origen_alias: 'google_forms',
+                  alias_origen: norm.alias_origen
+                })
+                inserted++
+              }
             }
           }
         }
@@ -958,6 +1173,7 @@ export async function aplicarImportacionWellness(
 }
 
 export interface ConfirmImportParams {
+  tipoCuestionario: 'DIARIO' | 'SEMANAL'
   downloadedBackupName: string | null
   userConfirmedBackup: boolean
   previewData: PreviewRow[]
@@ -990,7 +1206,8 @@ export async function confirmarYEjecutarImportacion(params: ConfirmImportParams)
       params.filename,
       params.sheetName,
       params.mappingName,
-      params.downloadedBackupName
+      params.downloadedBackupName,
+      params.tipoCuestionario
     )
 
     if (!outcome.success) {
