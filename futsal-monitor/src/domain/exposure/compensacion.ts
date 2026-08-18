@@ -10,10 +10,14 @@ import type { CompensacionPostPartido, RPE_Partido } from '@/types'
  * @returns Déficit de minutos o null si no hay objetivo
  */
 export function calcularDeficitCompensacion(
-  minutosJugados: number,
+  minutosJugados: number | null | undefined,
   minutosObjetivo?: number | null
 ): number | null {
   if (minutosObjetivo === undefined || minutosObjetivo === null) {
+    return null
+  }
+  
+  if (minutosJugados === undefined || minutosJugados === null) {
     return null
   }
   

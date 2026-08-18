@@ -1,138 +1,68 @@
 import { describe, it, expect } from 'vitest'
-import { esSesionRPECompleta, calcularCompletitudSesion, calcularCompletitudSemana } from './monitoring'
-import type { Jugadora, Sesion, SesionRPE } from '@/types'
+import { evaluarCompletitudDatos } from './completitud'
+import type { Jugadora, Partido, RPE_Partido, Wellness, SesionRPE } from '@/types'
 
-describe('BLOQUE D — Completitud de sesiones y semanas (completitud.test.ts)', () => {
-  it('1. completa + RPE y duración válidos: completo (true)', () => {
-    const rpe: SesionRPE = {
-      id_sesion: 'S1',
-      id_jugadora: 'J1',
-      fecha: '2026-08-01',
-      asistencia: 'completa',
-      rpe: 7,
-      duracion_min: 60
-    }
-    expect(esSesionRPECompleta(rpe)).toBe(true)
+describe('Data Quality: evaluarCompletitudDatos', () => {
+  const jugadoras: Jugadora[] = [
+    { id_jugadora: 'j1', nombre: 'Jugadora 1', activa: true, dorsal: 1, posicion: 'Ala' }
+  ]
+
+  const hoyLocal = '2026-08-18'
+
+  it('debe detectar partido pasado sin fila rpe_partido como pendiente de minutos', () => {
+    const partidos: Partido[] = [{ id_partido: 'p1', fecha: '2026-08-17', rival: 'Rival', competicion: '', lugar: 'Local', resultado: '' }]
+    const report = evaluarCompletitudDatos(jugadoras, [], partidos, [], [], hoyLocal)
+    
+    expect(report.alertas).toHaveLength(1)
+    expect(report.alertas[0].estado).toBe('pendiente')
+    expect(report.alertas[0].tipo).toBe('minutos_partido')
+    expect(report.alertas[0].titulo).toBe('Participación/minutos de partido pendientes de registrar')
   })
 
-  it('2. parcial + RPE y duración válidos: completo (true)', () => {
-    const rpe: SesionRPE = {
-      id_sesion: 'S1',
-      id_jugadora: 'J1',
-      fecha: '2026-08-01',
-      asistencia: 'parcial',
-      rpe: 5,
-      duracion_min: 30
-    }
-    expect(esSesionRPECompleta(rpe)).toBe(true)
+  it('debe excluir partidos futuros', () => {
+    const partidos: Partido[] = [{ id_partido: 'p1', fecha: '2026-08-20', rival: 'Futuro', competicion: '', lugar: 'Local', resultado: '' }]
+    const report = evaluarCompletitudDatos(jugadoras, [], partidos, [], [], hoyLocal)
+    
+    expect(report.alertas).toHaveLength(0)
   })
 
-  it('3. parcial sin RPE: incompleto (false)', () => {
-    const rpe: SesionRPE = {
-      id_sesion: 'S1',
-      id_jugadora: 'J1',
-      fecha: '2026-08-01',
-      asistencia: 'parcial',
-      rpe: null,
-      duracion_min: 30
-    }
-    expect(esSesionRPECompleta(rpe)).toBe(false)
+  it('debe marcar como "No aplicable" si la jugadora no fue convocada o minutos = 0 explícito', () => {
+    const partidos: Partido[] = [{ id_partido: 'p1', fecha: '2026-08-17', rival: 'Rival', competicion: '', lugar: 'Local', resultado: '' }]
+    const rpes: RPE_Partido[] = [{
+      id_partido: 'p1', id_jugadora: 'j1', fecha: '2026-08-17',
+      participacion: 'no_convocada', minutos_jugados: 0, rpe: null, carga_ua: null
+    }]
+    
+    const report = evaluarCompletitudDatos(jugadoras, [], partidos, rpes, [], hoyLocal)
+    
+    expect(report.alertas).toHaveLength(1)
+    expect(report.alertas[0].estado).toBe('no_aplicable')
   })
 
-  it('4. ausente: completo como asistencia, sin carga (true)', () => {
-    const rpe: SesionRPE = {
-      id_sesion: 'S1',
-      id_jugadora: 'J1',
-      fecha: '2026-08-01',
-      asistencia: 'ausente',
-      rpe: null,
-      duracion_min: null
-    }
-    expect(esSesionRPECompleta(rpe)).toBe(true)
+  it('debe marcar como RPE pendiente si jugó minutos pero rpe es nulo', () => {
+    const partidos: Partido[] = [{ id_partido: 'p1', fecha: '2026-08-17', rival: 'Rival', competicion: '', lugar: 'Local', resultado: '' }]
+    const rpes: RPE_Partido[] = [{
+      id_partido: 'p1', id_jugadora: 'j1', fecha: '2026-08-17',
+      participacion: 'completa', minutos_jugados: 20, rpe: null, carga_ua: null
+    }]
+    
+    const report = evaluarCompletitudDatos(jugadoras, [], partidos, rpes, [], hoyLocal)
+    
+    expect(report.alertas[0].tipo).toBe('rpe_partido')
+    expect(report.alertas[0].estado).toBe('pendiente')
+    expect(report.alertas[0].titulo).toBe('RPE competitivo pendiente')
   })
 
-  it('5. no_convocada: completo como asistencia, sin carga (true)', () => {
-    const rpe: SesionRPE = {
-      id_sesion: 'S1',
-      id_jugadora: 'J1',
-      fecha: '2026-08-01',
-      asistencia: 'no_convocada'
-    }
-    expect(esSesionRPECompleta(rpe)).toBe(true)
-  })
-
-  it('6. excusada: completo como asistencia, sin carga (true)', () => {
-    const rpe: SesionRPE = {
-      id_sesion: 'S1',
-      id_jugadora: 'J1',
-      fecha: '2026-08-01',
-      asistencia: 'excusada'
-    }
-    expect(esSesionRPECompleta(rpe)).toBe(true)
-  })
-
-  it('7. sin_registrar: incompleto (false)', () => {
-    const rpe: SesionRPE = {
-      id_sesion: 'S1',
-      id_jugadora: 'J1',
-      fecha: '2026-08-01',
-      asistencia: 'sin_registrar'
-    }
-    expect(esSesionRPECompleta(rpe)).toBe(false)
-  })
-
-  it('8. legado sin asistencia con RPE y duración: completo (true)', () => {
-    const rpe: SesionRPE = {
-      id_sesion: 'S1',
-      id_jugadora: 'J1',
-      fecha: '2026-08-01',
-      rpe: 6,
-      duracion_min: 45
-    }
-    expect(esSesionRPECompleta(rpe)).toBe(true)
-  })
-
-  it('9. legado sin asistencia sin RPE o duración: incompleto (false)', () => {
-    const rpe: SesionRPE = {
-      id_sesion: 'S1',
-      id_jugadora: 'J1',
-      fecha: '2026-08-01',
-      rpe: null,
-      duracion_min: 45
-    }
-    expect(esSesionRPECompleta(rpe)).toBe(false)
-  })
-
-  it('10. calcularCompletitudSemana con combinación de estados', () => {
-    const jugadoras: Jugadora[] = [
-      { id_jugadora: 'J1', nombre: 'Ana', fecha_nacimiento: '2000-01-01', posicion: 'Ala', altura_cm: 165, peso_kg: 55, imc: 20, grasa: 15, anos_experiencia_futsal: 5, historial_lesional: '', notas: '', activa: true },
-      { id_jugadora: 'J2', nombre: 'Bea', fecha_nacimiento: '2000-01-01', posicion: 'Pivot', altura_cm: 170, peso_kg: 60, imc: 20, grasa: 15, anos_experiencia_futsal: 5, historial_lesional: '', notas: '', activa: true }
-    ]
-    const sesiones: Sesion[] = [
-      { id_sesion: 'S1', fecha: '2026-08-01', tipo_dia: 'Entreno', tipo_sesion: 'Fisico', objetivo_principal: '', observaciones_grupo: '' }
-    ]
-    const rpeSesiones: SesionRPE[] = [
-      { id_sesion: 'S1', id_jugadora: 'J1', asistencia: 'completa', rpe: 7, duracion_min: 60, fecha: '2026-08-01' },
-      { id_sesion: 'S1', id_jugadora: 'J2', asistencia: 'ausente', fecha: '2026-08-01' }
+  it('debe contar wellness correctamente dentro de los últimos 7 días y excluir futuros', () => {
+    const wellness: Wellness[] = [
+      { id_wellness: 'w1', id_jugadora: 'j1', fecha: '2026-08-18', sueno: 5, estres: 5, fatiga: 5, dolor_muscular: 5, humor: 5, puntuacion_total: 25 },
+      { id_wellness: 'w2', id_jugadora: 'j1', fecha: '2026-08-15', sueno: 5, estres: 5, fatiga: 5, dolor_muscular: 5, humor: 5, puntuacion_total: 25 },
+      { id_wellness: 'w3', id_jugadora: 'j1', fecha: '2026-08-20', sueno: 5, estres: 5, fatiga: 5, dolor_muscular: 5, humor: 5, puntuacion_total: 25 }, // futuro
+      { id_wellness: 'w4', id_jugadora: 'j1', fecha: '2026-08-10', sueno: 5, estres: 5, fatiga: 5, dolor_muscular: 5, humor: 5, puntuacion_total: 25 }, // antiguo
     ]
 
-    // Ambos están completados (uno asistió, otro estuvo ausente registrado) -> 100% completitud
-    const pct = calcularCompletitudSemana(jugadoras, sesiones, rpeSesiones)
-    expect(pct).toBe(100)
-  })
-
-  it('11. calcularCompletitudSesion con jugadora sin registrar', () => {
-    const jugadoras: Jugadora[] = [
-      { id_jugadora: 'J1', nombre: 'Ana', fecha_nacimiento: '2000-01-01', posicion: 'Ala', altura_cm: 165, peso_kg: 55, imc: 20, grasa: 15, anos_experiencia_futsal: 5, historial_lesional: '', notas: '', activa: true },
-      { id_jugadora: 'J2', nombre: 'Bea', fecha_nacimiento: '2000-01-01', posicion: 'Pivot', altura_cm: 170, peso_kg: 60, imc: 20, grasa: 15, anos_experiencia_futsal: 5, historial_lesional: '', notas: '', activa: true }
-    ]
-    const rpeSesiones: SesionRPE[] = [
-      { id_sesion: 'S1', id_jugadora: 'J1', asistencia: 'completa', rpe: 7, duracion_min: 60, fecha: '2026-08-01' },
-      { id_sesion: 'S1', id_jugadora: 'J2', asistencia: 'sin_registrar', fecha: '2026-08-01' }
-    ]
-
-    // 1 de 2 completas -> 50% completitud
-    const pct = calcularCompletitudSesion(jugadoras, rpeSesiones)
-    expect(pct).toBe(50)
+    const report = evaluarCompletitudDatos(jugadoras, wellness, [], [], [], hoyLocal)
+    expect(report.wellness).toHaveLength(1)
+    expect(report.wellness[0].registros_ultimos_7_dias).toBe(2)
   })
 })

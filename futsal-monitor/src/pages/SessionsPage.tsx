@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useStore } from '@/store/store'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { Filters } from '@/components/shared/Filters'
 import { Modal } from '@/components/shared/Modal'
@@ -9,7 +10,11 @@ import { calcularCargaUA, calcularCargaMediaRealizada } from '@/domain/calculati
 import type { Sesion, TipoDia, TipoSesion, SesionRPE } from '@/types'
 import { getTodayLocalISO } from '@/domain/dates/dates'
 import { WeeklyCalendar } from '@/components/planning/WeeklyCalendar'
+
 export function SessionsPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  
   const { sesiones, partidos, jugadoras, sesion_rpe, filters, addSesion, updateSesion } = useStore()
   const [view, setView] = useState<'plan' | 'historial'>('plan')
   const [modalOpen, setModalOpen] = useState(false)
@@ -55,10 +60,34 @@ export function SessionsPage() {
     }
   }, [rpeSession, sesion_rpe, activas])
 
-  const openRpeModal = (s: Sesion) => {
+  const openRpeModal = (s: Sesion, focusJugadoraId?: string) => {
     setRpeSession(s)
     setRpeModalOpen(true)
+    
+    if (focusJugadoraId) {
+      setTimeout(() => {
+        const row = document.getElementById(`rpe-sesion-row-${focusJugadoraId}`)
+        if (row) {
+          row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          row.classList.add('bg-amber-50')
+          setTimeout(() => row.classList.remove('bg-amber-50'), 2000)
+        }
+      }, 100)
+    }
   }
+
+  useEffect(() => {
+    const state = location.state as any
+    if (state?.openRpeSesionId && sesiones.length > 0) {
+      const sesion = sesiones.find(s => s.id_sesion === state.openRpeSesionId)
+      if (sesion) {
+        setTimeout(() => {
+          openRpeModal(sesion, state.focusJugadoraId)
+        }, 100)
+      }
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location.state, navigate, location.pathname, sesiones])
 
   const { saveRpeBatch, cancelSesion, duplicateSesion } = useStore()
   const handleCrearCompensatorio = async (jugadora: import('@/types').Jugadora) => {
@@ -402,7 +431,7 @@ export function SessionsPage() {
             const cargaVal = calcularCargaUA(rpeVal, durVal)
 
             return (
-              <div key={j.id_jugadora} className="py-2.5 border-b border-surface-100 space-y-1.5">
+              <div key={j.id_jugadora} id={`rpe-sesion-row-${j.id_jugadora}`} className="py-2.5 border-b border-surface-100 space-y-1.5 transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-surface-700">{j.nombre}</span>

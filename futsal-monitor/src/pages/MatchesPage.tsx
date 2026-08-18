@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useStore } from '@/store/store'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { Filters } from '@/components/shared/Filters'
 import { Modal } from '@/components/shared/Modal'
@@ -8,6 +9,9 @@ import type { Partido, ParticipacionPartido, RPE_Partido, CompensacionPostPartid
 import { calcularDeficitCompensacion, inferirEstadoCompensacion } from '@/domain/exposure/compensacion'
 
 export function MatchesPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  
   const { 
     partidos, rpe_partido, jugadoras, filters, compensacion_postpartido, 
     addPartido, updatePartido, saveRpePartidoBatch, upsertCompensacionPostPartido 
@@ -46,7 +50,7 @@ export function MatchesPage() {
     return true
   })
 
-  const openRpeModal = (partidoId: string) => {
+  const openRpeModal = (partidoId: string, focusJugadoraId?: string) => {
     setRpePartidoId(partidoId)
     const existingRpes = rpe_partido.filter(r => r.id_partido === partidoId)
     
@@ -74,7 +78,31 @@ export function MatchesPage() {
     setBatchForm(initialForm)
     setErrorMsg('')
     setRpeModalOpen(true)
+    
+    if (focusJugadoraId) {
+      setTimeout(() => {
+        const row = document.getElementById(`rpe-row-${focusJugadoraId}`)
+        if (row) {
+          row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          row.classList.add('bg-amber-50')
+          setTimeout(() => row.classList.remove('bg-amber-50'), 2000)
+        }
+      }, 100)
+    }
   }
+
+  // Handle auto-open from DataQualityPage navigation
+  useEffect(() => {
+    const state = location.state as any
+    if (state?.openRpePartidoId) {
+      // Small timeout to ensure DOM is ready
+      setTimeout(() => {
+        openRpeModal(state.openRpePartidoId, state.focusJugadoraId)
+      }, 100)
+      // Clear state so it doesn't reopen on refresh
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location.state, navigate, location.pathname, rpe_partido, activePlayers])
 
   const handleUpdatePlayerForm = (id: string, key: keyof PlayerForm, value: any) => {
     setBatchForm(prev => {
@@ -175,8 +203,13 @@ export function MatchesPage() {
     
     // Obtener los minutos jugados del rpe_partido actual para recalcular déficit exacto
     const rpeInfo = rpe_partido.find(r => r.id_partido === compPartidoId && r.id_jugadora === id_jugadora)
-    const minJugados = rpeInfo?.minutos_jugados || 0
+    const minJugados = rpeInfo?.minutos_jugados ?? null
     
+    if (minJugados === null) {
+      alert("No se puede guardar una compensación si los minutos jugados están pendientes.")
+      return
+    }
+
     const deficit = calcularDeficitCompensacion(minJugados, data.minutos_objetivo)
     const estadoReal = inferirEstadoCompensacion(deficit, data.estado || 'pendiente')
     
@@ -330,7 +363,7 @@ export function MatchesPage() {
                 const isModificada = data.participacion === 'modificada'
                 
                 return (
-                  <tr key={j.id_jugadora} className="hover:bg-surface-50 transition-colors">
+                  <tr key={j.id_jugadora} id={`rpe-row-${j.id_jugadora}`} className="hover:bg-surface-50 transition-colors">
                     <td className="px-3 py-2 font-medium">{j.nombre}</td>
                     <td className="px-3 py-2">
                       <select 
@@ -432,16 +465,18 @@ export function MatchesPage() {
                 const rpeData = rpe_partido.find(r => r.id_partido === compPartidoId && r.id_jugadora === j.id_jugadora)
                 const compData = compForms[j.id_jugadora] || {}
                 
-                const mins = rpeData?.minutos_jugados || 0
+                const mins = rpeData?.minutos_jugados ?? null
                 const srpe = rpeData?.carga_ua || 0
                 const participacion = rpeData?.participacion || 'Sin registrar'
+                
+                const isPending = mins === null
                 
                 return (
                   <tr key={j.id_jugadora} className="hover:bg-surface-50 transition-colors">
                     <td className="px-3 py-2 font-medium">{j.nombre}</td>
                     <td className="px-3 py-2 text-[10px] text-surface-500">
                       <div>Part: {participacion.replace(/_/g, ' ')}</div>
-                      <div>Min: {mins}' | sRPE: {srpe} UA</div>
+                      <div>Min: {isPending ? <span className="text-amber-600">Pendiente</span> : `${mins}'`} | sRPE: {srpe} UA</div>
                     </td>
                     <td className="px-3 py-2 text-center">
                       <div className="flex flex-col gap-1 items-center">
@@ -464,13 +499,14 @@ export function MatchesPage() {
                       </div>
                     </td>
                     <td className="px-3 py-2 text-center font-mono font-bold text-rose-600">
-                      {compData.deficit_minutos !== undefined && compData.deficit_minutos !== null ? `${compData.deficit_minutos}'` : '—'}
+                      {isPending ? <span className="text-amber-500 font-sans font-medium text-[9px]">Pendiente de<br/>registrar minutos</span> : (compData.deficit_minutos !== undefined && compData.deficit_minutos !== null ? `${compData.deficit_minutos}'` : '—')}
                     </td>
                     <td className="px-3 py-2 text-center">
                       <select 
                         value={compData.estado || 'pendiente'}
+                        disabled={isPending}
                         onChange={(e) => handleUpdateCompForm(j.id_jugadora, 'estado', e.target.value)}
-                        className="border border-surface-200 rounded px-2 py-1 text-[10px]"
+                        className="border border-surface-200 rounded px-2 py-1 text-[10px] disabled:opacity-50"
                       >
                         <option value="pendiente">Pendiente</option>
                         <option value="planificada">Planificada</option>
@@ -481,7 +517,8 @@ export function MatchesPage() {
                     <td className="px-3 py-2">
                       <button 
                         onClick={() => handleSaveCompensacion(j.id_jugadora)}
-                        className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-2 py-1 rounded font-medium text-[10px]"
+                        disabled={isPending}
+                        className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-2 py-1 rounded font-medium text-[10px] disabled:opacity-50 disabled:hover:bg-indigo-50"
                       >
                         Guardar
                       </button>
