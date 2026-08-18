@@ -7,6 +7,7 @@ import { ROUTES } from '@/constants/routes'
 
 import { LoginPage } from '@/pages/LoginPage'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { DataQualityPage } from '@/pages/DataQualityPage'
 import { PlayersPage } from '@/pages/PlayersPage'
 import { PlayerProfilePage } from '@/pages/PlayerProfilePage'
 import { WellnessPage } from '@/pages/WellnessPage'
@@ -42,6 +43,7 @@ const SuspenseWrapper = ({ children }: { children: React.ReactNode }) => (
 
 const routes = [
   { path: ROUTES.DASHBOARD, Component: DashboardPage },
+  { path: ROUTES.CALIDAD_DATOS, Component: DataQualityPage },
   { path: ROUTES.JUGADORAS, Component: PlayersPage },
   { path: ROUTES.JUGADORA_PROFILE, Component: PlayerProfilePage },
   { path: ROUTES.WELLNESS, Component: WellnessPage },

@@ -684,3 +684,17 @@ export interface AliasJugadora {
   fecha_baja?: string
   notas?: string
 }
+
+export interface CompensacionPostPartido {
+  id?: number
+  id_partido: string
+  id_jugadora: string
+  minutos_objetivo?: number | null
+  deficit_minutos?: number | null
+  estado: 'pendiente' | 'planificada' | 'realizada' | 'omitida'
+  id_sesion?: string | null
+  tipo_compensacion?: string | null
+  observaciones?: string | null
+  created_at: string
+  updated_at: string
+}

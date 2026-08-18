@@ -2,6 +2,7 @@ export const ROUTES = {
   LOGIN: '/login',
   DASHBOARD: '/',
   SEGUIMIENTO: '/seguimiento',
+  CALIDAD_DATOS: '/calidad-datos',
   JUGADORAS: '/jugadoras',
   JUGADORA_PROFILE: '/jugadoras/:id',
   WELLNESS: '/wellness',

@@ -3,6 +3,7 @@ import { ROUTES } from '@/constants/routes'
 
 const navItems = [
   { to: ROUTES.DASHBOARD, label: 'Dashboard', icon: '⊞' },
+  { to: ROUTES.CALIDAD_DATOS, label: 'Calidad de Datos', icon: '✓' },
   { to: ROUTES.SEGUIMIENTO, label: 'Panel Hoy', icon: '◈' },
   { to: ROUTES.DECISION_DIARIA, label: 'Decisión diaria', icon: '⚡' },
   { to: ROUTES.JUGADORAS, label: 'Jugadoras', icon: '◉' },

@@ -4,10 +4,14 @@ import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { Filters } from '@/components/shared/Filters'
 import { Modal } from '@/components/shared/Modal'
 import { DatePicker } from '@/components/shared/DatePicker'
-import type { Partido, ParticipacionPartido, RPE_Partido } from '@/types'
+import type { Partido, ParticipacionPartido, RPE_Partido, CompensacionPostPartido } from '@/types'
+import { calcularDeficitCompensacion, inferirEstadoCompensacion } from '@/domain/exposure/compensacion'
 
 export function MatchesPage() {
-  const { partidos, rpe_partido, jugadoras, filters, addPartido, updatePartido, saveRpePartidoBatch } = useStore()
+  const { 
+    partidos, rpe_partido, jugadoras, filters, compensacion_postpartido, 
+    addPartido, updatePartido, saveRpePartidoBatch, upsertCompensacionPostPartido 
+  } = useStore()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Partido | null>(null)
   const [form, setForm] = useState<Partido>({
@@ -28,6 +32,11 @@ export function MatchesPage() {
   const [batchForm, setBatchForm] = useState<Record<string, PlayerForm>>({})
   const [isSaving, setIsSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+
+  // Compensación Modal State
+  const [compModalOpen, setCompModalOpen] = useState(false)
+  const [compPartidoId, setCompPartidoId] = useState<string>('')
+  const [compForms, setCompForms] = useState<Record<string, Partial<CompensacionPostPartido>>>({})
 
   const activePlayers = useMemo(() => jugadoras.filter(j => j.activa !== false), [jugadoras])
 
@@ -132,6 +141,64 @@ export function MatchesPage() {
     }
   }
 
+  const openCompensacionModal = (partidoId: string) => {
+    setCompPartidoId(partidoId)
+    const existingComps = compensacion_postpartido.filter(c => c.id_partido === partidoId)
+    
+    const initialForm: Record<string, Partial<CompensacionPostPartido>> = {}
+    activePlayers.forEach(j => {
+      const existing = existingComps.find(c => c.id_jugadora === j.id_jugadora)
+      if (existing) {
+        initialForm[j.id_jugadora] = { ...existing }
+      } else {
+        initialForm[j.id_jugadora] = {
+          id_partido: partidoId,
+          id_jugadora: j.id_jugadora,
+          estado: 'pendiente'
+        }
+      }
+    })
+    setCompForms(initialForm)
+    setCompModalOpen(true)
+  }
+
+  const handleUpdateCompForm = (id_jugadora: string, key: keyof CompensacionPostPartido, value: any) => {
+    setCompForms(prev => {
+      const current = prev[id_jugadora] || {}
+      return { ...prev, [id_jugadora]: { ...current, [key]: value } }
+    })
+  }
+
+  const handleSaveCompensacion = async (id_jugadora: string) => {
+    const data = compForms[id_jugadora]
+    if (!data) return
+    
+    // Obtener los minutos jugados del rpe_partido actual para recalcular déficit exacto
+    const rpeInfo = rpe_partido.find(r => r.id_partido === compPartidoId && r.id_jugadora === id_jugadora)
+    const minJugados = rpeInfo?.minutos_jugados || 0
+    
+    const deficit = calcularDeficitCompensacion(minJugados, data.minutos_objetivo)
+    const estadoReal = inferirEstadoCompensacion(deficit, data.estado || 'pendiente')
+    
+    await upsertCompensacionPostPartido({
+      id: data.id,
+      id_partido: compPartidoId,
+      id_jugadora: id_jugadora,
+      minutos_objetivo: data.minutos_objetivo,
+      deficit_minutos: deficit,
+      estado: estadoReal,
+      id_sesion: data.id_sesion,
+      tipo_compensacion: data.tipo_compensacion,
+      observaciones: data.observaciones,
+      created_at: data.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    
+    // Update local state to reflect calculated state/deficit
+    handleUpdateCompForm(id_jugadora, 'deficit_minutos', deficit)
+    handleUpdateCompForm(id_jugadora, 'estado', estadoReal)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -171,8 +238,12 @@ export function MatchesPage() {
                 </button>
               </DataCell>
               <DataCell>
-                <button onClick={() => { setEditing(p); setForm(p); setModalOpen(true) }}
-                  className="text-[10px] text-primary-600 hover:underline">Editar</button>
+                <div className="flex flex-col gap-1 items-start">
+                  <button onClick={() => { setEditing(p); setForm(p); setModalOpen(true) }}
+                    className="text-[10px] text-primary-600 hover:underline">Editar</button>
+                  <button onClick={() => openCompensacionModal(p.id_partido)}
+                    className="text-[10px] text-indigo-600 hover:underline">Compensación</button>
+                </div>
               </DataCell>
             </DataRow>
           )
@@ -340,6 +411,86 @@ export function MatchesPage() {
           >
             {isSaving ? 'Guardando...' : 'Guardar todo'}
           </button>
+        </div>
+      </Modal>
+
+      <Modal open={compModalOpen} onClose={() => setCompModalOpen(false)} title="Compensación Postpartido" width="max-w-6xl">
+        <div className="overflow-x-auto max-h-[60vh]">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="bg-surface-50 sticky top-0 z-10 shadow-sm">
+              <tr>
+                <th className="px-3 py-2 font-medium text-surface-600 border-b border-surface-200">Jugadora</th>
+                <th className="px-3 py-2 font-medium text-surface-600 border-b border-surface-200">Exposición</th>
+                <th className="px-3 py-2 font-medium text-surface-600 border-b border-surface-200 text-center">Obj. Minutos</th>
+                <th className="px-3 py-2 font-medium text-surface-600 border-b border-surface-200 text-center">Déficit</th>
+                <th className="px-3 py-2 font-medium text-surface-600 border-b border-surface-200 text-center">Estado</th>
+                <th className="px-3 py-2 font-medium text-surface-600 border-b border-surface-200">Acción</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-surface-100">
+              {activePlayers.map(j => {
+                const rpeData = rpe_partido.find(r => r.id_partido === compPartidoId && r.id_jugadora === j.id_jugadora)
+                const compData = compForms[j.id_jugadora] || {}
+                
+                const mins = rpeData?.minutos_jugados || 0
+                const srpe = rpeData?.carga_ua || 0
+                const participacion = rpeData?.participacion || 'Sin registrar'
+                
+                return (
+                  <tr key={j.id_jugadora} className="hover:bg-surface-50 transition-colors">
+                    <td className="px-3 py-2 font-medium">{j.nombre}</td>
+                    <td className="px-3 py-2 text-[10px] text-surface-500">
+                      <div>Part: {participacion.replace(/_/g, ' ')}</div>
+                      <div>Min: {mins}' | sRPE: {srpe} UA</div>
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <div className="flex flex-col gap-1 items-center">
+                        <input
+                          type="number"
+                          min={0}
+                          placeholder="Sin objetivo"
+                          className="w-24 border border-surface-200 rounded px-2 py-1 text-xs text-center"
+                          value={compData.minutos_objetivo ?? ''}
+                          onChange={(e) => handleUpdateCompForm(j.id_jugadora, 'minutos_objetivo', e.target.value ? Number(e.target.value) : null)}
+                        />
+                        <div className="flex gap-1">
+                          {[10, 15, 20].map(val => (
+                            <button key={val} onClick={() => handleUpdateCompForm(j.id_jugadora, 'minutos_objetivo', val)}
+                              className="text-[9px] bg-surface-100 hover:bg-surface-200 px-1.5 py-0.5 rounded text-surface-600">
+                              {val}'
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-center font-mono font-bold text-rose-600">
+                      {compData.deficit_minutos !== undefined && compData.deficit_minutos !== null ? `${compData.deficit_minutos}'` : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <select 
+                        value={compData.estado || 'pendiente'}
+                        onChange={(e) => handleUpdateCompForm(j.id_jugadora, 'estado', e.target.value)}
+                        className="border border-surface-200 rounded px-2 py-1 text-[10px]"
+                      >
+                        <option value="pendiente">Pendiente</option>
+                        <option value="planificada">Planificada</option>
+                        <option value="realizada">Realizada</option>
+                        <option value="omitida">Omitida</option>
+                      </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <button 
+                        onClick={() => handleSaveCompensacion(j.id_jugadora)}
+                        className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-2 py-1 rounded font-medium text-[10px]"
+                      >
+                        Guardar
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       </Modal>
     </div>

@@ -26,7 +26,8 @@ import type {
   Alerta, FiltersState, SesionRPE, Readiness, AlertaEstado,
   HistorialImportacion, CicloMenstrual, CargaGPS, FuerzaVBT, Hidratacion,
   RTPChecklist, TestPsicologico, HistorialCopia, PlantillaImportacion,
-  ProtocoloCMJ, MedicionCMJ, EjercicioFuerza, TrabajoFuerzaIndividual, PlantillaFuerza, SesionFuerzaIndividual
+  ProtocoloCMJ, MedicionCMJ, EjercicioFuerza, TrabajoFuerzaIndividual, PlantillaFuerza, SesionFuerzaIndividual,
+  CompensacionPostPartido
 } from '@/types'
 
 interface AppState {
@@ -56,6 +57,7 @@ interface AppState {
     trabajos_fuerza: TrabajoFuerzaIndividual[]
     plantillas_fuerza: PlantillaFuerza[]
     sesiones_fuerza_individual: SesionFuerzaIndividual[]
+    compensacion_postpartido: CompensacionPostPartido[]
   filters: FiltersState
   loading: boolean
   isAuthenticated: boolean
@@ -148,6 +150,8 @@ interface AppState {
   ) => Promise<void>
   updatePlantillaFuerza: (p: PlantillaFuerza) => Promise<void>
   toggleActivaPlantillaFuerza: (id: string, activa: boolean) => Promise<void>
+
+  upsertCompensacionPostPartido: (c: CompensacionPostPartido) => Promise<void>
 }
 
 const DEFAULT_FILTERS: FiltersState = {
@@ -946,6 +950,7 @@ export const useStore = create<AppState>((set, get) => ({
   trabajos_fuerza: [],
   plantillas_fuerza: [],
   sesiones_fuerza_individual: [],
+  compensacion_postpartido: [],
 
   loadAll: async () => {
     activeLoadsCount++
@@ -962,7 +967,8 @@ export const useStore = create<AppState>((set, get) => ({
         historial_copias,
         ciclo_menstrual, carga_gps, fuerza_vbt, hidratacion,
         rtp_checklist, test_psicologico, plantillas_importacion,
-        protocolos_cmj, pruebas_cmj, ejercicios_fuerza, trabajos_fuerza, plantillas_fuerza, sesiones_fuerza_individual
+        protocolos_cmj, pruebas_cmj, ejercicios_fuerza, trabajos_fuerza, plantillas_fuerza, sesiones_fuerza_individual,
+        compensacion_postpartido
       ] =
         await Promise.all([
           db.jugadoras.toArray(),
@@ -990,7 +996,8 @@ export const useStore = create<AppState>((set, get) => ({
           db.ejercicios_fuerza.toArray(),
           db.trabajos_fuerza.toArray(),
           db.plantillas_fuerza.toArray(),
-          db.sesiones_fuerza_individual.toArray()
+          db.sesiones_fuerza_individual.toArray(),
+          db.compensacion_postpartido.toArray()
         ])
 
       // Si loadEpoch cambió durante la lectura I/O, este snapshot está obsoleto y se omite el set global
@@ -1030,6 +1037,7 @@ export const useStore = create<AppState>((set, get) => ({
         trabajos_fuerza,
         plantillas_fuerza,
         sesiones_fuerza_individual: sesiones_fuerza_individual.sort((a, b) => b.fecha.localeCompare(a.fecha)),
+        compensacion_postpartido,
         hasData: true
       })
     } finally {
@@ -1974,6 +1982,31 @@ export const useStore = create<AppState>((set, get) => ({
 
   toggleActivaPlantillaFuerza: async (id, activa) => {
     await db.plantillas_fuerza.update(id, { activa, updatedAt: new Date().toISOString() })
+    await get().loadAll()
+  },
+
+  upsertCompensacionPostPartido: async (c) => {
+    await db.transaction('rw', db.compensacion_postpartido, async () => {
+      const existing = await db.compensacion_postpartido
+        .where({ id_partido: c.id_partido, id_jugadora: c.id_jugadora })
+        .first()
+
+      const now = new Date().toISOString()
+      if (existing) {
+        await db.compensacion_postpartido.put({
+          ...existing,
+          ...c,
+          id: existing.id,
+          updated_at: now
+        })
+      } else {
+        await db.compensacion_postpartido.put({
+          ...c,
+          created_at: now,
+          updated_at: now
+        })
+      }
+    })
     await get().loadAll()
   },
 
