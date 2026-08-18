@@ -12,6 +12,14 @@ export function DataQualityPage() {
     return evaluarCompletitudDatos(jugadoras, wellness, partidos, rpe_partido, sesion_rpe, getTodayLocalISO())
   }, [jugadoras, wellness, partidos, rpe_partido, sesion_rpe])
 
+  const alertasPendientes = useMemo(() => {
+    return completitud.alertas.filter(item => item.estado === 'pendiente' || item.estado === 'error')
+  }, [completitud.alertas])
+
+  const noAplicables = useMemo(() => {
+    return completitud.alertas.filter(item => item.estado === 'no_aplicable')
+  }, [completitud.alertas])
+
   const resolverAlerta = (item: any) => {
     if (item.destino === 'partidos') {
       navigate('/matches', {
@@ -44,17 +52,20 @@ export function DataQualityPage() {
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-surface-200 overflow-hidden">
-          <div className="p-4 bg-surface-50 border-b border-surface-200">
-            <h2 className="font-semibold text-surface-800">Alertas Pendientes ({completitud.alertas.length})</h2>
+        <div className="bg-white rounded-xl shadow-sm border border-surface-200 overflow-hidden flex flex-col">
+          <div className="p-4 bg-surface-50 border-b border-surface-200 flex justify-between items-center">
+            <h2 className="font-semibold text-surface-800">Alertas pendientes ({alertasPendientes.length})</h2>
+            {noAplicables.length > 0 && (
+              <span className="text-xs text-surface-500 font-medium">{noAplicables.length} registros no aplicables</span>
+            )}
           </div>
           <div className="divide-y divide-surface-100 max-h-[600px] overflow-y-auto">
-            {completitud.alertas.length === 0 ? (
+            {alertasPendientes.length === 0 ? (
               <div className="p-8 text-center text-surface-500 text-sm">
-                🎉 ¡Todo al día! No hay datos pendientes.
+                🎉 Todo al día. No hay datos pendientes.
               </div>
             ) : (
-              completitud.alertas.map((alerta, idx) => {
+              alertasPendientes.map((alerta, idx) => {
                 const isPendiente = alerta.estado === 'pendiente'
                 return (
                   <div key={idx} className={`p-4 flex items-start justify-between gap-4 ${isPendiente ? 'bg-white' : 'bg-surface-50'}`}>

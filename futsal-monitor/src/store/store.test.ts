@@ -128,6 +128,10 @@ vi.mock('@/db/database', () => ({
       toArray: vi.fn(() => Promise.resolve(plantillasFuerzaArr))
     },
     sesiones_fuerza_individual: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])), add: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    compensacion_postpartido: { 
+      toArray: vi.fn(() => Promise.resolve([])), 
+      where: vi.fn(() => ({ first: vi.fn(() => Promise.resolve(null)) })) 
+    }
   },
 }))
 
