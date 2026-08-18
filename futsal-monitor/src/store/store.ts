@@ -1179,6 +1179,19 @@ export const useStore = create<AppState>((set, get) => ({
     
     for (const r of rpes) {
       inferirParticipacionPartido(r)
+      
+      const isZero = r.participacion === 'no_convocada' || r.participacion === 'convocada_sin_minutos' || r.minutos_jugados === 0
+      const hasMins = typeof r.minutos_jugados === 'number' && !isNaN(r.minutos_jugados)
+      const hasRpe = typeof r.rpe === 'number' && !isNaN(r.rpe)
+      
+      if (isZero) {
+        r.carga_ua = 0
+      } else if (hasMins && hasRpe) {
+        r.carga_ua = r.minutos_jugados! * r.rpe!
+      } else {
+        r.carga_ua = null as any
+      }
+
       const errs = validateRPE_Partido(r)
       if (errs.length > 0) {
         erroresTodas.push(...errs.map(e => `[${r.id_jugadora}] ${e.message}`))

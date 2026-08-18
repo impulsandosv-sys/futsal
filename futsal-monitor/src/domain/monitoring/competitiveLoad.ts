@@ -18,8 +18,9 @@ export interface JugadoraCompetitiveLoad {
 }
 
 export interface CompetitiveLoadFiltros {
-  rangoDias?: number // 7, 14, 28... if undefined, all time
-  fechaReferencia: string // usually today
+  rangoDias?: number | 'temporada' | 'ultimo_partido'
+  fechaReferencia: string
+  temporadaActiva?: { fecha_inicio: string; fecha_fin?: string }
 }
 
 /**
@@ -36,7 +37,35 @@ export function calcularCargaCompetitivaJugadora(
   let rpesFiltrados = rpes.filter(r => r.id_jugadora === jugadora.id_jugadora)
   let partidosFiltrados = partidos
 
-  if (filtros.rangoDias) {
+  if (filtros.rangoDias === 'ultimo_partido') {
+    // Buscar el partido más reciente de la lista disponible, hasta la fechaReferencia
+    const partidosPasados = partidos.filter(p => p.fecha <= filtros.fechaReferencia)
+    partidosPasados.sort((a, b) => b.fecha.localeCompare(a.fecha))
+    const ultimo = partidosPasados.length > 0 ? partidosPasados[0] : null
+    if (ultimo) {
+      partidosFiltrados = [ultimo]
+      rpesFiltrados = rpesFiltrados.filter(r => r.id_partido === ultimo.id_partido)
+    } else {
+      partidosFiltrados = []
+      rpesFiltrados = []
+    }
+  } else if (filtros.rangoDias === 'temporada') {
+    if (filtros.temporadaActiva) {
+      const { fecha_inicio, fecha_fin } = filtros.temporadaActiva
+      partidosFiltrados = partidos.filter(p => {
+        const pDate = p.fecha
+        return pDate >= fecha_inicio && (!fecha_fin || pDate <= fecha_fin)
+      })
+      rpesFiltrados = rpesFiltrados.filter(r => {
+        const rDate = r.fecha || ''
+        return rDate >= fecha_inicio && (!fecha_fin || rDate <= fecha_fin)
+      })
+    } else {
+      // Si no hay temporada activa, devolver vacío como se solicitó
+      partidosFiltrados = []
+      rpesFiltrados = []
+    }
+  } else if (typeof filtros.rangoDias === 'number') {
     const end = parseISO(filtros.fechaReferencia)
     const start = subDays(end, filtros.rangoDias)
     

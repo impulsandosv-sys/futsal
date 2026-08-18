@@ -1,23 +1,36 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useStore } from '@/store/store'
 import { format } from 'date-fns'
 import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { calcularCargaCompetitivaPlantilla } from '@/domain/monitoring/competitiveLoad'
+import { obtenerTemporadaActiva } from '@/domain/temporadas/temporadas'
+import { db } from '@/db/database'
+import type { Temporada } from '@/types'
 
 export function CompetitiveLoadPage() {
   const { jugadoras, partidos, rpe_partido } = useStore()
-  const [rangoDias, setRangoDias] = useState<number | undefined>(undefined)
+  
+  const [temporadaActiva, setTemporadaActiva] = useState<Temporada | null>(null)
+  
+  useEffect(() => {
+    obtenerTemporadaActiva(db).then(t => setTemporadaActiva(t || null))
+  }, [])
+  
+  const [rangoDias, setRangoDias] = useState<number | 'temporada' | 'ultimo_partido'>('temporada')
   const [jugadoraSeleccionada, setJugadoraSeleccionada] = useState<string>('todas')
   const [sortBy, setSortBy] = useState<'minutos' | 'srpe' | 'srpe_ultimo'>('srpe')
+  
+  const temporadaActiva = useMemo(() => temporadas.find(t => t.activa), [temporadas])
   
   const today = format(new Date(), 'yyyy-MM-dd')
 
   const metricasPlantilla = useMemo(() => {
     return calcularCargaCompetitivaPlantilla(jugadoras, partidos, rpe_partido, {
       fechaReferencia: today,
-      rangoDias: rangoDias
+      rangoDias: rangoDias,
+      temporadaActiva
     })
-  }, [jugadoras, partidos, rpe_partido, rangoDias, today])
+  }, [jugadoras, partidos, rpe_partido, rangoDias, today, temporadaActiva])
 
   const datosOrdenados = useMemo(() => {
     return [...metricasPlantilla].sort((a, b) => {
@@ -54,10 +67,15 @@ export function CompetitiveLoadPage() {
           <label className="block text-xs font-medium text-surface-600 mb-1">Periodo</label>
           <select 
             className="w-48 border border-surface-300 rounded px-3 py-1.5 text-sm focus:ring-1 focus:ring-primary-500"
-            value={rangoDias === undefined ? 'all' : rangoDias.toString()}
-            onChange={(e) => setRangoDias(e.target.value === 'all' ? undefined : Number(e.target.value))}
+            value={rangoDias.toString()}
+            onChange={(e) => {
+              const val = e.target.value
+              if (val === 'temporada' || val === 'ultimo_partido') setRangoDias(val)
+              else setRangoDias(Number(val))
+            }}
           >
-            <option value="all">Temporada completa</option>
+            <option value="temporada">Temporada activa</option>
+            <option value="ultimo_partido">Último partido</option>
             <option value="7">Últimos 7 días</option>
             <option value="14">Últimos 14 días</option>
             <option value="28">Últimos 28 días</option>
@@ -93,6 +111,12 @@ export function CompetitiveLoadPage() {
           </div>
         )}
       </div>
+
+      {rangoDias === 'temporada' && !temporadaActiva && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-lg text-sm">
+          No hay una temporada activa configurada. Ve a la configuración de temporadas para activarla.
+        </div>
+      )}
 
       {jugadoraSeleccionada === 'todas' ? (
         <DataTable
