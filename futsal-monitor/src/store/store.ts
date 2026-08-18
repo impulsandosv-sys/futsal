@@ -87,6 +87,7 @@ interface AppState {
   addTest: (t: TestFisico) => Promise<void>
 
   addRPE_Partido: (r: RPE_Partido) => Promise<void>
+  saveRpePartidoBatch: (rpes: RPE_Partido[]) => Promise<void>
 
   addSesionRPE: (srpe: SesionRPE) => Promise<void>
   updateSesionRPE: (srpe: SesionRPE) => Promise<void>
@@ -1170,6 +1171,73 @@ export const useStore = create<AppState>((set, get) => ({
 
     await sincronizarRpePartidoIncremental(r.id_partido, r.id_jugadora, fechaEfectivaCalculada, set, get)
     await evaluarYSincronizarAlertas(r.id_jugadora, set)
+  },
+
+  saveRpePartidoBatch: async (rpes) => {
+    const erroresTodas: string[] = []
+    const procesados: RPE_Partido[] = []
+    
+    for (const r of rpes) {
+      inferirParticipacionPartido(r)
+      const errs = validateRPE_Partido(r)
+      if (errs.length > 0) {
+        erroresTodas.push(...errs.map(e => `[${r.id_jugadora}] ${e.message}`))
+      } else {
+        procesados.push(r)
+      }
+    }
+    
+    if (erroresTodas.length > 0) {
+      throw new Error(`Errores de validación:\n${erroresTodas.join('\n')}`)
+    }
+
+    if (procesados.length === 0) return
+
+    const affectedPairs = new Map<string, { id_jugadora: string; fecha: string }>()
+
+    await db.transaction(
+      'rw',
+      [db.rpe_partido, db.resumen_semanal, db.readiness, db.sesiones, db.partidos, db.sesion_rpe, db.wellness, db.jugadoras],
+      async () => {
+        const config = useStore.getState().filters
+        
+        for (const r of procesados) {
+          const match = await db.partidos.get(r.id_partido as any)
+          if (!match) throw new Error(`El partido '${r.id_partido}' no existe.`)
+          
+          const fechaEfectiva = r.fecha || match.fecha
+          if (!fechaEfectiva) throw new Error('No se pudo determinar la fecha del RPE de partido')
+
+          const existing = await db.rpe_partido
+            .where({ id_partido: r.id_partido, id_jugadora: r.id_jugadora })
+            .first()
+          
+          const rpeGuardar = { ...r, fecha: fechaEfectiva }
+          if (existing?.id) {
+            rpeGuardar.id = existing.id
+          }
+          
+          await db.rpe_partido.put(rpeGuardar)
+          
+          const keyNew = JSON.stringify([rpeGuardar.id_jugadora, rpeGuardar.fecha])
+          affectedPairs.set(keyNew, { id_jugadora: rpeGuardar.id_jugadora, fecha: rpeGuardar.fecha })
+          
+          await recalcularResumenSemanal(rpeGuardar.id_jugadora, rpeGuardar.fecha, {
+            incluirPartidos: config.incluirPartidos,
+            incluirGimnasio: config.incluirGimnasio,
+            incluirReadaptacion: config.incluirReadaptacion,
+          })
+          await recalcularReadinessJugadora(rpeGuardar.id_jugadora, rpeGuardar.fecha)
+        }
+      }
+    )
+
+    await get().loadAll()
+    
+    const affectedPlayers = Array.from(
+      new Set(Array.from(affectedPairs.values(), ({ id_jugadora }) => id_jugadora))
+    )
+    await evaluarYSincronizarAlertasLote(affectedPlayers, set)
   },
 
   addWellness: async (w) => {

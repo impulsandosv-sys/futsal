@@ -9,6 +9,7 @@ const navItems = [
   { to: ROUTES.WELLNESS, label: 'Wellness', icon: '◐' },
   { to: ROUTES.SESIONES, label: 'Sesiones', icon: '◗' },
   { to: ROUTES.PARTIDOS, label: 'Partidos', icon: '◤' },
+  { to: ROUTES.CARGA_COMPETITIVA, label: 'Carga Competitiva', icon: '⚡' },
   { to: ROUTES.LESIONES, label: 'Lesiones', icon: '◕' },
   { to: ROUTES.TESTS, label: 'Tests', icon: '◖' },
   { to: ROUTES.CMJ, label: 'CMJ', icon: '⇡' },

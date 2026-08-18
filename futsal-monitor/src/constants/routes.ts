@@ -7,6 +7,7 @@ export const ROUTES = {
   WELLNESS: '/wellness',
   SESIONES: '/sesiones',
   PARTIDOS: '/partidos',
+  CARGA_COMPETITIVA: '/carga-competitiva',
   LESIONES: '/lesiones',
   TESTS: '/tests',
   CMJ: '/pruebas-cmj',

@@ -12,6 +12,7 @@ import { PlayerProfilePage } from '@/pages/PlayerProfilePage'
 import { WellnessPage } from '@/pages/WellnessPage'
 import { SessionsPage } from '@/pages/SessionsPage'
 import { MatchesPage } from '@/pages/MatchesPage'
+import { CompetitiveLoadPage } from '@/pages/CompetitiveLoadPage'
 import { InjuriesPage } from '@/pages/InjuriesPage'
 import { TestsPage } from '@/pages/TestsPage'
 import { StrengthPage } from '@/pages/StrengthPage'
@@ -46,6 +47,7 @@ const routes = [
   { path: ROUTES.WELLNESS, Component: WellnessPage },
   { path: ROUTES.SESIONES, Component: SessionsPage },
   { path: ROUTES.PARTIDOS, Component: MatchesPage },
+  { path: ROUTES.CARGA_COMPETITIVA, Component: CompetitiveLoadPage },
   { path: ROUTES.LESIONES, Component: InjuriesPage },
   { path: ROUTES.TESTS, Component: TestsPage },
   { path: ROUTES.FUERZA, Component: StrengthPage },

@@ -1,13 +1,13 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useStore } from '@/store/store'
 import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { Filters } from '@/components/shared/Filters'
 import { Modal } from '@/components/shared/Modal'
 import { DatePicker } from '@/components/shared/DatePicker'
-import type { Partido, ParticipacionPartido } from '@/types'
+import type { Partido, ParticipacionPartido, RPE_Partido } from '@/types'
 
 export function MatchesPage() {
-  const { partidos, rpe_partido, jugadoras, filters, addPartido, updatePartido } = useStore()
+  const { partidos, rpe_partido, jugadoras, filters, addPartido, updatePartido, saveRpePartidoBatch } = useStore()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Partido | null>(null)
   const [form, setForm] = useState<Partido>({
@@ -15,16 +15,21 @@ export function MatchesPage() {
   })
 
   const [rpeModalOpen, setRpeModalOpen] = useState(false)
-  const [rpePartido, setRpePartido] = useState<string>('')
-  const [rpeForm, setRpeForm] = useState<{
-    id_jugadora: string;
-    minutos_jugados: number | '';
-    rpe: number | '';
-    participacion: ParticipacionPartido | '';
-    motivo_participacion_reducida: string;
-  }>({ id_jugadora: '', minutos_jugados: 0, rpe: 5, participacion: '', motivo_participacion_reducida: '' })
+  const [rpePartidoId, setRpePartidoId] = useState<string>('')
   
-  const [confirmClearData, setConfirmClearData] = useState<{ pendingParticipacion?: ParticipacionPartido, pendingMinutos?: number | '' } | null>(null)
+  // State for the batch form: map of jugadoraId -> formData
+  type PlayerForm = {
+    participacion: ParticipacionPartido | ''
+    minutos_jugados: number | ''
+    rpe: number | ''
+    motivo_participacion_reducida: string
+    comentario_staff: string
+  }
+  const [batchForm, setBatchForm] = useState<Record<string, PlayerForm>>({})
+  const [isSaving, setIsSaving] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
+
+  const activePlayers = useMemo(() => jugadoras.filter(j => j.activa !== false), [jugadoras])
 
   const filtered = partidos.filter((p) => {
     if (filters.fecha_desde && p.fecha < filters.fecha_desde) return false
@@ -32,65 +37,99 @@ export function MatchesPage() {
     return true
   })
 
-  const handleAddRPE = async () => {
-    const { addRPE_Partido } = useStore.getState()
-    const isZero = rpeForm.participacion === 'no_convocada' || rpeForm.participacion === 'convocada_sin_minutos'
-    const finalMinutos = isZero ? 0 : (rpeForm.minutos_jugados === '' ? null : Number(rpeForm.minutos_jugados))
-    const finalRpe = isZero ? null : (rpeForm.rpe === '' ? null : Number(rpeForm.rpe))
+  const openRpeModal = (partidoId: string) => {
+    setRpePartidoId(partidoId)
+    const existingRpes = rpe_partido.filter(r => r.id_partido === partidoId)
     
-    await addRPE_Partido({
-      id_partido: rpePartido,
-      id_jugadora: rpeForm.id_jugadora,
-      minutos_jugados: finalMinutos,
-      rpe: finalRpe,
-      fecha: partidos.find(p => p.id_partido === rpePartido)?.fecha || '',
-      carga_ua: (finalRpe ?? 0) * (finalMinutos ?? 0),
-      participacion: rpeForm.participacion || undefined,
-      motivo_participacion_reducida: rpeForm.motivo_participacion_reducida || undefined
+    const initialForm: Record<string, PlayerForm> = {}
+    activePlayers.forEach(j => {
+      const existing = existingRpes.find(r => r.id_jugadora === j.id_jugadora)
+      if (existing) {
+        initialForm[j.id_jugadora] = {
+          participacion: existing.participacion || '',
+          minutos_jugados: existing.minutos_jugados ?? '',
+          rpe: existing.rpe ?? '',
+          motivo_participacion_reducida: existing.motivo_participacion_reducida || '',
+          comentario_staff: existing.comentario_staff || ''
+        }
+      } else {
+        initialForm[j.id_jugadora] = {
+          participacion: '',
+          minutos_jugados: '',
+          rpe: '',
+          motivo_participacion_reducida: '',
+          comentario_staff: ''
+        }
+      }
     })
-    setRpeModalOpen(false)
-    setRpeForm({ id_jugadora: '', minutos_jugados: 0, rpe: 5, participacion: '', motivo_participacion_reducida: '' })
+    setBatchForm(initialForm)
+    setErrorMsg('')
+    setRpeModalOpen(true)
   }
 
-  const handleParticipacionChange = (nuevaPart: ParticipacionPartido) => {
-    const isCurrentlyFilled = (rpeForm.minutos_jugados !== 0 && rpeForm.minutos_jugados !== '') || (rpeForm.rpe !== '' && rpeForm.rpe !== null)
-    const clearsData = nuevaPart === 'no_convocada' || nuevaPart === 'convocada_sin_minutos'
+  const handleUpdatePlayerForm = (id: string, key: keyof PlayerForm, value: any) => {
+    setBatchForm(prev => {
+      const current = prev[id]
+      const updated = { ...current, [key]: value }
+
+      if (key === 'participacion') {
+        if (value === 'completa') {
+          updated.minutos_jugados = 40
+        } else if (value === 'no_convocada' || value === 'convocada_sin_minutos') {
+          updated.minutos_jugados = 0
+          updated.rpe = ''
+        }
+      } else if (key === 'minutos_jugados') {
+        if (updated.participacion === 'modificada' && value === 0) {
+          updated.rpe = ''
+        }
+      }
+      
+      return { ...prev, [id]: updated }
+    })
+  }
+
+  const handleSaveBatch = async () => {
+    setErrorMsg('')
+    setIsSaving(true)
     
-    if (isCurrentlyFilled && clearsData) {
-      setConfirmClearData({ pendingParticipacion: nuevaPart })
-    } else {
-      applyParticipacion(nuevaPart)
+    const match = partidos.find(p => p.id_partido === rpePartidoId)
+    const fecha = match?.fecha || ''
+    
+    const toSave: RPE_Partido[] = []
+    
+    for (const [id_jugadora, data] of Object.entries(batchForm)) {
+      // Only process rows that have some data entered
+      if (data.participacion || data.minutos_jugados !== '' || data.rpe !== '') {
+        const isZero = data.participacion === 'no_convocada' || data.participacion === 'convocada_sin_minutos'
+        const min = isZero ? 0 : (data.minutos_jugados === '' ? null : Number(data.minutos_jugados))
+        const rpeVal = isZero ? null : (data.rpe === '' ? null : Number(data.rpe))
+        const carga = (rpeVal !== null && min !== null) ? rpeVal * min : null
+        
+        toSave.push({
+          id_partido: rpePartidoId,
+          id_jugadora,
+          fecha,
+          participacion: (data.participacion as ParticipacionPartido) || undefined,
+          minutos_jugados: min,
+          rpe: rpeVal,
+          carga_ua: carga,
+          motivo_participacion_reducida: data.motivo_participacion_reducida || undefined,
+          comentario_staff: data.comentario_staff || undefined
+        })
+      }
     }
-  }
-
-  const handleMinutosChange = (val: string) => {
-    const min = val === '' ? '' : Number(val)
-    if (rpeForm.participacion === 'modificada' && min === 0 && rpeForm.minutos_jugados !== 0 && rpeForm.rpe !== '' && rpeForm.rpe !== null) {
-      setConfirmClearData({ pendingMinutos: min })
-    } else {
-      applyMinutos(min)
+    
+    try {
+      if (toSave.length > 0) {
+        await saveRpePartidoBatch(toSave)
+      }
+      setRpeModalOpen(false)
+    } catch (e: any) {
+      setErrorMsg(e.message)
+    } finally {
+      setIsSaving(false)
     }
-  }
-
-  const applyMinutos = (min: number | '') => {
-    setConfirmClearData(null)
-    const newForm = { ...rpeForm, minutos_jugados: min }
-    if (rpeForm.participacion === 'modificada' && min === 0) {
-      newForm.rpe = ''
-    }
-    setRpeForm(newForm)
-  }
-
-  const applyParticipacion = (part: ParticipacionPartido) => {
-    setConfirmClearData(null)
-    const newForm = { ...rpeForm, participacion: part }
-    if (part === 'completa') {
-      newForm.minutos_jugados = 40
-    } else if (part === 'no_convocada' || part === 'convocada_sin_minutos') {
-      newForm.minutos_jugados = 0
-      newForm.rpe = ''
-    }
-    setRpeForm(newForm)
   }
 
   return (
@@ -126,7 +165,7 @@ export function MatchesPage() {
               <DataCell>{p.resultado || '—'}</DataCell>
               <DataCell>{p.lugar}</DataCell>
               <DataCell>
-                <button onClick={() => { setRpePartido(p.id_partido); setRpeModalOpen(true) }}
+                <button onClick={() => openRpeModal(p.id_partido)}
                   className="text-primary-600 hover:underline">
                   {rpes.length > 0 ? `${Math.round(cargaTotal)} UA (${rpes.length})` : 'Añadir RPE'}
                 </button>
@@ -190,77 +229,117 @@ export function MatchesPage() {
         </div>
       </Modal>
 
-      <Modal open={rpeModalOpen} onClose={() => setRpeModalOpen(false)} title="Añadir RPE de partido" width="max-w-md">
-        <div className="space-y-4">
-          {confirmClearData && (
-            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded text-xs flex flex-col gap-2">
-              <p>Cambiar a este estado borrará los minutos y el RPE actuales. ¿Estás seguro?</p>
-              <div className="flex gap-2">
-                <button onClick={() => setConfirmClearData(null)} className="px-2 py-1 bg-white border border-red-200 rounded">Cancelar</button>
-                <button onClick={() => {
-                  if (confirmClearData.pendingParticipacion) applyParticipacion(confirmClearData.pendingParticipacion)
-                  else if (confirmClearData.pendingMinutos !== undefined) applyMinutos(confirmClearData.pendingMinutos)
-                }} className="px-2 py-1 bg-red-600 text-white rounded">Sí, borrar</button>
-              </div>
-            </div>
-          )}
-          
-          <div>
-            <label className="text-[10px] font-medium text-surface-600 block mb-1">Jugadora</label>
-            <select className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"
-              value={rpeForm.id_jugadora} onChange={(e) => setRpeForm({ ...rpeForm, id_jugadora: e.target.value })}>
-              <option value="">Seleccionar</option>
-              {jugadoras.filter(j => j.activa !== false).map((j) => (
-                <option key={j.id_jugadora} value={j.id_jugadora}>{j.nombre}</option>
-              ))}
-            </select>
+      <Modal open={rpeModalOpen} onClose={() => setRpeModalOpen(false)} title="Carga Competitiva (RPE de partido)" width="max-w-6xl">
+        {errorMsg && (
+          <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded text-xs mb-4 whitespace-pre-wrap">
+            {errorMsg}
           </div>
-          <div>
-            <label className="text-[10px] font-medium text-surface-600 block mb-1">Participación</label>
-            <select className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"
-              value={rpeForm.participacion} onChange={(e) => handleParticipacionChange(e.target.value as ParticipacionPartido)}>
-              <option value="">Seleccionar</option>
-              <option value="completa">Completa (40 mins)</option>
-              <option value="parcial">Parcial (1-39 mins)</option>
-              <option value="modificada">Modificada</option>
-              <option value="convocada_sin_minutos">Convocada sin minutos (0 mins)</option>
-              <option value="no_convocada">No convocada (0 mins)</option>
-            </select>
-          </div>
-          
-          {rpeForm.participacion === 'modificada' && (
-            <div>
-              <label className="text-[10px] font-medium text-surface-600 block mb-1">Motivo (Obligatorio)</label>
-              <textarea className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"
-                value={rpeForm.motivo_participacion_reducida} onChange={(e) => setRpeForm({ ...rpeForm, motivo_participacion_reducida: e.target.value })} />
-            </div>
-          )}
-
-          {rpeForm.participacion !== 'no_convocada' && rpeForm.participacion !== 'convocada_sin_minutos' && (
-            <>
-              <div>
-                <label className="text-[10px] font-medium text-surface-600 block mb-1">Minutos jugados</label>
-                <input type="number" min={0} max={rpeForm.participacion === 'modificada' ? 39 : 40} className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs disabled:bg-surface-100"
-                  value={rpeForm.minutos_jugados} disabled={rpeForm.participacion === 'completa'}
-                  onChange={(e) => handleMinutosChange(e.target.value)} />
-              </div>
-              {!(rpeForm.participacion === 'modificada' && rpeForm.minutos_jugados === 0) && (
-                <div>
-                  <label className="text-[10px] font-medium text-surface-600 block mb-1">RPE (1-10)</label>
-                  <input type="number" min={1} max={10} className="w-full border border-surface-200 rounded px-2 py-1.5 text-xs"
-                    value={rpeForm.rpe} onChange={(e) => setRpeForm({ ...rpeForm, rpe: e.target.value === '' ? '' : Number(e.target.value) })} />
-                </div>
-              )}
-            </>
-          )}
-
-          <div className="text-[10px] text-surface-500">
-            Carga estimada: <strong>{(Number(rpeForm.rpe) || 0) * (Number(rpeForm.minutos_jugados) || 0)} UA</strong>
-          </div>
+        )}
+        <div className="overflow-x-auto max-h-[60vh]">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="bg-surface-50 sticky top-0 z-10 shadow-sm">
+              <tr>
+                <th className="px-3 py-2 font-medium text-surface-600 border-b border-surface-200 w-48">Jugadora</th>
+                <th className="px-3 py-2 font-medium text-surface-600 border-b border-surface-200 w-40">Participación</th>
+                <th className="px-3 py-2 font-medium text-surface-600 border-b border-surface-200 w-24">Minutos</th>
+                <th className="px-3 py-2 font-medium text-surface-600 border-b border-surface-200 w-20">RPE (1-10)</th>
+                <th className="px-3 py-2 font-medium text-surface-600 border-b border-surface-200 w-24">sRPE (UA)</th>
+                <th className="px-3 py-2 font-medium text-surface-600 border-b border-surface-200 min-w-[200px]">Nota / Motivo</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-surface-100">
+              {activePlayers.map(j => {
+                const data = batchForm[j.id_jugadora]
+                if (!data) return null
+                
+                const isZero = data.participacion === 'no_convocada' || data.participacion === 'convocada_sin_minutos'
+                const rpeVal = Number(data.rpe) || 0
+                const minVal = Number(data.minutos_jugados) || 0
+                const sRPE = (isZero || !data.minutos_jugados || !data.rpe) ? 0 : rpeVal * minVal
+                const isModificada = data.participacion === 'modificada'
+                
+                return (
+                  <tr key={j.id_jugadora} className="hover:bg-surface-50 transition-colors">
+                    <td className="px-3 py-2 font-medium">{j.nombre}</td>
+                    <td className="px-3 py-2">
+                      <select 
+                        className="w-full border border-surface-200 rounded px-2 py-1 text-xs"
+                        value={data.participacion} 
+                        onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'participacion', e.target.value)}
+                      >
+                        <option value="">(Sin definir)</option>
+                        <option value="completa">Completa (40')</option>
+                        <option value="parcial">Parcial (1-39')</option>
+                        <option value="modificada">Modificada</option>
+                        <option value="convocada_sin_minutos">Convocada sin jugar (0')</option>
+                        <option value="no_convocada">No convocada (0')</option>
+                      </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <input 
+                        type="number" 
+                        min={0} max={isModificada ? 39 : 40} 
+                        className="w-full border border-surface-200 rounded px-2 py-1 text-xs disabled:bg-surface-100 disabled:opacity-50"
+                        value={data.minutos_jugados} 
+                        disabled={isZero || data.participacion === 'completa' || !data.participacion}
+                        placeholder={isZero ? '0' : ''}
+                        onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'minutos_jugados', e.target.value === '' ? '' : Number(e.target.value))} 
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input 
+                        type="number" min={1} max={10} step={1}
+                        className="w-full border border-surface-200 rounded px-2 py-1 text-xs disabled:bg-surface-100 disabled:opacity-50"
+                        value={data.rpe} 
+                        disabled={isZero || (isModificada && data.minutos_jugados === 0) || !data.participacion}
+                        onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'rpe', e.target.value === '' ? '' : Number(e.target.value))} 
+                      />
+                    </td>
+                    <td className="px-3 py-2 font-mono font-medium">
+                      {isZero ? '0' : (sRPE > 0 ? sRPE : '—')}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-col gap-1">
+                        {isModificada && (
+                          <input 
+                            type="text" 
+                            className="w-full border border-red-200 bg-red-50 rounded px-2 py-1 text-xs placeholder:text-red-400"
+                            placeholder="Motivo modificada *"
+                            value={data.motivo_participacion_reducida}
+                            onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'motivo_participacion_reducida', e.target.value)}
+                          />
+                        )}
+                        <input 
+                          type="text" 
+                          className="w-full border border-surface-200 rounded px-2 py-1 text-xs"
+                          placeholder="Nota (opcional)"
+                          value={data.comentario_staff}
+                          onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'comentario_staff', e.target.value)}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
-        <div className="flex justify-end gap-2 mt-4">
-          <button onClick={() => { setRpeModalOpen(false); setConfirmClearData(null); }} className="text-xs text-surface-600 px-3 py-1.5 border border-surface-200 rounded">Cancelar</button>
-          <button onClick={handleAddRPE} disabled={!!confirmClearData} className="text-xs text-white bg-primary-600 px-3 py-1.5 rounded hover:bg-primary-700 disabled:opacity-50">Añadir RPE</button>
+        
+        <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-surface-200">
+          <button 
+            onClick={() => setRpeModalOpen(false)} 
+            className="text-xs font-medium text-surface-600 px-4 py-2 border border-surface-200 rounded hover:bg-surface-50"
+            disabled={isSaving}
+          >
+            Cancelar
+          </button>
+          <button 
+            onClick={handleSaveBatch} 
+            disabled={isSaving} 
+            className="text-xs font-medium text-white bg-primary-600 px-4 py-2 rounded hover:bg-primary-700 disabled:opacity-50 shadow-sm"
+          >
+            {isSaving ? 'Guardando...' : 'Guardar todo'}
+          </button>
         </div>
       </Modal>
     </div>
