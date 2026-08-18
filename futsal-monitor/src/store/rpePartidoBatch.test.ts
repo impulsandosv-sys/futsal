@@ -105,20 +105,7 @@ describe('saveRpePartidoBatch', () => {
     expect(j2?.carga_ua).toBe(0)
   })
 
-  it('asigna carga_ua null si faltan minutos o rpe', async () => {
-    // Para probar null, necesitamos estados que permitan RPE nulo o mins nulos sin que falle validacion.
-    // La validacion actual en legacy o parcial modificada puede forzar rpe si hay mins.
-    // Si participacion=modificada, mins>0 requiere RPE.
-    // Si no hay participacion (legacy), min=10 sin RPE tira error, pero si dejamos que pase la validacion,
-    // (en realidad la validacion nos frena). 
-    // Vamos a usar los mocks de `store.saveRpePartidoBatch` donde probamos que la logica asigna null
-    // y falla la validacion, PERO si pasara, tendria null. Como sabemos que la validacion detiene los
-    // casos incorrectos, el hecho de que calcule `null` es correcto.
-    
-    // Mejor mockear `validateRPE_Partido` o probar un caso legacy válido si existe.
-    // actually, if we just want to test if `null` is handled properly, let's verify error message
-    // or just trust the logic. The logic sets it to null before validation.
-  })
+
 
   it('valida que no se guarden datos requeridos ausentes y devuelve error', async () => {
     const store = useStore.getState()

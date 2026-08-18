@@ -20,15 +20,13 @@ export function CompetitiveLoadPage() {
   const [jugadoraSeleccionada, setJugadoraSeleccionada] = useState<string>('todas')
   const [sortBy, setSortBy] = useState<'minutos' | 'srpe' | 'srpe_ultimo'>('srpe')
   
-  const temporadaActiva = useMemo(() => temporadas.find(t => t.activa), [temporadas])
-  
   const today = format(new Date(), 'yyyy-MM-dd')
 
   const metricasPlantilla = useMemo(() => {
     return calcularCargaCompetitivaPlantilla(jugadoras, partidos, rpe_partido, {
       fechaReferencia: today,
       rangoDias: rangoDias,
-      temporadaActiva
+      temporadaActiva: temporadaActiva || undefined
     })
   }, [jugadoras, partidos, rpe_partido, rangoDias, today, temporadaActiva])
 
