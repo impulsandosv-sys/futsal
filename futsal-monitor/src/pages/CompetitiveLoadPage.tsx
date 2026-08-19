@@ -6,6 +6,7 @@ import { calcularCargaCompetitivaPlantilla } from '@/domain/monitoring/competiti
 import { obtenerTemporadaActiva } from '@/domain/temporadas/temporadas'
 import { db } from '@/db/database'
 import type { Temporada } from '@/types'
+import { QuickMinuteRegistrationModal } from '@/components/monitoring/QuickMinuteRegistrationModal'
 
 export function CompetitiveLoadPage() {
   const { jugadoras, partidos, rpe_partido } = useStore()
@@ -20,7 +21,35 @@ export function CompetitiveLoadPage() {
   const [jugadoraSeleccionada, setJugadoraSeleccionada] = useState<string>('todas')
   const [sortBy, setSortBy] = useState<'minutos' | 'srpe' | 'srpe_ultimo'>('srpe')
   
+  const [quickModalOpen, setQuickModalOpen] = useState(false)
+  const [initialMatchId, setInitialMatchId] = useState('')
+
   const today = format(new Date(), 'yyyy-MM-dd')
+
+  const handleOpenQuickModal = () => {
+    const activePlayers = jugadoras.filter(j => j.activa !== false)
+    const pastMatches = partidos.filter(p => p.fecha <= today).sort((a, b) => b.fecha.localeCompare(a.fecha))
+    
+    let defaultMatchId = ''
+    if (pastMatches.length > 0) {
+      defaultMatchId = pastMatches[0].id_partido
+      for (const p of pastMatches) {
+        const rpes = rpe_partido.filter(r => r.id_partido === p.id_partido)
+        const hasPendingMinutes = activePlayers.some(jug => {
+          const rpe = rpes.find(r => r.id_jugadora === jug.id_jugadora)
+          if (!rpe) return true // no record
+          if (rpe.participacion && rpe.minutos_jugados === null) return true // explicitly pending
+          return false
+        })
+        if (hasPendingMinutes) {
+          defaultMatchId = p.id_partido
+          break
+        }
+      }
+    }
+    setInitialMatchId(defaultMatchId)
+    setQuickModalOpen(true)
+  }
 
   const metricasPlantilla = useMemo(() => {
     return calcularCargaCompetitivaPlantilla(jugadoras, partidos, rpe_partido, {
@@ -57,7 +86,19 @@ export function CompetitiveLoadPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-surface-900">Carga Competitiva</h1>
+        <button 
+          onClick={handleOpenQuickModal}
+          className="bg-primary-600 text-white text-xs font-medium px-4 py-2 rounded hover:bg-primary-700 shadow-sm"
+        >
+          Registrar minutos
+        </button>
       </div>
+
+      <QuickMinuteRegistrationModal 
+        open={quickModalOpen} 
+        onClose={() => setQuickModalOpen(false)} 
+        initialMatchId={initialMatchId} 
+      />
 
       {/* Filtros */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-surface-200 flex flex-wrap gap-4 items-end">

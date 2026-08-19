@@ -7,6 +7,7 @@ import { Modal } from '@/components/shared/Modal'
 import { DatePicker } from '@/components/shared/DatePicker'
 import type { Partido, ParticipacionPartido, RPE_Partido, CompensacionPostPartido } from '@/types'
 import { calcularDeficitCompensacion, inferirEstadoCompensacion } from '@/domain/exposure/compensacion'
+import { useRpeBatchForm } from '@/hooks/useRpeBatchForm'
 
 export function MatchesPage() {
   const location = useLocation()
@@ -25,15 +26,8 @@ export function MatchesPage() {
   const [rpeModalOpen, setRpeModalOpen] = useState(false)
   const [rpePartidoId, setRpePartidoId] = useState<string>('')
   
-  // State for the batch form: map of jugadoraId -> formData
-  type PlayerForm = {
-    participacion: ParticipacionPartido | ''
-    minutos_jugados: number | ''
-    rpe: number | ''
-    motivo_participacion_reducida: string
-    comentario_staff: string
-  }
-  const [batchForm, setBatchForm] = useState<Record<string, PlayerForm>>({})
+  const { batchForm, initializeForm, handleUpdatePlayerForm, buildBatchToSave, setBatchForm } = useRpeBatchForm()
+  
   const [isSaving, setIsSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -54,28 +48,7 @@ export function MatchesPage() {
     setRpePartidoId(partidoId)
     const existingRpes = rpe_partido.filter(r => r.id_partido === partidoId)
     
-    const initialForm: Record<string, PlayerForm> = {}
-    activePlayers.forEach(j => {
-      const existing = existingRpes.find(r => r.id_jugadora === j.id_jugadora)
-      if (existing) {
-        initialForm[j.id_jugadora] = {
-          participacion: existing.participacion || '',
-          minutos_jugados: existing.minutos_jugados ?? '',
-          rpe: existing.rpe ?? '',
-          motivo_participacion_reducida: existing.motivo_participacion_reducida || '',
-          comentario_staff: existing.comentario_staff || ''
-        }
-      } else {
-        initialForm[j.id_jugadora] = {
-          participacion: '',
-          minutos_jugados: '',
-          rpe: '',
-          motivo_participacion_reducida: '',
-          comentario_staff: ''
-        }
-      }
-    })
-    setBatchForm(initialForm)
+    initializeForm(activePlayers, existingRpes)
     setErrorMsg('')
     setRpeModalOpen(true)
     
@@ -104,28 +77,6 @@ export function MatchesPage() {
     }
   }, [location.state, navigate, location.pathname, rpe_partido, activePlayers])
 
-  const handleUpdatePlayerForm = (id: string, key: keyof PlayerForm, value: any) => {
-    setBatchForm(prev => {
-      const current = prev[id]
-      const updated = { ...current, [key]: value }
-
-      if (key === 'participacion') {
-        if (value === 'completa') {
-          updated.minutos_jugados = 40
-        } else if (value === 'no_convocada' || value === 'convocada_sin_minutos') {
-          updated.minutos_jugados = 0
-          updated.rpe = ''
-        }
-      } else if (key === 'minutos_jugados') {
-        if (updated.participacion === 'modificada' && value === 0) {
-          updated.rpe = ''
-        }
-      }
-      
-      return { ...prev, [id]: updated }
-    })
-  }
-
   const handleSaveBatch = async () => {
     setErrorMsg('')
     setIsSaving(true)
@@ -133,29 +84,7 @@ export function MatchesPage() {
     const match = partidos.find(p => p.id_partido === rpePartidoId)
     const fecha = match?.fecha || ''
     
-    const toSave: RPE_Partido[] = []
-    
-    for (const [id_jugadora, data] of Object.entries(batchForm)) {
-      // Only process rows that have some data entered
-      if (data.participacion || data.minutos_jugados !== '' || data.rpe !== '') {
-        const isZero = data.participacion === 'no_convocada' || data.participacion === 'convocada_sin_minutos'
-        const min = isZero ? 0 : (data.minutos_jugados === '' ? null : Number(data.minutos_jugados))
-        const rpeVal = isZero ? null : (data.rpe === '' ? null : Number(data.rpe))
-        const carga = (rpeVal !== null && min !== null) ? rpeVal * min : null
-        
-        toSave.push({
-          id_partido: rpePartidoId,
-          id_jugadora,
-          fecha,
-          participacion: (data.participacion as ParticipacionPartido) || undefined,
-          minutos_jugados: min,
-          rpe: rpeVal,
-          carga_ua: carga,
-          motivo_participacion_reducida: data.motivo_participacion_reducida || undefined,
-          comentario_staff: data.comentario_staff || undefined
-        })
-      }
-    }
+    const toSave = buildBatchToSave(rpePartidoId, fecha)
     
     try {
       if (toSave.length > 0) {

@@ -156,9 +156,7 @@ export function validateRPE_Partido(r: RPE_Partido): ValidationError[] {
         if (!hasMins || r.minutos_jugados !== 40) {
           errors.push({ field: 'minutos_jugados', message: 'Minutos deben ser exactamente 40' })
         }
-        if (!hasRPE) {
-          errors.push({ field: 'rpe', message: 'RPE obligatorio (1-10)' })
-        } else {
+        if (hasRPE) {
           const rpeErr = validateRange(r.rpe!, 1, 10, 'RPE')
           if (rpeErr) errors.push(rpeErr)
         }
@@ -167,9 +165,7 @@ export function validateRPE_Partido(r: RPE_Partido): ValidationError[] {
         if (!hasMins || r.minutos_jugados! < 1 || r.minutos_jugados! > 39) {
           errors.push({ field: 'minutos_jugados', message: 'Minutos deben estar entre 1 y 39' })
         }
-        if (!hasRPE) {
-          errors.push({ field: 'rpe', message: 'RPE obligatorio (1-10)' })
-        } else {
+        if (hasRPE) {
           const rpeErr = validateRange(r.rpe!, 1, 10, 'RPE')
           if (rpeErr) errors.push(rpeErr)
         }
@@ -183,9 +179,7 @@ export function validateRPE_Partido(r: RPE_Partido): ValidationError[] {
             errors.push({ field: 'rpe', message: 'RPE debe ser nulo o estar ausente si hay 0 minutos' })
           }
         } else if (r.minutos_jugados! > 0) {
-          if (!hasRPE) {
-            errors.push({ field: 'rpe', message: 'RPE obligatorio entre 1 y 10 si hay minutos jugados' })
-          } else {
+          if (hasRPE) {
             const rpeErr = validateRange(r.rpe!, 1, 10, 'RPE')
             if (rpeErr) errors.push(rpeErr)
           }
@@ -204,9 +198,6 @@ export function validateRPE_Partido(r: RPE_Partido): ValidationError[] {
     if (hasMins) {
       if (r.minutos_jugados! < 0 || r.minutos_jugados! > 40) {
         errors.push({ field: 'minutos_jugados', message: 'Minutos fuera de rango (0-40)' })
-      }
-      if (r.minutos_jugados! > 0 && !hasRPE) {
-          errors.push({ field: 'rpe', message: 'RPE requerido si hay minutos jugados' })
       }
     }
   }
