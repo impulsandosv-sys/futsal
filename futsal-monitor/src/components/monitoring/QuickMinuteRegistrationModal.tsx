@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { Modal } from '@/components/shared/Modal'
 import { useStore } from '@/store/store'
 import { useRpeBatchForm } from '@/hooks/useRpeBatchForm'
+import { getTodayLocalISO } from '@/domain/dates/dates'
 
 interface QuickMinuteRegistrationModalProps {
   open: boolean
@@ -28,7 +29,7 @@ export function QuickMinuteRegistrationModal({
   
   const activePlayers = useMemo(() => jugadoras.filter(j => j.activa !== false), [jugadoras])
   const pastMatches = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = getTodayLocalISO()
     return partidos.filter(p => p.fecha <= today).sort((a, b) => b.fecha.localeCompare(a.fecha))
   }, [partidos])
 

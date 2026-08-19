@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useStore } from '@/store/store'
-import { format } from 'date-fns'
 import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { calcularCargaCompetitivaPlantilla } from '@/domain/monitoring/competitiveLoad'
 import { obtenerTemporadaActiva } from '@/domain/temporadas/temporadas'
+import { getTodayLocalISO } from '@/domain/dates/dates'
 import { db } from '@/db/database'
 import type { Temporada } from '@/types'
 import { QuickMinuteRegistrationModal } from '@/components/monitoring/QuickMinuteRegistrationModal'
@@ -24,7 +24,7 @@ export function CompetitiveLoadPage() {
   const [quickModalOpen, setQuickModalOpen] = useState(false)
   const [initialMatchId, setInitialMatchId] = useState('')
 
-  const today = format(new Date(), 'yyyy-MM-dd')
+  const today = getTodayLocalISO()
 
   const handleOpenQuickModal = () => {
     const activePlayers = jugadoras.filter(j => j.activa !== false)

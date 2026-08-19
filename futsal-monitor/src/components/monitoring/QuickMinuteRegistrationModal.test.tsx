@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QuickMinuteRegistrationModal } from './QuickMinuteRegistrationModal'
 import { useStore } from '@/store/store'
+import { getTodayLocalISO } from '@/domain/dates/dates'
 
 vi.mock('@/store/store')
+vi.mock('@/domain/dates/dates')
 
 describe('QuickMinuteRegistrationModal', () => {
   const mockSave = vi.fn()
@@ -11,7 +13,9 @@ describe('QuickMinuteRegistrationModal', () => {
     { id_jugadora: 'j1', nombre: 'Jugadora 1', activa: true }
   ]
   const mockPartidos = [
-    { id_partido: 'p1', fecha: '2023-01-01', rival: 'Rival 1', competicion: 'Liga' }
+    { id_partido: 'p1', fecha: '2026-08-18', rival: 'Ayer', competicion: 'Liga' },
+    { id_partido: 'p2', fecha: '2026-08-19', rival: 'Hoy', competicion: 'Liga' },
+    { id_partido: 'p3', fecha: '2026-08-20', rival: 'Manana', competicion: 'Liga' }
   ]
   const mockRpePartido: any[] = []
 
@@ -23,6 +27,20 @@ describe('QuickMinuteRegistrationModal', () => {
       rpe_partido: mockRpePartido,
       saveRpePartidoBatch: mockSave
     } as any)
+    vi.mocked(getTodayLocalISO).mockReturnValue('2026-08-19')
+  })
+
+  it('Filtra partidos usando fecha local (hoy y pasados sí, futuros no)', () => {
+    render(<QuickMinuteRegistrationModal open={true} onClose={vi.fn()} initialMatchId="p1" />)
+    const select = screen.getAllByRole('combobox')[0] // Partido select
+    
+    // Deberían estar las opciones correspondientes a Ayer y Hoy, pero no Mañana
+    expect(screen.getByText(/Ayer/)).toBeInTheDocument()
+    expect(screen.getByText(/Hoy/)).toBeInTheDocument()
+    expect(screen.queryByText(/Manana/)).not.toBeInTheDocument()
+    
+    // Verificamos que se usó getTodayLocalISO para determinar "hoy"
+    expect(getTodayLocalISO).toHaveBeenCalled()
   })
 
   it('1. El modal renderiza correctamente', () => {
@@ -55,7 +73,7 @@ describe('QuickMinuteRegistrationModal', () => {
       expect(mockSave).toHaveBeenCalledWith([{
         id_partido: 'p1',
         id_jugadora: 'j1',
-        fecha: '2023-01-01',
+        fecha: '2026-08-18',
         participacion: 'no_convocada',
         minutos_jugados: 0,
         rpe: null,
@@ -81,7 +99,7 @@ describe('QuickMinuteRegistrationModal', () => {
       expect(mockSave).toHaveBeenCalledWith([{
         id_partido: 'p1',
         id_jugadora: 'j1',
-        fecha: '2023-01-01',
+        fecha: '2026-08-18',
         participacion: 'parcial',
         minutos_jugados: 18,
         rpe: null,
@@ -108,7 +126,7 @@ describe('QuickMinuteRegistrationModal', () => {
       expect(mockSave).toHaveBeenCalledWith([{
         id_partido: 'p1',
         id_jugadora: 'j1',
-        fecha: '2023-01-01',
+        fecha: '2026-08-18',
         participacion: 'parcial',
         minutos_jugados: 18,
         rpe: 7,
