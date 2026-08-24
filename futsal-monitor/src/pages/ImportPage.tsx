@@ -68,6 +68,7 @@ export function ImportPage() {
   const [omittedRows, setOmittedRows] = useState<Set<number>>(new Set())
   const [editingRowId, setEditingRowId] = useState<number | null>(null)
   const [draftEditData, setDraftEditData] = useState<Record<string, any> | null>(null)
+  const [aliasesToSave, setAliasesToSave] = useState<Record<string, string>>({})
 
   // Derivación pura del resumen de previsualización (React State Pure Rule)
   const previewSummary = useMemo(() => {
@@ -412,6 +413,7 @@ export function ImportPage() {
     setEditingRowId(row.filaOriginal)
     setDraftEditData({
       id_jugadora: row.id_jugadora,
+      recordar_alias: row.estado === 'ERROR' || row.estado === 'ACTUALIZACION_POSIBLE',
       fecha: row.fecha,
       calidad_sueno: row.calidad_sueno ?? '',
       fatiga: row.fatiga ?? '',
@@ -441,6 +443,12 @@ export function ImportPage() {
 
   const handleSaveRow = (filaOriginal: number) => {
     if (!draftEditData) return
+
+    const originalRow = previewData.find(p => p.filaOriginal === filaOriginal)
+    if (draftEditData.recordar_alias && draftEditData.id_jugadora && originalRow?.alias_origen) {
+      setAliasesToSave(prev => ({ ...prev, [originalRow.alias_origen!]: draftEditData.id_jugadora }))
+    }
+
     setParsedRawRows(prev => {
       const newRows = [...prev]
       const idx = filaOriginal - 2
@@ -510,6 +518,7 @@ export function ImportPage() {
       filename: importFile?.name || 'forms.csv',
       sheetName: selectedSheet,
       mappingName: selectedPlantillaId === 'default' ? 'Google Forms Wellness 2026-27' : (plantillas_importacion.find(p => p.id === Number(selectedPlantillaId))?.nombre || 'Personalizada'),
+      aliasesToSave: Object.entries(aliasesToSave).map(([a, id]) => ({ alias_origen: a, id_jugadora: id })),
       onStart: () => {
         setImporting(true)
       },
@@ -993,6 +1002,17 @@ export function ImportPage() {
                                           </option>
                                         ))}
                                       </select>
+                                      {(row.estado === 'ERROR' || row.estado === 'ACTUALIZACION_POSIBLE') && draftEditData.id_jugadora && (
+                                        <div className="mt-1 flex items-center gap-1">
+                                          <input
+                                            type="checkbox"
+                                            id={`recordar-${row.filaOriginal}`}
+                                            checked={draftEditData.recordar_alias}
+                                            onChange={e => setDraftEditData({ ...draftEditData, recordar_alias: e.target.checked })}
+                                          />
+                                          <label htmlFor={`recordar-${row.filaOriginal}`} className="text-[9px] text-surface-600 font-medium">Recordar asignación</label>
+                                        </div>
+                                      )}
                                     </td>
                                     <td className="p-1">
                                       <input
@@ -1314,8 +1334,8 @@ export function ImportPage() {
             <div className="space-y-6">
               {importOutcome?.success && (
                 <div className="p-4 bg-green-50 border border-green-200 text-green-800 rounded-lg">
-                  <h3 className="font-bold text-sm">✓ ¡Importación aplicada en la base de datos local!</h3>
-                  <p className="text-xs mt-1">Registros añadidos: <strong>{importOutcome.inserted}</strong> | Actualizados: <strong>{importOutcome.updated}</strong> | Omitidos: {importOutcome.skipped} | Errores: {importOutcome.errors}</p>
+                  <h3 className="font-bold text-sm">🎉 ¡Importación aplicada en la base de datos local!</h3>
+                  <p className="text-xs mt-1">Registros añadidos: <strong>{importOutcome.inserted}</strong> | Actualizados: <strong>{importOutcome.updated}</strong> | Omitidos: {importOutcome.skipped} | Errores: {importOutcome.errors}{importOutcome.nuevos_aliases ? ` | Nuevos Alias Guardados: ${importOutcome.nuevos_aliases}` : ''}</p>
                 </div>
               )}
 

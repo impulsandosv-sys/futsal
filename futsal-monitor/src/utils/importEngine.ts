@@ -1,6 +1,7 @@
 import { db } from '@/db/database'
 import type { FutsalDB } from '@/db/database'
 import { calcularScoreWellness } from '@/utils/calculations'
+import { agregarAliasJugadora } from '@/domain/alias/aliasJugadora'
 import type {
   RawCellValue,
   RawImportRow,
@@ -887,7 +888,8 @@ export async function aplicarImportacionWellness(
   backupName: string,
   tipoCuestionario: 'DIARIO' | 'SEMANAL' = 'DIARIO',
   config?: FiltrosCarga,
-  dbInstance: FutsalDB = db
+  dbInstance: FutsalDB = db,
+  aliasesToSave: { alias_origen: string, id_jugadora: string }[] = []
 ): Promise<ImportOutcome> {
   if (!backupName || backupName.trim() === '') {
     throw new Error('No se puede aplicar la importación sin una copia de seguridad previa de seguridad registrada.')
@@ -932,6 +934,17 @@ export async function aplicarImportacionWellness(
       dbInstance.alertas,
       dbInstance.lesiones
     ], async () => {
+      // Persist aliases first so they roll back on error
+      for (const alias of aliasesToSave) {
+        await agregarAliasJugadora(dbInstance, {
+          id_jugadora: alias.id_jugadora,
+          origen: 'wellness',
+          valor: alias.alias_origen,
+          activo: true,
+          fecha_alta: new Date().toISOString().split('T')[0]
+        })
+      }
+
       // Re-query active season inside transaction
       const temporadaActiva = await obtenerTemporadaActiva(dbInstance)
 
@@ -1265,6 +1278,7 @@ export async function aplicarImportacionWellness(
     updated,
     skipped,
     errors,
+    nuevos_aliases: aliasesToSave.length,
     idImportacion,
     recalculoExitoso: true
   }
@@ -1279,6 +1293,7 @@ export interface ConfirmImportParams {
   filename: string
   sheetName: string
   mappingName: string
+  aliasesToSave?: { alias_origen: string, id_jugadora: string }[]
   onStart: () => void
   onSuccess: (outcome: ImportOutcome) => void
   onFailure: (errorMsg: string) => void
@@ -1305,7 +1320,10 @@ export async function confirmarYEjecutarImportacion(params: ConfirmImportParams)
       params.sheetName,
       params.mappingName,
       params.downloadedBackupName,
-      params.tipoCuestionario
+      params.tipoCuestionario,
+      undefined,
+      db,
+      params.aliasesToSave
     )
 
     if (!outcome.success) {

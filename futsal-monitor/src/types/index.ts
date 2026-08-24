@@ -344,6 +344,7 @@ export interface ImportOutcome {
   updated: number
   skipped: number
   errors: number
+  nuevos_aliases?: number
   idImportacion?: number
   recalculoExitoso: boolean
 }
@@ -672,7 +673,7 @@ export interface Temporada {
   notas?: string
 }
 
-export type OrigenAlias = 'google_forms' | 'chronojump' | 'manual' | 'otro'
+export type OrigenAlias = 'google_forms' | 'chronojump' | 'manual' | 'otro' | 'wellness'
 
 export interface AliasJugadora {
   id_alias?: number

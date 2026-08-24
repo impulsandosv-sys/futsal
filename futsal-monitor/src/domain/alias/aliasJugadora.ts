@@ -3,6 +3,23 @@ import type { FutsalDB } from '@/db/database'
 import { validateFechaLocalISO, getLocalDateString } from '@/domain/dates/dates'
 
 /**
+ * Normaliza un texto para comparación segura de alias:
+ * - Elimina espacios al inicio y final.
+ * - Convierte múltiples espacios internos en uno solo.
+ * - Convierte a minúsculas.
+ * - Elimina diacríticos (tildes).
+ */
+export function normalizarAlias(s: string): string {
+  if (!s) return ''
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
  * Valida la consistencia de una entidad AliasJugadora.
  * Retorna una lista de errores o un array vacío si el alias es totalmente válido.
  */
@@ -52,49 +69,77 @@ export async function agregarAliasJugadora(db: FutsalDB, alias: AliasJugadora): 
       throw new Error(`La jugadora '${alias.id_jugadora}' no existe en la base de datos`)
     }
 
-    const valorNormalizado = alias.valor.trim()
-    const candidatos = await db.alias_jugadora
-      .where({ origen: alias.origen, valor: valorNormalizado })
+    const valorNormalizado = normalizarAlias(alias.valor)
+    const orígenesAComprobar = alias.origen === 'wellness' ? ['wellness', 'google_forms'] : [alias.origen]
+    const candidatosTotales = await db.alias_jugadora
+      .where('origen').anyOf(orígenesAComprobar)
       .toArray()
+    const candidatos = candidatosTotales.filter(a => normalizarAlias(a.valor) === valorNormalizado)
 
+    // 1. Colisiones activas con otras jugadoras (Prioridad absoluta)
     const colision = candidatos.find(
       (a) => a.id_jugadora !== alias.id_jugadora && a.activo === true,
     )
-
     if (colision) {
       throw new Error(
-        `El alias (origen: '${alias.origen}', valor: '${valorNormalizado}') ya está registrado para otra jugadora ('${colision.id_jugadora}')`,
+        `El alias '${alias.valor}' ya está registrado para otra jugadora (ID: ${colision.id_jugadora}).`
       )
     }
 
-    const id = await db.alias_jugadora.put({
-      ...alias,
-      valor: valorNormalizado,
-    })
+    // 2. Reactivación / Idempotencia misma jugadora
+    const existenteMismaJugadora = candidatos.find(a => a.id_jugadora === alias.id_jugadora)
+    if (existenteMismaJugadora) {
+      if (!existenteMismaJugadora.activo) {
+        // Reactivar alias inactivo para la misma jugadora
+        await db.alias_jugadora.update(existenteMismaJugadora.id_alias!, { activo: true, fecha_baja: undefined })
+        return existenteMismaJugadora.id_alias!
+      }
+      // Ya existe y está activo para la misma jugadora: idempotente
+      return existenteMismaJugadora.id_alias!
+    }
 
+    // 3. Alta nueva
+    const newAlias = { ...alias, valor: alias.valor.trim() }
+    const id = await db.alias_jugadora.add(newAlias)
     return id
   })
 }
 
+export class AmbiguousAliasError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AmbiguousAliasError';
+  }
+}
+
 /**
- * Resuelve el ID interno de jugadora a partir del par (origen, valor).
- * Solamente retorna el id_jugadora si existe un alias coincidente con activo === true.
- * Retorna null si el alias no existe o está inactivo.
+ * Resuelve un alias a una id_jugadora si existe y está activo.
+ * Si detecta múltiples IDs activos para el mismo alias normalizado, lanza AmbiguousAliasError.
  */
 export async function resolverAliasActivo(
   db: FutsalDB,
   origen: OrigenAlias,
-  valor: string,
+  valor: string
 ): Promise<string | null> {
   if (!valor || !valor.trim()) return null
 
-  const valorNormalizado = valor.trim()
-  const candidatos = await db.alias_jugadora
-    .where({ origen, valor: valorNormalizado })
+  const valorNormalizado = normalizarAlias(valor)
+  const orígenesAComprobar = origen === 'wellness' ? ['wellness', 'google_forms'] : [origen]
+  const candidatosTotales = await db.alias_jugadora
+    .where('origen').anyOf(orígenesAComprobar)
     .toArray()
+  
+  const candidatos = candidatosTotales.filter(a => normalizarAlias(a.valor) === valorNormalizado)
+  const candidatosActivos = candidatos.filter(a => a.activo === true)
 
-  const activoMatch = candidatos.find((a) => a.activo === true)
-  return activoMatch ? activoMatch.id_jugadora : null
+  if (candidatosActivos.length === 0) return null
+
+  const idsUnicos = Array.from(new Set(candidatosActivos.map(a => a.id_jugadora)))
+  if (idsUnicos.length > 1) {
+    throw new AmbiguousAliasError(`Resolución ambigua: el alias '${valor}' apunta simultáneamente a las jugadoras: ${idsUnicos.join(', ')}`)
+  }
+
+  return idsUnicos[0]
 }
 
 /**

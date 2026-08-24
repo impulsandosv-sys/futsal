@@ -1,12 +1,14 @@
 import type { FutsalDB } from '@/db/database'
 import type { OrigenAlias, Temporada } from '@/types'
 import { validateFechaLocalISO } from '@/domain/dates/dates'
+import { normalizarAlias } from '@/domain/alias/aliasJugadora'
 
 export interface ResolucionIdentidadWellness {
   exito: boolean
   id_jugadora?: string
   alias_origen?: string
   mensajeError?: string
+  metodo_resolucion?: string
 }
 
 export interface ValidacionTemporadaWellness {
@@ -24,7 +26,7 @@ export interface ValidacionTemporadaWellness {
 export async function resolverIdentidadFilaWellness(
   db: FutsalDB,
   valorExternalRaw: unknown,
-  origen: OrigenAlias = 'google_forms'
+  origen: OrigenAlias = 'wellness'
 ): Promise<ResolucionIdentidadWellness> {
   if (valorExternalRaw === null || valorExternalRaw === undefined) {
     return { exito: false, mensajeError: 'ID_Jugadora ausente' }
@@ -41,26 +43,40 @@ export async function resolverIdentidadFilaWellness(
     return {
       exito: true,
       id_jugadora: jugadoraPorId.id_jugadora,
-      alias_origen: aliasValor
+      alias_origen: aliasValor,
+      metodo_resolucion: 'ID exacto'
     }
   }
 
   // 2. Prioridad 2: Alias explícito activo
+  const orígenesAComprobar = origen === 'wellness' ? ['wellness', 'google_forms'] : [origen]
   const candidatos = await db.alias_jugadora
     .where('origen')
-    .equals(origen)
+    .anyOf(orígenesAComprobar)
     .toArray()
 
-  const candidatosValor = candidatos.filter((a) => a.valor.trim() === aliasValor)
+  const aliasNormalizadoVal = normalizarAlias(aliasValor)
+  const candidatosValor = candidatos.filter((a) => normalizarAlias(a.valor) === aliasNormalizadoVal)
   
   if (candidatosValor.length > 0) {
-    const aliasActivo = candidatosValor.find((a) => a.activo === true)
-    if (!aliasActivo) {
+    const activos = candidatosValor.filter((a) => a.activo === true)
+    
+    if (activos.length === 0) {
       return {
         exito: false,
         mensajeError: `Alias '${aliasValor}' inactivo para el origen '${origen}'`
       }
     }
+
+    const idsUnicos = Array.from(new Set(activos.map(a => a.id_jugadora)))
+    if (idsUnicos.length > 1) {
+      return {
+        exito: false,
+        mensajeError: `Resolución ambigua: el alias '${aliasValor}' apunta simultáneamente a múltiples jugadoras activas.`
+      }
+    }
+
+    const aliasActivo = activos[0]
 
     const jugadora = await db.jugadoras.get(aliasActivo.id_jugadora)
     if (!jugadora) {
@@ -73,22 +89,23 @@ export async function resolverIdentidadFilaWellness(
     return {
       exito: true,
       id_jugadora: aliasActivo.id_jugadora,
-      alias_origen: aliasValor
+      alias_origen: aliasValor,
+      metodo_resolucion: 'Alias activo'
     }
   }
 
   // 3. Prioridad 3: Nombre normalizado no ambiguo (Igualdad exacta)
-  const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim()
-  const aliasNormalizado = normalizar(aliasValor)
+  const aliasNormalizado = normalizarAlias(aliasValor)
   
   const jugadorasActivas = await db.jugadoras.filter(j => j.activa === true).toArray()
-  const jugadorasCoincidentes = jugadorasActivas.filter(j => normalizar(j.nombre) === aliasNormalizado)
+  const jugadorasCoincidentes = jugadorasActivas.filter(j => normalizarAlias(j.nombre) === aliasNormalizado)
 
   if (jugadorasCoincidentes.length === 1) {
     return {
       exito: true,
       id_jugadora: jugadorasCoincidentes[0].id_jugadora,
-      alias_origen: aliasValor
+      alias_origen: aliasValor,
+      metodo_resolucion: 'Coincidencia nombre'
     }
   } else if (jugadorasCoincidentes.length > 1) {
     return {

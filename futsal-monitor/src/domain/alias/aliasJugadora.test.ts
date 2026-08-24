@@ -238,5 +238,105 @@ describe('Dominio AliasJugadora (T-02-DOM-GOV)', () => {
     // Alias inexistente con el nombre exacto de la jugadora "Jugadora Uno"
     expect(await resolverAliasActivo(testDb, 'chronojump', 'Jugadora Uno')).toBeNull()
   })
+
+  it('11. Alias activo de J2 + alias inactivo de J1 impide reactivacion', async () => {
+    // 1. Alias inactivo J1
+    await testDb.alias_jugadora.add({
+      id_jugadora: 'J1',
+      origen: 'wellness',
+      valor: 'ani',
+      activo: false,
+      fecha_alta: '2026-08-01',
+    })
+
+    // 2. Alias activo J2
+    await testDb.alias_jugadora.add({
+      id_jugadora: 'J2',
+      origen: 'wellness',
+      valor: 'ani',
+      activo: true,
+      fecha_alta: '2026-08-01',
+    })
+
+    // 3. Reactivar J1 falla
+    await expect(
+      agregarAliasJugadora(testDb, {
+        id_jugadora: 'J1',
+        origen: 'wellness',
+        valor: 'ani',
+        activo: true,
+        fecha_alta: '2026-08-01',
+      })
+    ).rejects.toThrow(/ya est.* registrado para otra jugadora.*J2/)
+
+    // Check states: J2 active, J1 inactive
+    const aliases = await testDb.alias_jugadora.where('origen').equals('wellness').toArray()
+    const j1Alias = aliases.find(a => a.id_jugadora === 'J1')
+    const j2Alias = aliases.find(a => a.id_jugadora === 'J2')
+    expect(j1Alias?.activo).toBe(false)
+    expect(j2Alias?.activo).toBe(true)
+  })
+
+  it('12. resolverAliasActivo lanza AmbiguousAliasError si hay 2 activos', async () => {
+    await testDb.alias_jugadora.add({
+      id_jugadora: 'J1',
+      origen: 'wellness',
+      valor: 'ani',
+      activo: true,
+      fecha_alta: '2026-08-01',
+    })
+    await testDb.alias_jugadora.add({
+      id_jugadora: 'J2',
+      origen: 'google_forms', // compatible origin
+      valor: 'ani',
+      activo: true,
+      fecha_alta: '2026-08-01',
+    })
+
+    await expect(resolverAliasActivo(testDb, 'wellness', 'ani')).rejects.toThrow(/Resolución ambigua/)
+  })
+
+  it('13. Alta idempotente misma jugadora', async () => {
+    await agregarAliasJugadora(testDb, {
+      id_jugadora: 'J1',
+      origen: 'wellness',
+      valor: 'idempotente',
+      activo: true,
+      fecha_alta: '2026-08-01',
+    })
+    const id2 = await agregarAliasJugadora(testDb, {
+      id_jugadora: 'J1',
+      origen: 'wellness',
+      valor: 'idempotente',
+      activo: true,
+      fecha_alta: '2026-08-01',
+    })
+    expect(id2).toBeDefined()
+    
+    // Count should be 1
+    const count = await testDb.alias_jugadora.where('valor').equals('idempotente').count()
+    expect(count).toBe(1)
+  })
+
+  it('14. Reactivación misma jugadora sin conflicto', async () => {
+    await testDb.alias_jugadora.add({
+      id_jugadora: 'J1',
+      origen: 'wellness',
+      valor: 'inactivo',
+      activo: false,
+      fecha_alta: '2026-08-01',
+    })
+
+    await agregarAliasJugadora(testDb, {
+      id_jugadora: 'J1',
+      origen: 'wellness',
+      valor: 'inactivo',
+      activo: true,
+      fecha_alta: '2026-08-02',
+    })
+
+    const resolved = await resolverAliasActivo(testDb, 'wellness', 'inactivo')
+    expect(resolved).toBe('J1')
+  })
 })
 

@@ -22,21 +22,21 @@ describe('Dominio T-02A — Identity & Season Validation for Wellness Import', (
     // Configurar alias
     await db.alias_jugadora.put({
       id_jugadora: 'J1',
-      origen: 'google_forms',
+      origen: 'wellness',
       valor: 'GF-001',
       activo: true,
       fecha_alta: '2026-08-01'
     })
     await db.alias_jugadora.put({
       id_jugadora: 'J2',
-      origen: 'google_forms',
+      origen: 'wellness',
       valor: 'GF-002',
       activo: true,
       fecha_alta: '2026-08-01'
     })
     await db.alias_jugadora.put({
       id_jugadora: 'J1',
-      origen: 'google_forms',
+      origen: 'wellness',
       valor: 'GF-INACTIVO',
       activo: false,
       fecha_alta: '2026-08-01',
@@ -88,7 +88,7 @@ describe('Dominio T-02A — Identity & Season Validation for Wellness Import', (
     it('6. Alias asignado a una jugadora borrada retorna error de existencia', async () => {
       await db.alias_jugadora.put({
         id_jugadora: 'J99',
-        origen: 'google_forms',
+        origen: 'wellness',
         valor: 'GF-FANTASMA',
         activo: true,
         fecha_alta: '2026-08-01'
