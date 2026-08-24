@@ -80,7 +80,6 @@ describe('PR-1: Alias persistentes de Wellness', () => {
       rows, 'update', 'test.csv', 'Hoja', 'Map', 'backup.json', 'DIARIO', undefined, db,
       [{ alias_origen: 'La Ani', id_jugadora: 'J-1' }]
     )
-    console.log('OUTCOME TEST 6:', outcome)
     expect(outcome.nuevos_aliases).toBe(1)
     
     const res = await resolverIdentidadFilaWellness(db, 'La Ani')

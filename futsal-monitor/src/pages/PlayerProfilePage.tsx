@@ -8,6 +8,7 @@ import { formatWeek, getTodayLocalISO } from '@/domain/dates/dates'
 import { Modal } from '@/components/shared/Modal'
 import { StrengthDetailModal } from '@/components/fuerza/StrengthDetailModal'
 import { calcularResumenSesionFuerza } from '@/domain/neuromuscular/fuerzaEngine'
+import { calcularExposicionCompetitiva } from '@/domain/exposure/matchExposure'
 import type { Wellness, FinalidadSesionFuerza } from '@/types'
 
 import { PlayerAliasSection } from '@/components/player/PlayerAliasSection'
@@ -79,6 +80,10 @@ export function PlayerProfilePage() {
   const cargaDiaria = useMemo(() => {
     return calcularCargaDiariaUltimosDias(rpeEntrenoJug, rpePartidoJug, 14, hoyStr, sesiones)
   }, [rpeEntrenoJug, rpePartidoJug, hoyStr, sesiones])
+
+  const exposicionCompetitiva = useMemo(() => {
+    return calcularExposicionCompetitiva(rpePartidoJug, hoyStr)
+  }, [rpePartidoJug, hoyStr])
 
   const wellnessJug = useMemo(() => wellness.filter((w) => w.id_jugadora === id).sort((a, b) => b.fecha.localeCompare(a.fecha)), [wellness, id])
   const lesionesJug = useMemo(() => lesiones.filter((l) => l.id_jugadora === id).sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio)), [lesiones, id])
@@ -372,6 +377,108 @@ export function PlayerProfilePage() {
             ) : (
               <p className="text-[10px] text-surface-400">Sin sesiones de fuerza registradas</p>
             )}
+          </div>
+          <div className="bg-white rounded-lg border border-surface-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-surface-700">Exposición competitiva</h3>
+              <div className="relative group">
+                <span 
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium peer ${exposicionCompetitiva.motivosCalidadDato.length > 0 ? 'cursor-help' : ''} ${
+                  exposicionCompetitiva.calidadDato === 'completa' ? 'bg-green-50 text-green-700 border border-green-200' :
+                  exposicionCompetitiva.calidadDato === 'parcial' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                  exposicionCompetitiva.calidadDato === 'insuficiente' ? 'bg-red-50 text-red-700 border border-red-200' :
+                  'bg-surface-100 text-surface-600 border border-surface-200'
+                }`}
+                  tabIndex={exposicionCompetitiva.motivosCalidadDato.length > 0 ? 0 : undefined}
+                  aria-describedby={exposicionCompetitiva.motivosCalidadDato.length > 0 ? "tooltip-calidad" : undefined}
+                  onKeyDown={(e) => { if (e.key === 'Escape') e.currentTarget.blur() }}
+                >
+                  {exposicionCompetitiva.calidadDato === 'sin_competicion' ? 'Sin competición' : 
+                   exposicionCompetitiva.calidadDato === 'insuficiente' ? 'Datos competitivos incompletos' :
+                   exposicionCompetitiva.calidadDato.charAt(0).toUpperCase() + exposicionCompetitiva.calidadDato.slice(1)}
+                </span>
+                {exposicionCompetitiva.motivosCalidadDato.length > 0 && (
+                  <div id="tooltip-calidad" className="absolute right-0 bottom-full mb-1 hidden group-hover:block peer-focus:block w-48 p-2 bg-surface-800 text-white text-[10px] rounded shadow-lg z-10" role="tooltip">
+                    <ul className="list-disc pl-3">
+                      {exposicionCompetitiva.motivosCalidadDato.map((m, i) => <li key={i}>{m}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-surface-500">Minutos (7d / 28d)</span>
+                <span className="text-sm font-semibold text-surface-800">
+                  {exposicionCompetitiva.minutos7d ?? '—'} / {exposicionCompetitiva.minutos28d ?? '—'}
+                </span>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-surface-500">Partidos (7d / 28d)</span>
+                <span className="text-xs font-medium text-surface-700">
+                  {exposicionCompetitiva.partidosJugados7d} / {exposicionCompetitiva.partidosJugados28d}
+                </span>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-surface-500">Convocatorias (7d / 28d)</span>
+                <span className="text-xs font-medium text-surface-700">
+                  {exposicionCompetitiva.convocatorias7d} / {exposicionCompetitiva.convocatorias28d}
+                </span>
+              </div>
+
+              {exposicionCompetitiva.convocadaSinMinutos28d > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-surface-500">Conv. sin minutos (28d)</span>
+                  <span className="text-xs font-medium text-amber-600">
+                    {exposicionCompetitiva.convocadaSinMinutos28d}
+                  </span>
+                </div>
+              )}
+
+              {exposicionCompetitiva.porcentajeExposicion7d !== null && (
+                <div className="flex items-center justify-between pt-2 border-t border-surface-100">
+                  <span className="text-[10px] text-surface-500">% Exposición (7d)</span>
+                  <span className="text-xs font-semibold text-primary-700">
+                    {Math.round(exposicionCompetitiva.porcentajeExposicion7d)}%
+                  </span>
+                </div>
+              )}
+
+              {exposicionCompetitiva.referenciaSemanal28d !== null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-surface-500">Referencia 28d</span>
+                  <span className="text-xs font-medium text-surface-700">
+                    {Math.round(exposicionCompetitiva.referenciaSemanal28d)} min/sem
+                  </span>
+                </div>
+              )}
+
+              {exposicionCompetitiva.ratioCambioExposicion !== null && (
+                <div className="flex items-center justify-between relative group/ratio">
+                  <span 
+                    className="peer text-[10px] text-surface-500 cursor-help border-b border-dashed border-surface-300" 
+                    tabIndex={0} 
+                    aria-describedby="tooltip-ratio"
+                    onKeyDown={(e) => { if (e.key === 'Escape') e.currentTarget.blur() }}
+                  >
+                    Ratio de cambio
+                  </span>
+                  <span className={`text-xs font-semibold ${
+                    exposicionCompetitiva.ratioCambioExposicion > 1.5 ? 'text-primary-700' :
+                    exposicionCompetitiva.ratioCambioExposicion < 0.5 ? 'text-surface-500' :
+                    'text-surface-800'
+                  }`}>
+                    {exposicionCompetitiva.ratioCambioExposicion.toFixed(2)}
+                  </span>
+                  <div id="tooltip-ratio" className="absolute right-0 bottom-full mb-1 hidden group-hover/ratio:block peer-focus:block w-48 p-2 bg-surface-800 text-white text-[10px] rounded shadow-lg z-10" role="tooltip">
+                    Comparativa de minutos de los últimos 7 días respecto a la media semanal de los últimos 28 días.
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

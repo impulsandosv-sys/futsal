@@ -48,6 +48,8 @@ vi.mock('@/db/database', () => {
       }))
     },
     historial_importaciones: mockTable(),
+    wellness_diario_importado: mockTable(),
+    wellness_semanal_importado: mockTable(),
     sesion_rpe: mockTable(),
     readiness: mockTable(),
     sesiones: mockTable(),
@@ -83,7 +85,7 @@ describe('importEngine - professional validation, mappings & transactions', () =
 
   // 1. Detección de alias de encabezados
   it('1. normalizarEncabezado limpia mayúsculas, espacios y acentos', () => {
-    expect(normalizarEncabezado('  Sueño (1-10)  ')).toBe('sueno (1-10)')
+    expect(normalizarEncabezado('  Sueño (1-10)  ')).toBe('sueno 1 10')
     expect(normalizarEncabezado('Código_Jugadora')).toBe('codigo jugadora')
     expect(normalizarEncabezado('Estrés')).toBe('estres')
   })
@@ -150,7 +152,7 @@ describe('importEngine - professional validation, mappings & transactions', () =
     // ID no existente
     res = validarFilaWellness({ id_jugadora: 'J99', fecha: '2026-07-19', calidad_sueno: '8' }, context)
     expect(res.isValid).toBe(false)
-    expect(res.errorMsg).toContain('no existe')
+    expect(res.errorMsg).toContain('Jugadora no registrada')
 
     // Fecha futura
     const tomorrowStr = new Date(Date.now() + 86400 * 1000).toISOString().split('T')[0]

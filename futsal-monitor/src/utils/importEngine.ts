@@ -915,6 +915,7 @@ export async function aplicarImportacionWellness(
   let skipped = 0
   let errors = 0
   let idImportacion: number | undefined
+  let nuevosAliasesCount = 0
 
   try {
     // Executing transaction on all affected tables for complete atomicity
@@ -936,13 +937,16 @@ export async function aplicarImportacionWellness(
     ], async () => {
       // Persist aliases first so they roll back on error
       for (const alias of aliasesToSave) {
-        await agregarAliasJugadora(dbInstance, {
+        const result = await agregarAliasJugadora(dbInstance, {
           id_jugadora: alias.id_jugadora,
           origen: 'wellness',
           valor: alias.alias_origen,
           activo: true,
           fecha_alta: new Date().toISOString().split('T')[0]
         })
+        if (result.accion === 'creado' || result.accion === 'reactivado') {
+          nuevosAliasesCount++
+        }
       }
 
       // Re-query active season inside transaction
@@ -1278,7 +1282,7 @@ export async function aplicarImportacionWellness(
     updated,
     skipped,
     errors,
-    nuevos_aliases: aliasesToSave.length,
+    nuevos_aliases: nuevosAliasesCount,
     idImportacion,
     recalculoExitoso: true
   }

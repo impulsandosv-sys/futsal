@@ -194,10 +194,14 @@ describe('T-02A-R — Test de Atomicidad y Equivalencia Postimportación Wellnes
         'Hoja1',
         'Default',
         'backup_success.json',
+        'DIARIO',
         undefined,
         dbTest
       )
 
+      if (!outcome.success) {
+        console.error('Import failed with error:', outcome.error)
+      }
       expect(outcome.success).toBe(true)
       expect(outcome.inserted).toBe(1)
 
@@ -254,6 +258,7 @@ describe('T-02A-R — Test de Atomicidad y Equivalencia Postimportación Wellnes
         'Hoja1',
         'Default',
         'backup_fail.json',
+        'DIARIO',
         undefined,
         dbTest
       )
@@ -306,6 +311,7 @@ describe('T-02A-R — Test de Atomicidad y Equivalencia Postimportación Wellnes
         'Hoja1',
         'Default',
         'backup_fail.json',
+        'DIARIO',
         undefined,
         dbTest
       )
@@ -351,6 +357,7 @@ describe('T-02A-R — Test de Atomicidad y Equivalencia Postimportación Wellnes
         'Hoja1',
         'Default',
         'backup_fail.json',
+        'DIARIO',
         undefined,
         dbTest
       )
@@ -396,6 +403,7 @@ describe('T-02A-R — Test de Atomicidad y Equivalencia Postimportación Wellnes
         'Hoja1',
         'Default',
         'backup_fail.json',
+        'DIARIO',
         undefined,
         dbTest
       )

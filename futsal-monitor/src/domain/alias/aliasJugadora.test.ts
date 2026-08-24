@@ -133,13 +133,14 @@ describe('Dominio AliasJugadora (T-02-DOM-GOV)', () => {
   })
 
   it('5. Un alias inactivo no resuelve por defecto', async () => {
-    const idAlias = await agregarAliasJugadora(testDb, {
+    const res = await agregarAliasJugadora(testDb, {
       id_jugadora: 'J1',
       origen: 'google_forms',
       valor: 'J1-TEMPORAL',
       activo: true,
       fecha_alta: '2026-08-01',
     })
+    const idAlias = res.id_alias
 
     expect(await resolverAliasActivo(testDb, 'google_forms', 'J1-TEMPORAL')).toBe('J1')
 

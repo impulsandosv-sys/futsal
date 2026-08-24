@@ -75,13 +75,13 @@ describe('Bloque E — Integración real Dexie de Backups y Restauración (Merge
     expect(backup.version).toBeDefined()
     expect(backup.data.jugadoras).toHaveLength(1)
     expect(backup.data.jugadoras[0].id_jugadora).toBe('J001')
-    expect(Object.keys(backup.data).length).toBe(29)
+    expect(Object.keys(backup.data).length).toBe(31)
   })
 
   it('2. Validación de backup: rechaza JSON inválido, versión no soportada y ausencia de tablas críticas', () => {
     expect(validateBackupData(null).canRestore).toBe(false)
     expect(validateBackupData({ version: 999, databaseSchemaVersion: 999, data: {} }).canRestore).toBe(false)
-    expect(validateBackupData({ backupFormatVersion: 1, databaseSchemaVersion: 15, data: { wellness: [] } }).canRestore).toBe(false) // Falta jugadoras/sesiones/etc
+    expect(validateBackupData({ backupFormatVersion: 1, databaseSchemaVersion: 16, data: { wellness: [] } }).canRestore).toBe(false) // Falta jugadoras/sesiones/etc
   })
 
   it('3. Restore merge sin conflictos: inserta nuevos datos de jugadora y wellness sin tocar datos locales ajenos', async () => {
@@ -90,9 +90,9 @@ describe('Bloque E — Integración real Dexie de Backups y Restauración (Merge
 
     // Incoming
     const backup: BackupFile = {
-      version: 15,
+      version: 16,
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       timestamp: new Date().toISOString(),
       data: {
         ...baseValidData,
@@ -114,9 +114,9 @@ describe('Bloque E — Integración real Dexie de Backups y Restauración (Merge
     await db.jugadoras.add({ id_jugadora: 'J001', nombre: 'Ana Nombre Local', posicion: 'Ala', activa: true })
 
     const backup: BackupFile = {
-      version: 15,
+      version: 16,
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       timestamp: new Date().toISOString(),
       data: {
         ...baseValidData,
@@ -136,9 +136,9 @@ describe('Bloque E — Integración real Dexie de Backups y Restauración (Merge
     await db.jugadoras.add({ id_jugadora: 'J001', nombre: 'Ana Nombre Local', posicion: 'Ala', activa: true })
 
     const backup: BackupFile = {
-      version: 15,
+      version: 16,
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       timestamp: new Date().toISOString(),
       data: {
         ...baseValidData,
@@ -156,9 +156,9 @@ describe('Bloque E — Integración real Dexie de Backups y Restauración (Merge
 
   it('6. Restore merge con huérfano: ignora wellness de jugadora inexistente y registra conflicto', async () => {
     const backup: BackupFile = {
-      version: 15,
+      version: 16,
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       timestamp: new Date().toISOString(),
       data: {
         ...baseValidData,
@@ -191,9 +191,9 @@ describe('Bloque E — Integración real Dexie de Backups y Restauración (Merge
     await db.jugadoras.add({ id_jugadora: 'J_SAFE', nombre: 'Jugadora Segura', posicion: 'Ala', activa: true })
 
     const badBackup: BackupFile = {
-      version: 15,
+      version: 16,
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       timestamp: new Date().toISOString(),
       data: {
         jugadoras: [{ id_jugadora: 'J_INCOMPLETA', nombre: 'Incompleta', posicion: 'Ala', activa: true }]
@@ -350,7 +350,7 @@ describe('Bloque E — Integración real Dexie de Backups y Restauración (Merge
 
     const futureBackup = {
       backupFormatVersion: 1,
-      databaseSchemaVersion: 999, // Versión futura (999 > 15)
+      databaseSchemaVersion: 999, // Versión futura (999 > 16)
       version: 999,
       data: {
         ...baseValidData,
@@ -374,9 +374,9 @@ describe('Bloque E — Integración real Dexie de Backups y Restauración (Merge
     await db.jugadoras.add({ id_jugadora: 'J001', nombre: 'Ana Lopez', posicion: 'Ala', activa: true })
 
     const backup: BackupFile = {
-      version: 15,
+      version: 16,
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       timestamp: new Date().toISOString(),
       data: {
         ...baseValidData,
@@ -422,7 +422,7 @@ describe('Bloque E — Integración real Dexie de Backups y Restauración (Merge
 
     const brokenBackup = {
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       data: {
         ...baseValidData,
         jugadoras: [{ id_jugadora: 'J001', nombre: 'Ana' }],
@@ -443,7 +443,7 @@ describe('Bloque E — Integración real Dexie de Backups y Restauración (Merge
     expect(jugadoras[0].id_jugadora).toBe('J_SAFE_REL')
   })
 
-  it('15. Backup y restauración con equivalencia por entidad de datos deportivos completos CMJ y Fuerza (Requisitos 4, 5E y 6)', async () => {
+  it('16. Backup y restauración con equivalencia por entidad de datos deportivos completos CMJ y Fuerza (Requisitos 4, 5E y 6)', async () => {
     // 1. Población inicial completa
     await db.jugadoras.add({ id_jugadora: 'J_SPORT', nombre: 'Carmen Garcia', posicion: 'Ala', activa: true })
     await db.temporadas.add({ id_temporada: 'TEMP_2026', nombre: '2025/2026', fecha_inicio: '2025-09-01', fecha_fin: '2026-06-30', activa: true })
@@ -533,9 +533,9 @@ describe('Bloque E — Integración real Dexie de Backups y Restauración (Merge
     await db.jugadoras.add({ id_jugadora: 'J001', nombre: 'Ana Local', posicion: 'Ala', activa: true })
 
     const backup: BackupFile = {
-      version: 15,
+      version: 16,
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       timestamp: new Date().toISOString(),
       data: {
         ...baseValidData,

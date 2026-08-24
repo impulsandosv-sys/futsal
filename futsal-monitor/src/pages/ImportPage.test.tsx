@@ -25,6 +25,8 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
     await db.alias_jugadora.clear()
     await db.wellness.clear()
     await db.historial_importaciones.clear()
+    await db.wellness_diario_importado.clear()
+    await db.wellness_semanal_importado.clear()
 
     await db.jugadoras.add({
       id_jugadora: 'J001',
@@ -119,11 +121,11 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       fireEvent.change(importInput, { target: { files: [file] } })
 
       await waitFor(() => {
-        const nextBtn = screen.getByRole('button', { name: /siguiente/i })
+        const nextBtn = screen.getByRole('button', { name: /^siguiente →$/i })
         expect(nextBtn).not.toBeDisabled()
       })
 
-      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
 
       let omitirCheckbox!: HTMLInputElement
       await waitFor(() => {
@@ -201,11 +203,11 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       fireEvent.change(importInput, { target: { files: [file] } })
 
       await waitFor(() => {
-        const nextBtn = screen.getByRole('button', { name: /siguiente/i })
+        const nextBtn = screen.getByRole('button', { name: /^siguiente →$/i })
         expect(nextBtn).not.toBeDisabled()
       })
 
-      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
 
       let checkbox!: HTMLInputElement
       await waitFor(() => {
@@ -266,11 +268,11 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       fireEvent.change(importInput, { target: { files: [file] } })
 
       await waitFor(() => {
-        const nextBtn = screen.getByRole('button', { name: /siguiente/i })
+        const nextBtn = screen.getByRole('button', { name: /^siguiente →$/i })
         expect(nextBtn).not.toBeDisabled()
       })
 
-      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
 
       let errorCheckbox!: HTMLInputElement
       await waitFor(() => {
@@ -284,7 +286,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       expect(screen.getByTestId('preview-count-errores').textContent).toBe('1')
       expect(screen.getByText(/Asistente bloqueado/i)).toBeInTheDocument()
 
-      const stepNextBtn = screen.getByRole('button', { name: /siguiente/i })
+      const stepNextBtn = screen.getByRole('button', { name: /^siguiente →$/i })
       expect(stepNextBtn).toBeDisabled()
 
       // 3. Excluye fila de error
@@ -295,11 +297,169 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
         expect(screen.getByTestId('preview-count-errores').textContent).toBe('0')
         expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('1')
         expect(screen.queryByText(/Asistente bloqueado/i)).not.toBeInTheDocument()
-        expect(screen.getByRole('button', { name: /siguiente/i })).not.toBeDisabled()
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
       })
 
       // Pureza Dexie: 0 escrituras
       expect(await db.wellness.count()).toBe(0)
+    })
+
+    it('Case 3.5 — Row ERROR: inline editing of ID Jugadora, save, and unblock', async () => {
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
+        'INVALID_ID,2026-01-15,8,3,4,2,9'
+      ].join('\n')
+
+      const file = new File([csvContent], 'wellness_error_inline.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
+
+      // 1. Wait for ERROR state and block
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-errores')).toHaveTextContent('1')
+        expect(screen.getByText(/Asistente bloqueado/i)).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).toBeDisabled()
+      })
+
+      // 2. Click Edit button
+      const editBtn = screen.getByRole('button', { name: /editar/i })
+      fireEvent.click(editBtn)
+
+      // 3. Edit mode active: ID Jugadora dropdown and save button should be visible
+      const idSelect = screen.getAllByRole('combobox').slice(-1)[0] // Dropdown for ID Jugadora
+      const saveBtn = screen.getByRole('button', { name: /revalidar/i })
+
+      expect(idSelect).toBeInTheDocument()
+      expect(saveBtn).toBeInTheDocument()
+
+      // 4. Change ID Jugadora to valid J001
+      fireEvent.change(idSelect, { target: { value: 'J001' } })
+
+      // 5. Save changes
+      fireEvent.click(saveBtn)
+
+      // 6. Wait for revalidation and unblock
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-errores')).toHaveTextContent('0')
+        expect(screen.getByTestId('preview-count-nuevos')).toHaveTextContent('1')
+        expect(screen.queryByText(/Asistente bloqueado/i)).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
+      })
+    })
+
+    it('Case 3.6 — Row ERROR: inline editing preserves comentario_sesion', async () => {
+      useStore.setState({
+        plantillas_importacion: [
+          {
+            id: 2,
+            nombre: 'Google Forms',
+            tipoImportacion: 'wellness',
+            mapeoColumnas: [
+              { excelHeader: 'ID_Jugadora', internalField: 'id_jugadora', required: true, label: 'ID Jugadora' },
+              { excelHeader: 'Fecha del entreno', internalField: 'fecha', required: true, label: 'Fecha' },
+              { excelHeader: 'Calidad de sueno', internalField: 'calidad_sueno', required: false, label: 'Calidad de sueño' },
+              { excelHeader: 'Fatiga', internalField: 'fatiga', required: false, label: 'Fatiga' },
+              { excelHeader: 'Dolor muscular', internalField: 'dolor_muscular', required: false, label: 'Dolor muscular' },
+              { excelHeader: 'Estres', internalField: 'estres', required: false, label: 'Estrés' },
+              { excelHeader: 'Estado de animo', internalField: 'estado_animo', required: false, label: 'Estado de ánimo' },
+              { excelHeader: 'Comentario sobre la sesion (opcional)', internalField: 'comentario_sesion', required: false, label: 'Comentario de sesión' }
+            ],
+            creadaEn: '2025-08-01T00:00:00Z',
+            actualizadaEn: '2025-08-01T00:00:00Z',
+            esPredeterminada: true
+          }
+        ]
+      })
+
+      const csvContent = [
+        'ID_Jugadora,Fecha del entreno,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo,Comentario sobre la sesion (opcional)',
+        'INVALID_ID,2026-01-15,8,3,4,2,9,Mi comentario de prueba'
+      ].join('\n')
+
+      const file = new File([csvContent], 'wellness_comentario.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
+
+      // 1. Wait for ERROR state
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-errores')).toHaveTextContent('1')
+      })
+
+      // 2. Click Edit button
+      const editBtn = screen.getByRole('button', { name: /editar/i })
+      fireEvent.click(editBtn)
+
+      const idSelect = screen.getAllByRole('combobox').slice(-1)[0]
+      const saveBtn = screen.getByRole('button', { name: /revalidar/i })
+
+      // 3. Change ID Jugadora to valid J001
+      fireEvent.change(idSelect, { target: { value: 'J001' } })
+
+      // 4. Save changes
+      fireEvent.click(saveBtn)
+
+      // 5. Wait for revalidation and unblock
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-errores')).toHaveTextContent('0')
+        expect(screen.getByTestId('preview-count-nuevos')).toHaveTextContent('1')
+      })
+      
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
+      
+      const downloadBtn = await screen.findByRole('button', { name: /descargar copia de seguridad/i })
+      fireEvent.click(downloadBtn)
+
+      const confirmBackupCb = await screen.findByRole('checkbox', { name: /confirmo que he guardado/i })
+      fireEvent.click(confirmBackupCb)
+
+      // Mock window.alert
+      const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {})
+
+      const applyBtn = await screen.findByRole('button', { name: /aplicar importación/i })
+      fireEvent.click(applyBtn)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Importación aplicada/i)).toBeInTheDocument()
+      }, { timeout: 3000 })
+
+      // Verificamos en IndexedDB
+      const dbImportado = await db.wellness_diario_importado.toArray()
+      expect(dbImportado).toHaveLength(1)
+      expect(dbImportado[0].textos['Comentario sobre la sesión (opcional)']).toBe('Mi comentario de prueba')
+
+      alertMock.mockRestore()
     })
   })
 
@@ -337,11 +497,11 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
 
       // 3. Avanza al paso de validación
       await waitFor(() => {
-        const nextBtn = screen.getByRole('button', { name: /siguiente/i })
+        const nextBtn = screen.getByRole('button', { name: /^siguiente →$/i })
         expect(nextBtn).not.toBeDisabled()
       })
 
-      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
 
       // 4. Comprueba página 1 de 2 y botón Siguiente disponible
       await waitFor(() => {
@@ -447,9 +607,9 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       fireEvent.change(importInput, { target: { files: [file] } })
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /siguiente/i })).not.toBeDisabled()
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
       })
-      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
 
       // Debe haber error
       await waitFor(() => {
@@ -463,11 +623,11 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       fireEvent.click(errorCheckbox)
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /siguiente/i })).not.toBeDisabled()
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
       })
 
       // Avanzar al paso de confirmación
-      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
 
       // Simular copia de seguridad
       const downloadBtn = await screen.findByRole('button', { name: /descargar copia de seguridad/i })

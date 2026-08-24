@@ -8,7 +8,7 @@ export const DAILY_WELLNESS_FIELDS: Record<string, WellnessScaleType> = {
   'Estado de ánimo': 'POSITIVE'
 }
 
-export const WEEKLY_WELLNESS_FIELDS: Record<string, WellnessScaleType> = {
+export const WELLNESS_WEEKLY_FIELD_MAP: Record<string, WellnessScaleType> = {
   '¿Cómo valorarías tu recuperación general esta semana?': 'POSITIVE',
   '¿Cómo ha sido la calidad de tu sueño esta semana?': 'POSITIVE',
   '¿Cómo ha sido tu nivel de estrés fuera del fútbol sala?': 'NEGATIVE',
@@ -59,10 +59,11 @@ export function calcularIndiceDiario(metricas: Record<string, { normalizado: num
 }
 
 export function calcularIndiceSemanal(metricas: Record<string, { normalizado: number | null }>): number | null {
-  const valores = Object.keys(WEEKLY_WELLNESS_FIELDS)
+  const valores = Object.keys(WELLNESS_WEEKLY_FIELD_MAP)
     .map((k) => metricas[k]?.normalizado)
     .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
 
   if (valores.length === 0) return null
   return Math.round((valores.reduce((a, b) => a + b, 0) / valores.length) * 10) / 10
 }
+

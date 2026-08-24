@@ -4,6 +4,7 @@ import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { Filters } from '@/components/shared/Filters'
 import { formatWeek, getWeeksFromActivities, getWeekStartDateISO, getWeekEndDateISO } from '@/domain/dates/dates'
 import { getLoadStatus, calcularResumenEquipoSemanal, calcularCompletitudSemana } from '@/domain/monitoring/monitoring'
+import { calcularExposicionCompetitiva } from '@/domain/exposure/matchExposure'
 import { exportToExcel } from '@/utils/export'
 import { generatePDFStaff } from '@/utils/pdf'
 import { construirDTOStaffResumenSemanal, construirDatosStaffPDFResumen } from '@/domain/privacy/exportPrivacy'
@@ -11,7 +12,7 @@ import { useNavigate } from 'react-router-dom'
 
 export function WeeklySummaryPage() {
   const {
-    jugadoras, sesiones, partidos, sesion_rpe,
+    jugadoras, sesiones, partidos, sesion_rpe, rpe_partido,
     resumen_semanal, filters, setFilter,
     generateWeeklySummary
   } = useStore()
@@ -202,12 +203,17 @@ export function WeeklySummaryPage() {
 
       {semanaActual && (
         <DataTable
-          headers={['Jugadora', 'Posición', 'Carga Entreno', 'Carga Partido', 'Carga Total', 'Carga Crónica', 'ACWR', 'Wellness', 'Sesiones', 'Estado']}
+          headers={['Jugadora', 'Posición', 'Carga Entreno', 'Carga Partido', 'Carga Total', 'Carga Crónica', 'ACWR', 'Wellness', 'Sesiones', 'Minutos (7d)', 'Partidos (7d)', 'Conv. (7d)', 'Estado']}
           emptyMessage="No hay datos para esta semana. Genera el resumen primero."
         >
           {resumenSemana.map((rs) => {
             const jug = jugadoras.find((j) => j.id_jugadora === rs.id_jugadora)
             const status = getLoadStatus(rs.acwr)
+            
+            const weekEndStr = getWeekEndDateISO(semanaActual)
+            const rpePartidoJug = rpe_partido.filter(r => r.id_jugadora === rs.id_jugadora)
+            const exp = weekEndStr ? calcularExposicionCompetitiva(rpePartidoJug, weekEndStr) : null
+
             return (
               <DataRow key={rs.id} onClick={() => navigate(`/jugadoras/${rs.id_jugadora}`)}>
                 <DataCell className="font-medium">{jug?.nombre || rs.id_jugadora}</DataCell>
@@ -223,6 +229,9 @@ export function WeeklySummaryPage() {
                 </DataCell>
                 <DataCell>{rs.wellness_medio > 0 ? rs.wellness_medio : '—'}</DataCell>
                 <DataCell>{rs.num_sesiones}</DataCell>
+                <DataCell>{exp?.minutos7d ?? '—'}</DataCell>
+                <DataCell>{exp?.partidosJugados7d ?? '—'}</DataCell>
+                <DataCell>{exp?.convocatorias7d ?? '—'}</DataCell>
                 <DataCell>
                   <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${status.color}`}>
                     {status.label}

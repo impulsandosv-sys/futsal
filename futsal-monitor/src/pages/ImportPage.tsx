@@ -314,6 +314,7 @@ export function ImportPage() {
     setParsedRawRows([])
     setTipoCuestionario(null)
     setCuestionarioError(null)
+    setAliasesToSave({})
     if (importFileRef.current) importFileRef.current.value = ''
   }
 
@@ -445,8 +446,16 @@ export function ImportPage() {
     if (!draftEditData) return
 
     const originalRow = previewData.find(p => p.filaOriginal === filaOriginal)
-    if (draftEditData.recordar_alias && draftEditData.id_jugadora && originalRow?.alias_origen) {
-      setAliasesToSave(prev => ({ ...prev, [originalRow.alias_origen!]: draftEditData.id_jugadora }))
+    if (originalRow?.alias_origen) {
+      if (draftEditData.recordar_alias && draftEditData.id_jugadora) {
+        setAliasesToSave(prev => ({ ...prev, [originalRow.alias_origen!]: draftEditData.id_jugadora }))
+      } else {
+        setAliasesToSave(prev => {
+          const newState = { ...prev }
+          delete newState[originalRow.alias_origen!]
+          return newState
+        })
+      }
     }
 
     setParsedRawRows(prev => {

@@ -118,7 +118,7 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
 
     expect(screen.getAllByText('Sin registro hoy').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Sin CMJ registrado').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('sin registro').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Sin carga sRPE').length).toBeGreaterThan(0)
 
     expect(screen.queryByText('0 cm')).not.toBeInTheDocument()
     expect(screen.queryByText('0 UA')).not.toBeInTheDocument()

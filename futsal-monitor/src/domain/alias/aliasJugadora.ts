@@ -52,12 +52,17 @@ export function validarAliasJugadora(alias: Partial<AliasJugadora>): string[] {
   return errors
 }
 
+export type ResultadoPersistenciaAlias = 
+  | { accion: 'creado'; id_alias: number }
+  | { accion: 'reactivado'; id_alias: number }
+  | { accion: 'existente'; id_alias: number }
+
 /**
  * Registra un alias externo para una jugadora de forma atómica.
  * Verifica que la jugadora exista y previene que el mismo par (origen, valor) esté asignado
  * a otra jugadora con estado activo.
  */
-export async function agregarAliasJugadora(db: FutsalDB, alias: AliasJugadora): Promise<number> {
+export async function agregarAliasJugadora(db: FutsalDB, alias: AliasJugadora): Promise<ResultadoPersistenciaAlias> {
   const errs = validarAliasJugadora(alias)
   if (errs.length > 0) {
     throw new Error(errs.join('. '))
@@ -92,16 +97,16 @@ export async function agregarAliasJugadora(db: FutsalDB, alias: AliasJugadora): 
       if (!existenteMismaJugadora.activo) {
         // Reactivar alias inactivo para la misma jugadora
         await db.alias_jugadora.update(existenteMismaJugadora.id_alias!, { activo: true, fecha_baja: undefined })
-        return existenteMismaJugadora.id_alias!
+        return { accion: 'reactivado', id_alias: existenteMismaJugadora.id_alias! }
       }
       // Ya existe y está activo para la misma jugadora: idempotente
-      return existenteMismaJugadora.id_alias!
+      return { accion: 'existente', id_alias: existenteMismaJugadora.id_alias! }
     }
 
     // 3. Alta nueva
     const newAlias = { ...alias, valor: alias.valor.trim() }
     const id = await db.alias_jugadora.add(newAlias)
-    return id
+    return { accion: 'creado', id_alias: id }
   })
 }
 

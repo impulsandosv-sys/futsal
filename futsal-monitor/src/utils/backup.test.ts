@@ -28,6 +28,8 @@ vi.mock('@/db/database', () => {
     jugadoras: mockTable(),
     formulario_respuestas: mockTable(),
     wellness: mockTable(),
+    wellness_diario_importado: mockTable(),
+    wellness_semanal_importado: mockTable(),
     sesiones: mockTable(),
     partidos: mockTable(),
     lesiones: mockTable(),
@@ -105,9 +107,9 @@ describe('backup utility - strict validation & security', () => {
     
     const backup = await createBackupData()
 
-    expect(backup.version).toBe(15)
+    expect(backup.version).toBe(16)
     expect(backup.backupFormatVersion).toBe(1)
-    expect(backup.databaseSchemaVersion).toBe(15)
+    expect(backup.databaseSchemaVersion).toBe(16)
     expect(backup.data).toHaveProperty('temporadas')
     expect(backup.data).toHaveProperty('alias_jugadora')
     expect(backup.data).toHaveProperty('jugadoras')
@@ -130,16 +132,16 @@ describe('backup utility - strict validation & security', () => {
     expect(validation.isValid).toBe(false)
     expect(validation.canRestore).toBe(false)
 
-    validation = validateBackupData({ version: 15 })
+    validation = validateBackupData({ version: 16 })
     expect(validation.isValid).toBe(false)
     expect(validation.canRestore).toBe(false)
   })
 
   it('3. Contrato de Versiones: valida backupFormatVersion y databaseSchemaVersion de forma independiente', async () => {
-    // Formato 1 + Esquema 15 (Soportado): canRestore es true
+    // Formato 1 + Esquema 16 (Soportado): canRestore es true
     let validation = validateBackupData({
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       data: { jugadoras: [], sesiones: [], partidos: [], lesiones: [], temporadas: [] }
     })
     expect(validation.isValid).toBe(true)
@@ -148,7 +150,7 @@ describe('backup utility - strict validation & security', () => {
     // Formato 2 (No soportado): canRestore es false, sin escrituras
     const backupFormatNoSoportado = {
       backupFormatVersion: 2,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       data: { jugadoras: [{ id_jugadora: 'J01', nombre: 'Jugadora 1' }], sesiones: [], partidos: [], lesiones: [], temporadas: [] }
     }
     validation = validateBackupData(backupFormatNoSoportado)
@@ -177,7 +179,7 @@ describe('backup utility - strict validation & security', () => {
   it('4. Bloqueo total por tabla crítica ausente: si falta una tabla crítica canRestore es false y cero tablas alteradas', async () => {
     const backupIncompletoSinJugadoras = {
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       data: {
         sesiones: [{ id_sesion: 'S01' }],
         partidos: [],
@@ -201,7 +203,7 @@ describe('backup utility - strict validation & security', () => {
   it('5. Política de Replace Opción A: bloquea reemplazo total si falta cualquier tabla opcional del contrato para evitar borrado accidental', async () => {
     const backupIncompletoSinWellness = {
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       data: {
         jugadoras: [{ id_jugadora: 'J01', nombre: 'Jugadora 1' }],
         sesiones: [],
@@ -221,7 +223,7 @@ describe('backup utility - strict validation & security', () => {
   it('6. Política de Merge con tabla ausente: preserva datos locales de esa tabla sin alterarlos ni ejecutar clear()', async () => {
     const backupSinWellness = {
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       data: {
         jugadoras: [{ id_jugadora: 'J01', nombre: 'Jugadora 1' }],
         sesiones: [],
@@ -283,7 +285,7 @@ describe('backup utility - strict validation & security', () => {
   it('8. Prevención de huérfanos en Merge: omitir registros hijos cuyos padres no existen', async () => {
     const backupData = {
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       data: {
         jugadoras: [{ id_jugadora: 'J01', nombre: 'Jugadora Existente' }],
         sesiones: [],
@@ -319,7 +321,7 @@ describe('backup utility - strict validation & security', () => {
   it('9. Restauración Replace: cancela y no ejecuta clear() si falla la descarga del backup previo', async () => {
     const backupData = {
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       data: {
         jugadoras: [{ id_jugadora: 'J01', nombre: 'Jugadora Nueva' }],
         sesiones: [],
@@ -329,7 +331,7 @@ describe('backup utility - strict validation & security', () => {
         formulario_respuestas: [], wellness: [], tests_fisicos: [], rpe_partido: [],
         sesion_rpe: [], alertas: [], historial_importaciones: [], historial_copias: [],
         ciclo_menstrual: [], carga_gps: [], fuerza_vbt: [], hidratacion: [],
-        rtp_checklist: [], test_psicologico: [], protocolos_cmj: [], pruebas_cmj: [],
+        rtp_checklist: [], test_psicologico: [], protocolos_cmj: [], pruebas_cmj: [], wellness_diario_importado: [], wellness_semanal_importado: [],
         ejercicios_fuerza: [], trabajos_fuerza: [], plantillas_fuerza: [],
         sesiones_fuerza_individual: [], plantillas_importacion: [], alias_jugadora: []
       }
@@ -350,7 +352,7 @@ describe('backup utility - strict validation & security', () => {
   it('10. Rollback de Transacción Dexie: captura error y responde con success: false sin persistencia', async () => {
     const backupData = {
       backupFormatVersion: 1,
-      databaseSchemaVersion: 15,
+      databaseSchemaVersion: 16,
       data: {
         jugadoras: [{ id_jugadora: 'J01', nombre: 'Jugadora Test' }],
         sesiones: [],
@@ -360,7 +362,7 @@ describe('backup utility - strict validation & security', () => {
         formulario_respuestas: [], wellness: [], tests_fisicos: [], rpe_partido: [],
         sesion_rpe: [], alertas: [], historial_importaciones: [], historial_copias: [],
         ciclo_menstrual: [], carga_gps: [], fuerza_vbt: [], hidratacion: [],
-        rtp_checklist: [], test_psicologico: [], protocolos_cmj: [], pruebas_cmj: [],
+        rtp_checklist: [], test_psicologico: [], protocolos_cmj: [], pruebas_cmj: [], wellness_diario_importado: [], wellness_semanal_importado: [],
         ejercicios_fuerza: [], trabajos_fuerza: [], plantillas_fuerza: [],
         sesiones_fuerza_individual: [], plantillas_importacion: [], alias_jugadora: []
       }

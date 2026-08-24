@@ -4,6 +4,7 @@ import { useStore } from '@/store/store'
 import { parseISO, subDays, addDays, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { construirDecisionDiaria } from '@/domain/dailyDecision/dailyDecisionEngine'
+import { calcularExposicionCompetitiva } from '@/domain/exposure/matchExposure'
 
 export function DailyDecisionPage() {
   const {
@@ -154,7 +155,7 @@ export function DailyDecisionPage() {
                   <th className="py-3 px-4">Wellness ({fechaOperativa})</th>
                   <th className="py-3 px-4">Alertas</th>
                   <th className="py-3 px-4">Último CMJ registrado</th>
-                  <th className="py-3 px-4">Carga sRPE (Últimos 7 días)</th>
+                  <th className="py-3 px-4">Carga y Exposición (7d)</th>
                   <th className="py-3 px-4 text-right">Acción</th>
                 </tr>
               </thead>
@@ -256,20 +257,47 @@ export function DailyDecisionPage() {
                       )}
                     </td>
 
-                    {/* Carga sRPE 7 días */}
+                    {/* Carga sRPE 7 días y Exposición */}
                     <td className="py-3 px-4">
-                      {j.carga7d ? (
-                        <div className="space-y-0.5">
-                          <span className="font-semibold text-surface-900">
-                            {j.carga7d.cargaAcumulada7d} UA
-                          </span>
-                          <span className="text-[10px] text-surface-500 block">
-                            {j.carga7d.numSesiones} sesión(es) (última: {j.carga7d.ultimaSesionFecha || 'N/A'})
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-surface-400 italic">sin registro</span>
-                      )}
+                      <div className="space-y-1.5">
+                        {j.carga7d ? (
+                          <div className="space-y-0.5">
+                            <span className="font-semibold text-surface-900">
+                              Carga: {j.carga7d.cargaAcumulada7d} UA
+                            </span>
+                            <span className="text-[10px] text-surface-500 block">
+                              {j.carga7d.numSesiones} sesión(es) (última: {j.carga7d.ultimaSesionFecha || 'N/A'})
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-surface-400 italic block">Sin carga sRPE</span>
+                        )}
+
+                        {(() => {
+                          const rpeJug = rpe_partido.filter(r => r.id_jugadora === j.id_jugadora)
+                          const exp = calcularExposicionCompetitiva(rpeJug, fechaOperativa)
+                          if (exp.calidadDato === 'sin_competicion') {
+                            return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-medium bg-surface-100 text-surface-600 border border-surface-200">Sin competición</span>
+                          }
+                          if (exp.calidadDato === 'insuficiente') {
+                            return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-medium bg-red-50 text-red-700 border border-red-200">Datos competitivos incompletos</span>
+                          }
+                          return (
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-medium ${
+                                exp.calidadDato === 'completa' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}>
+                                {exp.minutos7d ?? '—'} min / {exp.convocatorias7d} conv.
+                              </span>
+                              {exp.ratioCambioExposicion !== null && (
+                                <span className="text-[9px] text-surface-500 font-medium">
+                                  Ratio: {exp.ratioCambioExposicion.toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </div>
                     </td>
 
                     {/* Acción */}
