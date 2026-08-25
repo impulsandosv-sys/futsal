@@ -435,9 +435,9 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
         expect(screen.getByTestId('preview-count-errores')).toHaveTextContent('0')
         expect(screen.getByTestId('preview-count-nuevos')).toHaveTextContent('1')
       })
-      
+
       fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
-      
+
       const downloadBtn = await screen.findByRole('button', { name: /descargar copia de seguridad/i })
       fireEvent.click(downloadBtn)
 
@@ -660,6 +660,249 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       expect(dbImportado).toHaveLength(1)
       expect(dbImportado[0].textos['Comentario sobre la sesión (opcional)']).toBe('Buen entreno')
       expect(dbImportado[0].textos['Marca temporal']).toBe('46054.41615740741')
+
+      alertMock.mockRestore()
+    })
+  })
+
+  describe('BLOCK D - Flujo de Aliases (Recordar Asignacion)', () => {
+    beforeEach(async () => {
+      await db.wellness.clear()
+      await db.wellness_diario_importado.clear()
+      await db.alias_jugadora.clear()
+      await db.jugadoras.clear()
+
+      await db.jugadoras.bulkAdd([
+        { id_jugadora: 'J001', nombre: 'Jugadora 1', posicion: 'Cierre', activa: true },
+        { id_jugadora: 'J002', nombre: 'Jugadora 2', posicion: 'Ala', activa: true }
+      ])
+      await db.wellness.bulkAdd([
+        { id: 'W1', id_jugadora: 'J001', fecha: '2026-02-01', calidad_sueno: 8, fatiga: 7, dolor_muscular: 6, estres: 5, estado_animo: 8, dolor_especifico: 'Ninguno' },
+        { id: 'W2', id_jugadora: 'J001', fecha: '2026-02-02', calidad_sueno: 8, fatiga: 7, dolor_muscular: 6, estres: 5, estado_animo: 8, dolor_especifico: 'Ninguno' },
+        { id: 'W3', id_jugadora: 'J002', fecha: '2026-02-01', calidad_sueno: 8, fatiga: 7, dolor_muscular: 6, estres: 5, estado_animo: 8, dolor_especifico: 'Ninguno' },
+        { id: 'W4', id_jugadora: 'J002', fecha: '2026-02-02', calidad_sueno: 8, fatiga: 7, dolor_muscular: 6, estres: 5, estado_animo: 8, dolor_especifico: 'Ninguno' }
+      ])
+
+      useStore.getState().loadAll()
+    })
+
+    const setupWithCSV = async (csvRows: string[]) => {
+      const header = "Marca temporal,ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo,Dolor_especifico\n";
+      const csvContent = header + csvRows.join("\n")
+      const file = new File([csvContent], 'test-wellness.csv', { type: 'text/csv' })
+
+      const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {})
+
+      render(
+        <MemoryRouter>
+          <ImportPage />
+        </MemoryRouter>
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText(/Asistente de Importacin|Asistente de Importación/i)).toBeInTheDocument()
+      })
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText(/ID Jugadora/i)).toBeInTheDocument()
+      })
+
+      const selects = screen.getAllByRole('combobox')
+      fireEvent.change(selects[1], { target: { value: 'ID_Jugadora' } })
+      fireEvent.change(selects[2], { target: { value: 'Fecha' } })
+
+      await waitFor(() => {
+        expect(screen.getByText(/asistente bloqueado/i)).toBeInTheDocument()
+      })
+
+      return alertMock
+    }
+
+    const completeImport = async () => {
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText(/resumen de carga/i)).toBeInTheDocument()
+      })
+
+      const backupBtn = screen.getByRole('button', { name: /descargar copia de seguridad previa/i })
+      fireEvent.click(backupBtn)
+
+      const confirmCheck = await screen.findByRole('checkbox', { name: /confirmo que he guardado/i })
+      await waitFor(() => {
+        expect(confirmCheck).not.toBeDisabled()
+      })
+      fireEvent.click(confirmCheck)
+
+      const applyBtn = screen.getByRole('button', { name: /^aplicar importacin|^aplicar importación/i })
+      fireEvent.click(applyBtn)
+
+      await waitFor(() => {
+        expect(screen.getByText(/importacin aplicada|importación aplicada/i)).toBeInTheDocument()
+      }, { timeout: 3000 })
+    }
+
+    it('Test A - Reabrir conserva alias original', async () => {
+      const alertMock = await setupWithCSV(["2026-02-01 10:00:00,Desconocida1,2026-02-01,9,7,6,5,8,Ninguno"])
+
+      // 1. Asignar J001 con recordar activado
+      let editBtn = await screen.findByRole('button', { name: /editar/i })
+      fireEvent.click(editBtn)
+      await waitFor(() => { expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0) })
+
+      const idSelects = screen.getAllByRole('combobox')
+      const idSelect = idSelects[idSelects.length - 1]
+      fireEvent.change(idSelect, { target: { value: 'J001' } })
+
+      let checkbox = await screen.findByLabelText(/recordar asignacin|recordar asignación/i) as HTMLInputElement
+      if (!checkbox.checked) fireEvent.click(checkbox)
+
+      // 2. Guardar/revalidar
+      let saveBtn = screen.getByRole('button', { name: /revalidar/i })
+      fireEvent.click(saveBtn)
+      await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      await waitFor(() => { expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled() })
+
+      // 3. Reabrir edicion
+      editBtn = await screen.findByRole('button', { name: /editar/i })
+      fireEvent.click(editBtn)
+      await waitFor(() => { expect(screen.getByRole('button', { name: /revalidar/i })).toBeInTheDocument() })
+
+      // 4. Verificar que alias_origen_real sigue siendo Desconocida1 (el checkbox esta visible y marcado)
+      checkbox = await screen.findByLabelText(/recordar asignacin|recordar asignación/i) as HTMLInputElement
+      expect(checkbox).toBeInTheDocument()
+      expect(checkbox.checked).toBe(true)
+
+      // 5. Desmarcar, guardar e importar
+      fireEvent.click(checkbox)
+      saveBtn = screen.getByRole('button', { name: /revalidar/i })
+      fireEvent.click(saveBtn)
+      await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+
+      await completeImport()
+
+      // 6. Verificar que Desconocida1 no se persiste
+      const allAliases = await db.alias_jugadora.toArray()
+      const savedAlias = allAliases.find(a => a.valor.toLowerCase() === 'desconocida1')
+      expect(savedAlias).toBeUndefined()
+
+      alertMock.mockRestore()
+    })
+
+    it('Test B - Dos aliases, misma jugadora', async () => {
+      const alertMock = await setupWithCSV([
+        "2026-02-01 10:00:00,Ani,2026-02-01,9,7,6,5,8,Ninguno",
+        "2026-02-02 10:00:00,Ana G.,2026-02-02,9,7,6,5,8,Ninguno"
+      ])
+
+      // Asignar ambas a J001
+      const editBtns = await screen.findAllByRole('button', { name: /editar/i })
+
+      // Fila 2 (Ani)
+      fireEvent.click(editBtns[0])
+      await waitFor(() => { expect(screen.getByRole('button', { name: /revalidar/i })).toBeInTheDocument() })
+      let idSelects = screen.getAllByRole('combobox')
+      fireEvent.change(idSelects[idSelects.length - 1], { target: { value: 'J001' } })
+      let checkbox = await screen.findByLabelText(/recordar asignacin|recordar asignación/i) as HTMLInputElement
+      if (!checkbox.checked) fireEvent.click(checkbox)
+      fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
+      await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+
+      // Fila 3 (Ana G.)
+      fireEvent.click(editBtns[1])
+      await waitFor(() => { expect(screen.getByRole('button', { name: /revalidar/i })).toBeInTheDocument() })
+      idSelects = screen.getAllByRole('combobox')
+      fireEvent.change(idSelects[idSelects.length - 1], { target: { value: 'J001' } })
+      checkbox = await screen.findByLabelText(/recordar asignacin|recordar asignación/i) as HTMLInputElement
+      if (!checkbox.checked) fireEvent.click(checkbox)
+      fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
+      await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+
+      await waitFor(() => { expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled() })
+
+      // Reabrir solo fila 2 (Ani)
+      const reopenBtns = await screen.findAllByRole('button', { name: /editar/i })
+      fireEvent.click(reopenBtns[0])
+      await waitFor(() => { expect(screen.getByRole('button', { name: /revalidar/i })).toBeInTheDocument() })
+
+      // Desmarcar
+      checkbox = await screen.findByLabelText(/recordar asignacin|recordar asignación/i) as HTMLInputElement
+      if (checkbox.checked) fireEvent.click(checkbox)
+      fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
+      await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+
+      await completeImport()
+
+      // Verificar DB
+      const allAliases = await db.alias_jugadora.toArray()
+
+      const ani = allAliases.find(a => a.valor.toLowerCase() === 'ani' && a.activo === true)
+      expect(ani).toBeUndefined()
+
+      const anaG = allAliases.find(a => a.valor.toLowerCase() === 'ana g.' && a.activo === true)
+      expect(anaG).toBeDefined()
+      expect(anaG?.id_jugadora).toBe('J001')
+
+      alertMock.mockRestore()
+    })
+
+    it('Test C - Cambio de jugadora', async () => {
+      const alertMock = await setupWithCSV(["2026-02-01 10:00:00,Ani,2026-02-01,9,7,6,5,8,Ninguno"])
+
+      // Asignar J001
+      let editBtn = await screen.findByRole('button', { name: /editar/i })
+      fireEvent.click(editBtn)
+      await waitFor(() => { expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0) })
+
+      let idSelects = screen.getAllByRole('combobox')
+      fireEvent.change(idSelects[idSelects.length - 1], { target: { value: 'J001' } })
+
+      let checkbox = await screen.findByLabelText(/recordar asignacin|recordar asignación/i) as HTMLInputElement
+      if (!checkbox.checked) fireEvent.click(checkbox)
+
+      fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
+      await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      await waitFor(() => { expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled() })
+
+      // Reabrir misma fila
+      editBtn = await screen.findByRole('button', { name: /editar/i })
+      fireEvent.click(editBtn)
+      await waitFor(() => { expect(screen.getByRole('button', { name: /revalidar/i })).toBeInTheDocument() })
+
+      // Cambiar a J002
+      idSelects = screen.getAllByRole('combobox')
+      fireEvent.change(idSelects[idSelects.length - 1], { target: { value: 'J002' } })
+
+      // El checkbox deberia seguir ahi y estar marcado, si no, lo marcamos
+      checkbox = await screen.findByLabelText(/recordar asignacin|recordar asignación/i) as HTMLInputElement
+      if (!checkbox.checked) fireEvent.click(checkbox)
+
+      fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
+      await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+
+      await completeImport()
+
+      // Verificar
+      const allAliases = await db.alias_jugadora.toArray()
+      const ani = allAliases.find(a => a.valor.toLowerCase() === 'ani' && a.activo === true)
+      expect(ani).toBeDefined()
+      expect(ani?.id_jugadora).toBe('J002')
+
+      const aniJ001 = allAliases.find(a => a.valor.toLowerCase() === 'ani' && a.id_jugadora === 'J001')
+      expect(aniJ001).toBeUndefined()
 
       alertMock.mockRestore()
     })

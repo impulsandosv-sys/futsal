@@ -68,7 +68,7 @@ export function ImportPage() {
   const [omittedRows, setOmittedRows] = useState<Set<number>>(new Set())
   const [editingRowId, setEditingRowId] = useState<number | null>(null)
   const [draftEditData, setDraftEditData] = useState<Record<string, any> | null>(null)
-  const [aliasesToSave, setAliasesToSave] = useState<Record<string, string>>({})
+  const [aliasesToSave, setAliasesToSave] = useState<Record<number, { filaOriginal: number, alias_origen: string, id_jugadora: string }>>({})
 
   // Derivación pura del resumen de previsualización (React State Pure Rule)
   const previewSummary = useMemo(() => {
@@ -412,9 +412,11 @@ export function ImportPage() {
 
   const handleEditRow = (row: PreviewRow) => {
     setEditingRowId(row.filaOriginal)
+    const aliasTemporalExistente = aliasesToSave[row.filaOriginal as number]
     setDraftEditData({
       id_jugadora: row.id_jugadora,
-      recordar_alias: row.estado === 'ERROR' || row.estado === 'ACTUALIZACION_POSIBLE',
+      alias_origen_real: aliasTemporalExistente?.alias_origen ?? row.alias_origen,
+      recordar_alias: aliasTemporalExistente ? true : (row.estado === 'ERROR' || row.estado === 'ACTUALIZACION_POSIBLE'),
       fecha: row.fecha,
       calidad_sueno: row.calidad_sueno ?? '',
       fatiga: row.fatiga ?? '',
@@ -446,13 +448,22 @@ export function ImportPage() {
     if (!draftEditData) return
 
     const originalRow = previewData.find(p => p.filaOriginal === filaOriginal)
-    if (originalRow?.alias_origen) {
+    const realAlias = draftEditData.alias_origen_real || originalRow?.alias_origen
+
+    if (realAlias) {
       if (draftEditData.recordar_alias && draftEditData.id_jugadora) {
-        setAliasesToSave(prev => ({ ...prev, [originalRow.alias_origen!]: draftEditData.id_jugadora }))
+        setAliasesToSave(prev => ({
+          ...prev,
+          [filaOriginal]: {
+            filaOriginal,
+            alias_origen: realAlias,
+            id_jugadora: draftEditData.id_jugadora
+          }
+        }))
       } else {
         setAliasesToSave(prev => {
           const newState = { ...prev }
-          delete newState[originalRow.alias_origen!]
+          delete newState[filaOriginal]
           return newState
         })
       }
@@ -527,7 +538,7 @@ export function ImportPage() {
       filename: importFile?.name || 'forms.csv',
       sheetName: selectedSheet,
       mappingName: selectedPlantillaId === 'default' ? 'Google Forms Wellness 2026-27' : (plantillas_importacion.find(p => p.id === Number(selectedPlantillaId))?.nombre || 'Personalizada'),
-      aliasesToSave: Object.entries(aliasesToSave).map(([a, id]) => ({ alias_origen: a, id_jugadora: id })),
+      aliasesToSave: Object.values(aliasesToSave).map(a => ({ alias_origen: a.alias_origen, id_jugadora: a.id_jugadora })),
       onStart: () => {
         setImporting(true)
       },
