@@ -10,6 +10,7 @@ export interface ConfirmationModalProps {
   valorAnterior: string | number | boolean | null
   valorNuevo: string | number | boolean | null
   descripcion?: string
+  requireReason?: boolean
 }
 
 export function ConfirmationModal({
@@ -20,7 +21,8 @@ export function ConfirmationModal({
   entidad,
   valorAnterior,
   valorNuevo,
-  descripcion
+  descripcion,
+  requireReason = true
 }: ConfirmationModalProps) {
   const [motivo, setMotivo] = useState('')
   const [errorMotivo, setErrorMotivo] = useState<string | null>(null)
@@ -48,7 +50,7 @@ export function ConfirmationModal({
 
   const handleConfirm = () => {
     const trimmed = motivo.trim()
-    if (!trimmed) {
+    if (requireReason && !trimmed) {
       setErrorMotivo('El motivo es obligatorio para registrar el cambio en auditoría')
       return
     }
@@ -82,11 +84,15 @@ export function ConfirmationModal({
           </div>
         </div>
 
-        {/* Motivo obligatorio del cambio */}
+        {/* Motivo del cambio */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="motivo-input" className="text-xs font-semibold text-surface-800 flex items-center justify-between">
-            <span>Motivo de la modificación ({entidad})</span>
-            <span className="text-amber-600 font-normal text-[10px]">* Obligatorio</span>
+            <span>{requireReason ? `Motivo de la modificación (${entidad})` : 'Motivo o nota (opcional)'}</span>
+            {requireReason ? (
+              <span className="text-amber-600 font-normal text-[10px]">* Obligatorio</span>
+            ) : (
+              <span className="text-surface-400 font-normal text-[10px]">Opcional</span>
+            )}
           </label>
           <textarea
             id="motivo-input"
@@ -96,7 +102,11 @@ export function ConfirmationModal({
               setMotivo(e.target.value)
               if (e.target.value.trim()) setErrorMotivo(null)
             }}
-            placeholder="Describa el motivo o justificación técnica de este cambio..."
+            placeholder={
+              requireReason
+                ? 'Describa el motivo o justificación técnica de este cambio...'
+                : 'Añada una nota voluntaria o justificación (opcional)...'
+            }
             className={`w-full p-2.5 text-xs font-normal border rounded-lg focus:outline-none transition-colors ${
               errorMotivo
                 ? 'border-rose-500 ring-1 ring-rose-500 bg-rose-50/40 text-rose-900'

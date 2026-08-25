@@ -47,7 +47,7 @@ export function AlertsPage() {
 
   const handleTriggerStateChange = (alerta: Alerta, nuevoEstado: 'resuelta' | 'descartada') => {
     if (alerta.id !== undefined) {
-      const estadoAnterior = alerta.estado || (alerta.leida ? 'resuelta' : 'abierta')
+      const estadoAnterior = getEstadoEfectivo(alerta)
       setPendingAction({
         id: alerta.id,
         nuevoEstado,
@@ -60,40 +60,23 @@ export function AlertsPage() {
 
   const handleConfirmStateChange = async (motivo: string) => {
     if (pendingAction) {
-      await updateAlertaEstado(pendingAction.id, pendingAction.nuevoEstado)
-      registrarCambioAuditoria({
-        usuario: 'Preparador Físico',
-        entidad: 'alerta',
-        idEntidad: String(pendingAction.id),
-        idJugadora: pendingAction.idJugadora,
-        campoModificado: 'estado',
-        valorAnterior: pendingAction.estadoAnterior,
-        valorNuevo: pendingAction.nuevoEstado,
-        motivo
-      })
-      setConfirmModalOpen(false)
-      setPendingAction(null)
-    }
-  }
-
-  const handleDirectDismiss = async (alerta: Alerta) => {
-    if (alerta.id !== undefined) {
       try {
-        const estadoAnterior = getEstadoEfectivo(alerta)
-        await updateAlertaEstado(alerta.id, 'descartada')
+        await updateAlertaEstado(pendingAction.id, pendingAction.nuevoEstado)
         registrarCambioAuditoria({
           usuario: 'Preparador Físico',
           entidad: 'alerta',
-          idEntidad: String(alerta.id),
-          idJugadora: alerta.id_jugadora,
+          idEntidad: String(pendingAction.id),
+          idJugadora: pendingAction.idJugadora,
           campoModificado: 'estado',
-          valorAnterior: estadoAnterior,
-          valorNuevo: 'descartada',
-          motivo: 'ALERTA_DESCARTADA_MANUALMENTE'
+          valorAnterior: pendingAction.estadoAnterior,
+          valorNuevo: pendingAction.nuevoEstado,
+          motivo
         })
+        setConfirmModalOpen(false)
+        setPendingAction(null)
       } catch (error) {
-        console.error('Error descartando alerta:', error)
-        alert('Hubo un error al descartar la alerta. Inténtalo de nuevo.')
+        console.error('Error al actualizar estado de la alerta:', error)
+        alert('Hubo un error al actualizar la alerta. Inténtalo de nuevo.')
       }
     }
   }
@@ -296,7 +279,7 @@ export function AlertsPage() {
 
                 {aEstado !== 'descartada' && (
                   <button
-                    onClick={() => handleDirectDismiss(a)}
+                    onClick={() => handleTriggerStateChange(a, 'descartada')}
                     className="text-[9px] bg-surface-50 text-surface-700 border border-surface-200 hover:bg-surface-100 px-1 py-0.5 rounded"
                   >
                     Descartar
@@ -518,15 +501,17 @@ export function AlertsPage() {
       {confirmModalOpen && pendingAction && (
         <ConfirmationModal
           open={confirmModalOpen}
+          requireReason={false}
           onClose={() => {
             setConfirmModalOpen(false)
             setPendingAction(null)
           }}
           onConfirm={handleConfirmStateChange}
+          title={pendingAction.nuevoEstado === 'resuelta' ? 'Resolver alerta' : 'Descartar alerta'}
           entidad="alerta"
           valorAnterior={pendingAction.estadoAnterior}
           valorNuevo={pendingAction.nuevoEstado}
-          descripcion={`Modificación de estado de alerta a ${pendingAction.nuevoEstado.toUpperCase()}. Requiere motivo justificado.`}
+          descripcion={`Modificación de estado de alerta a ${pendingAction.nuevoEstado.toUpperCase()}.`}
         />
       )}
     </div>
