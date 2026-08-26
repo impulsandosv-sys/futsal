@@ -274,11 +274,9 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
 
       fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
 
-      let errorCheckbox!: HTMLInputElement
       await waitFor(() => {
         const checkboxes = screen.getAllByRole('checkbox')
         expect(checkboxes.length).toBeGreaterThan(0)
-        errorCheckbox = checkboxes[checkboxes.length - 1] as HTMLInputElement
       })
 
       // 2. Comprueba contadores (Nuevos: 1, Errores: 1) y bloqueo
@@ -289,8 +287,10 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       const stepNextBtn = screen.getByRole('button', { name: /^siguiente →$/i })
       expect(stepNextBtn).toBeDisabled()
 
-      // 3. Excluye fila de error
-      fireEvent.click(errorCheckbox)
+      // 3. Excluye fila de error (re-query after filter switch)
+      const currentCheckboxes = screen.getAllByRole('checkbox')
+      const targetErrorCb = currentCheckboxes[currentCheckboxes.length - 1] as HTMLInputElement
+      fireEvent.click(targetErrorCb)
 
       // 4. Comprueba contadores (Errores: 0, Omitidas: 1) y desbloqueo del paso 3
       await waitFor(() => {
@@ -921,16 +921,173 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
   })
 
   describe('BLOCK E - PR-3 Calidad del Dato', () => {
-    it('Muestra los contadores correctos del Panel de Calidad y verifica mensaje de bloqueo', async () => {
+    beforeEach(async () => {
+      await db.wellness.clear()
+      await db.wellness_diario_importado.clear()
+      await db.alias_jugadora.clear()
+      await db.jugadoras.clear()
+      await db.temporadas.clear()
+
+      await db.temporadas.add({
+        id_temporada: 'temp-2025-2026',
+        nombre: 'Temporada 2025/2026',
+        fecha_inicio: '2025-08-01',
+        fecha_fin: '2026-07-31',
+        activa: true,
+        creadaEn: '2025-08-01T00:00:00Z',
+        actualizadaEn: '2025-08-01T00:00:00Z'
+      })
+
+      await db.jugadoras.bulkAdd([
+        { id_jugadora: 'J001', nombre: 'Ana Lopez', posicion: 'Cierre', activa: true },
+        { id_jugadora: 'J002', nombre: 'Ana Lopez', posicion: 'Ala', activa: true },
+        { id_jugadora: 'J003', nombre: 'Clara Soto', posicion: 'Pivot', activa: true }
+      ])
+
+      await useStore.getState().loadAll()
+    })
+
+    it('1. Dataset con omitida, duplicado existente y duplicado interno idéntico: contadores separados y correctos', async () => {
+      await db.wellness.add({
+        id: 'W1',
+        id_jugadora: 'J001',
+        fecha: '2026-01-15',
+        calidad_sueno: 8,
+        fatiga: 3,
+        dolor_muscular: 4,
+        estres: 2,
+        estado_animo: 9,
+        score_wellness: 8.0,
+        dolor_especifico: ''
+      })
+      useStore.setState({ wellness: await db.wellness.toArray() })
+
       const csvContent = [
         'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
-        'J001,2026-01-15,8,3,4,2,9',
-        'J002,2026-01-15,8,3,4,2,9',
-        'NO_EXISTE,2026-01-15,8,3,4,2,9',
-        'J001,2026-01-15,8,3,4,2,10' // Conflicto/Actualizacion
+        'J001,2026-01-15,8,3,4,2,9', // Duplicado existente en DB
+        'J003,2026-01-16,8,3,4,2,9', // Nueva (se omitirá)
+        'J003,2026-01-17,7,4,3,2,8', // Nueva
+        'J003,2026-01-17,7,4,3,2,8'  // Duplicado interno idéntico en archivo
       ].join('\n')
 
+      const file = new File([csvContent], 'dataset1.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente/i }))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-total').textContent).toBe('4')
+      })
+
+      // Omitir manualmente la segunda fila (J003, 2026-01-16)
+      const checkboxes = screen.getAllByRole('checkbox')
+      const targetCheckbox = checkboxes[1]
+      fireEvent.click(targetCheckbox)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('1')
+        expect(screen.getByTestId('preview-count-duplicados-existentes').textContent).toBe('1')
+        expect(screen.getByTestId('preview-count-duplicados-internos').textContent).toBe('1')
+        expect(screen.getByTestId('preview-count-nuevos').textContent).toBe('1')
+      })
+    })
+
+    it('2. Dataset con jugadora no resuelta, alias ambiguo, fecha inválida y conflicto interno: contadores independientes', async () => {
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
+        'NO_REGISTRADA,2026-01-15,8,3,4,2,9', // Jugadora no resuelta
+        'Ana Lopez,2026-01-15,8,3,4,2,9',     // Alias ambiguo (J001 y J002)
+        'J003,FECHA_INVALIDA,8,3,4,2,9',       // Fecha inválida
+        'J003,2026-01-15,8,3,4,2,9',          // Válido
+        'J003,2026-01-15,8,3,4,2,10'          // Conflicto interno (mismo J003 y fecha, distintos datos)
+      ].join('\n')
+
+      const file = new File([csvContent], 'dataset2.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente/i }))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-total').textContent).toBe('5')
+      })
+
+      // Verificar cada contador de identidad e integridad por separado
+      expect(screen.getByTestId('quality-pendientesIdentidad').textContent).toBe('1')
+      expect(screen.getByTestId('quality-aliasAmbiguos').textContent).toBe('1')
+      expect(screen.getByTestId('quality-erroresFormato').textContent).toBe('1')
+      expect(screen.getByTestId('quality-conflictosInternos').textContent).toBe('1')
+    })
+
+    it('3. Jugadoras no resueltas NO aumenta cuando el único error es fecha inválida, conflicto interno o alias ambiguo', async () => {
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
+        'Ana Lopez,2026-01-15,8,3,4,2,9',     // Alias ambiguo
+        'J003,2026-99-99,8,3,4,2,9',          // Fecha inválida
+        'J003,2026-01-15,8,3,4,2,9',          // Válido
+        'J003,2026-01-15,8,3,4,2,10'          // Conflicto interno
+      ].join('\n')
+
+      const file = new File([csvContent], 'dataset3.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente/i }))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-total').textContent).toBe('4')
+      })
+
+      // Verificar explícitamente que Jugadoras no resueltas permanece en 0
+      expect(screen.getByTestId('quality-pendientesIdentidad').textContent).toBe('0')
+      expect(screen.getByTestId('quality-aliasAmbiguos').textContent).toBe('1')
+      expect(screen.getByTestId('quality-erroresFormato').textContent).toBe('1')
+      expect(screen.getByTestId('quality-conflictosInternos').textContent).toBe('1')
+    })
+
+    it('4. Muestra los contadores correctos del Panel de Calidad y verifica mensaje de bloqueo', async () => {
       await db.wellness.add({
+        id: 'W1',
         id_jugadora: 'J001',
         fecha: '2026-01-15',
         calidad_sueno: 8,
@@ -943,6 +1100,14 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       })
 
       useStore.setState({ wellness: await db.wellness.toArray() })
+
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
+        'J001,2026-01-15,8,3,4,2,9',  // Duplicado existente
+        'J002,2026-01-15,8,3,4,2,9',  // Nueva
+        'NO_EXISTE,2026-01-15,8,3,4,2,9', // Jugadora no resuelta
+        'J001,2026-01-15,8,3,4,2,10' // Conflicto interno (con la fila 1 de J001)
+      ].join('\n')
 
       const file = new File([csvContent], 'wellness_pr3.csv', { type: 'text/csv' })
 
@@ -969,13 +1134,16 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
         expect(screen.getByTestId('preview-count-total').textContent).toBe('4')
       })
 
-      // Verificar contadores del panel de calidad (id=quality-*)
-      expect(screen.getByTestId('quality-resIdExacto').textContent).toBe('1') // J001 (x2) - 1 duplicado identico que cuenta, y 1 duplicado de archivo que da ERROR
-      expect(screen.getByTestId('quality-resConflictosPendientes').textContent).toBe('3') // J002 y NO_EXISTE
+      // Verificar contadores del panel de calidad
+      expect(screen.getByTestId('quality-resIdExacto').textContent).toBe('2') // J001 (fila 1) y J002 (fila 2) resueltas por ID exacto
+      expect(screen.getByTestId('quality-pendientesIdentidad').textContent).toBe('1') // NO_EXISTE
+      expect(screen.getByTestId('quality-conflictosInternos').textContent).toBe('1') // Conflicto interno fila 4
+      expect(screen.getByTestId('preview-count-duplicados-existentes').textContent).toBe('1') // Fila 1
 
       // Verificar que el asistente está bloqueado con un mensaje accionable
       expect(screen.getByText(/No puedes aplicar la importación todavía:/i)).toBeInTheDocument()
-      expect(screen.getByText(/2 fila\(s\) requiere\(n\) asignar jugadora/i)).toBeInTheDocument()
+      expect(screen.getByText(/1 fila\(s\) requiere\(n\) asignar jugadora/i)).toBeInTheDocument()
+      expect(screen.getByText(/1 conflicto\(s\) interno\(s\) dentro del archivo/i)).toBeInTheDocument()
     })
   })
 })

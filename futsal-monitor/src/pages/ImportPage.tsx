@@ -83,7 +83,7 @@ export function ImportPage() {
   // Derivación pura del resumen de previsualización (React State Pure Rule)
   const previewSummary = useMemo(() => {
     let nuevos = 0, actualizaciones = 0, duplicados = 0, errores = 0, omitidos = 0
-    let resIdExacto = 0, resAliasGuardado = 0, resCoincidenciaNombre = 0, resConflictosPendientes = 0
+    let resIdExacto = 0, resAliasGuardado = 0, resCoincidenciaNombre = 0
     let aliasesNuevosCount = Object.keys(aliasesToSave).length
 
     // Quality Counters
@@ -118,9 +118,6 @@ export function ImportPage() {
       if (r.metodo_resolucion_identidad === 'ID exacto') resIdExacto++
       if (r.metodo_resolucion_identidad === 'Alias activo') resAliasGuardado++
       if (r.metodo_resolucion_identidad === 'Nombre normalizado') resCoincidenciaNombre++
-
-      // Conflictos pendientes for the old view (legacy)
-      if (r.estado === 'ERROR') resConflictosPendientes++
     })
 
     const isBlocked = previewData.some(r => r.estado !== 'OMITIDA' && r.tipo_incidencia && INCIDENCIAS_BLOQUEANTES.includes(r.tipo_incidencia))
@@ -128,7 +125,7 @@ export function ImportPage() {
     return {
       total: previewData.length,
       nuevos, actualizaciones, duplicados, errores, omitidos,
-      resIdExacto, resAliasGuardado, resCoincidenciaNombre, resConflictosPendientes,
+      resIdExacto, resAliasGuardado, resCoincidenciaNombre,
       aliasesNuevosCount,
 
       // Quality
@@ -622,7 +619,7 @@ export function ImportPage() {
             await evaluarSeguimientoJugadora(jId)
           }
         } catch (err: any) {
-
+          console.error('Error post-import evaluation:', err)
         } finally {
           setImporting(false)
         }
@@ -963,67 +960,89 @@ export function ImportPage() {
                 <div className="bg-surface-50 px-4 py-3 border-b border-surface-200 flex justify-between items-center">
                   <h3 className="text-sm font-bold text-surface-800">Panel de calidad de importación</h3>
                 </div>
-                <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {/* Fila superior: Resumen General */}
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-surface-500 uppercase font-bold">Total Filas</span>
-                    <span data-testid="preview-count-total" className="text-2xl font-bold text-surface-800">{previewSummary.total}</span>
+
+                {/* Sección 1: Estado de filas */}
+                <div className="p-4 border-b border-surface-200">
+                  <div className="text-[10px] font-bold text-surface-600 uppercase mb-3 pb-1 border-b border-surface-150">
+                    Estado de Filas
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-green-700 uppercase font-bold">Válidas / Nuevas</span>
-                    <span data-testid="preview-count-nuevos" className="text-2xl font-bold text-green-700">{previewSummary.nuevos}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-blue-700 uppercase font-bold">Actualizables</span>
-                    <span data-testid="preview-count-actualizaciones" className="text-2xl font-bold text-blue-700">{previewSummary.actualizaciones}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-amber-700 uppercase font-bold">Omitidas / Duplicadas</span>
-                    <span data-testid="preview-count-omitidas" className="text-2xl font-bold text-amber-700">
-                      {previewSummary.omitidos + previewSummary.duplicados}
-                    </span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-red-700 uppercase font-bold">Errores</span>
-                    <span data-testid="preview-count-errores" className="text-2xl font-bold text-red-700">{previewSummary.errores}</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div className="flex flex-col p-2.5 bg-surface-50 rounded border border-surface-200">
+                      <span className="text-[10px] text-surface-600 uppercase font-bold">Total Filas</span>
+                      <span data-testid="preview-count-total" className="text-xl font-bold text-surface-800">{previewSummary.total}</span>
+                    </div>
+                    <div className="flex flex-col p-2.5 bg-green-50/50 rounded border border-green-200">
+                      <span className="text-[10px] text-green-700 uppercase font-bold">Nuevas</span>
+                      <span data-testid="preview-count-nuevos" className="text-xl font-bold text-green-700">{previewSummary.nuevos}</span>
+                    </div>
+                    <div className="flex flex-col p-2.5 bg-amber-50/50 rounded border border-amber-200">
+                      <span className="text-[10px] text-amber-700 uppercase font-bold">Actualizables</span>
+                      <span data-testid="preview-count-actualizaciones" className="text-xl font-bold text-amber-700">{previewSummary.actualizaciones}</span>
+                    </div>
+                    <div className="flex flex-col p-2.5 bg-amber-50/50 rounded border border-amber-200">
+                      <span className="text-[10px] text-amber-700 uppercase font-bold">Omitidas manual</span>
+                      <span data-testid="preview-count-omitidas" className="text-xl font-bold text-amber-700">{previewSummary.omitidasManual}</span>
+                    </div>
+                    <div className="flex flex-col p-2.5 bg-surface-100/50 rounded border border-surface-200">
+                      <span className="text-[10px] text-surface-600 uppercase font-bold">Duplicados existentes</span>
+                      <span data-testid="preview-count-duplicados-existentes" className="text-xl font-bold text-surface-600">{previewSummary.duplicadosExistentes}</span>
+                    </div>
+                    <div className="flex flex-col p-2.5 bg-surface-100/50 rounded border border-surface-200">
+                      <span className="text-[10px] text-surface-600 uppercase font-bold">Duplicados internos</span>
+                      <span data-testid="preview-count-duplicados-internos" className="text-xl font-bold text-surface-600">{previewSummary.duplicadosInternosIdenticos}</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Sub-métricas de identidad y errores */}
-                <div className="bg-surface-50 px-4 py-3 border-t border-surface-200 grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-surface-600 uppercase mb-2 border-b border-surface-200 pb-1">Resolución de Identidad</div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-surface-600">ID exacto:</span>
-                      <span data-testid="quality-resIdExacto" className="font-semibold">{previewSummary.resIdExacto}</span>
+                {/* Sub-métricas: Identidad e Integridad */}
+                <div className="bg-surface-50 p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Sección 2: Identidad */}
+                  <div className="bg-white p-3.5 rounded border border-surface-200 space-y-2">
+                    <div className="text-[10px] font-bold text-surface-600 uppercase border-b border-surface-200 pb-1">
+                      Identidad
                     </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-surface-600">Por alias guardado:</span>
-                      <span className="font-semibold text-primary-700">{previewSummary.resAliasGuardado}</span>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-surface-700">Resueltas por ID exacto:</span>
+                      <span data-testid="quality-resIdExacto" className="font-bold text-green-700">{previewSummary.resIdExacto}</span>
                     </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-surface-600">Coincidencia de nombre:</span>
-                      <span className="font-semibold">{previewSummary.resCoincidenciaNombre}</span>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-surface-700">Resueltas por alias guardado:</span>
+                      <span data-testid="quality-resAliasGuardado" className="font-bold text-green-700">{previewSummary.resAliasGuardado}</span>
                     </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-surface-600 uppercase mb-2 border-b border-surface-200 pb-1">Conflictos y Nuevos Datos</div>
-                    <div className="flex justify-between text-xs">
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-surface-700">Resueltas por coincidencia de nombre:</span>
+                      <span data-testid="quality-resCoincidenciaNombre" className="font-bold text-green-700">{previewSummary.resCoincidenciaNombre}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5">
                       <span className="text-red-700 font-medium">Jugadoras no resueltas:</span>
-                      <span data-testid="quality-resConflictosPendientes" className="font-bold text-red-700">{previewSummary.resConflictosPendientes}</span>
+                      <span data-testid="quality-pendientesIdentidad" className="font-bold text-red-700">{previewSummary.pendientesIdentidad}</span>
                     </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-green-700 font-medium">Nuevos aliases a guardar:</span>
-                      <span className="font-bold text-green-700">{previewSummary.aliasesNuevosCount}</span>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-red-700 font-medium">Alias ambiguos:</span>
+                      <span data-testid="quality-aliasAmbiguos" className="font-bold text-red-700">{previewSummary.aliasAmbiguos}</span>
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-surface-600 uppercase mb-2 border-b border-surface-200 pb-1">Calidad del Formato</div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-red-700 font-medium">Errores de formato/datos:</span>
-                      <span className="font-bold text-red-700">{previewSummary.erroresFormato}</span>
+                  {/* Sección 3: Integridad */}
+                  <div className="bg-white p-3.5 rounded border border-surface-200 space-y-2">
+                    <div className="text-[10px] font-bold text-surface-600 uppercase border-b border-surface-200 pb-1">
+                      Integridad
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-red-700 font-medium">Errores formato/fecha/temporada:</span>
+                      <span data-testid="quality-erroresFormato" className="font-bold text-red-700">{previewSummary.erroresFormato}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-red-700 font-medium">Conflictos internos:</span>
+                      <span data-testid="quality-conflictosInternos" className="font-bold text-red-700">{previewSummary.conflictosInternos}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-green-700 font-medium">Nuevos aliases a guardar:</span>
+                      <span data-testid="quality-aliasesNuevosCount" className="font-bold text-green-700">{previewSummary.aliasesNuevosCount}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5 border-t border-surface-100 pt-1">
+                      <span className="text-red-700 font-medium">Total incidencias bloqueantes:</span>
+                      <span data-testid="preview-count-errores" className="font-bold text-red-700">{previewSummary.errores}</span>
                     </div>
                   </div>
                 </div>
