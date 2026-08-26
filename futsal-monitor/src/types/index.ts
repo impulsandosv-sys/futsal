@@ -303,9 +303,24 @@ export interface MappedWellnessRow {
   actividad_texto_semana?: string | null
 }
 
+export type TipoIncidenciaImportacion =
+  | 'sin_incidencia'
+  | 'jugadora_no_resuelta'
+  | 'alias_ambiguo'
+  | 'fecha_invalida'
+  | 'formato_invalido'
+  | 'temporada_no_activa'
+  | 'duplicado_existente'
+  | 'duplicado_interno_identico'
+  | 'conflicto_interno'
+  | 'actualizacion_posible'
+  | 'omitida_manual'
+
+
 export interface PreviewRow {
   filaOriginal: number
   estado: 'NUEVO' | 'ACTUALIZACION_POSIBLE' | 'DUPLICADO_IDENTICO' | 'ERROR' | 'OMITIDA'
+  tipo_incidencia?: TipoIncidenciaImportacion
   id_jugadora: string
   alias_origen?: string
   id_temporada?: string

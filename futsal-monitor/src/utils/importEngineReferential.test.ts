@@ -141,7 +141,7 @@ describe('Bloque 3A - Unit tests de validación referencial e integridad de impo
     expect(preview.rows).toHaveLength(2)
     expect(preview.rows[0].estado).toBe('NUEVO')
     expect(preview.rows[1].estado).toBe('ERROR')
-    expect(preview.rows[1].mensaje).toContain('Duplicado dentro del archivo')
+    expect(preview.rows[1].mensaje).toContain('Conflicto interno')
   })
 
   it('5. Varias filas con errores distintos conservan diagnósticos independientes', () => {

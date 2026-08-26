@@ -7,7 +7,7 @@ import type {
   RawImportRow,
   ColumnMapping,
   MappedWellnessRow,
-  PreviewRow,
+  PreviewRow, TipoIncidenciaImportacion,
   ImportStrategy,
   ImportOutcome,
   HistorialImportacion,
@@ -38,6 +38,7 @@ export interface ValidationResult {
   isValid: boolean
   errorMsg?: string
   normalRow?: MappedWellnessRow
+  tipoIncidencia?: TipoIncidenciaImportacion
 }
 
 export type TipoCuestionarioWellness = 'DIARIO' | 'SEMANAL'
@@ -418,15 +419,15 @@ export async function obtenerMapaJugadorasDexie(): Promise<Record<string, string
 export function validarFilaWellness(row: RawImportRow, context: ValidationContext): ValidationResult {
   const idRaw = row.id_jugadora
   if (idRaw === null || idRaw === undefined) {
-    return { isValid: false, errorMsg: 'ID_Jugadora ausente' }
+    return { isValid: false, errorMsg: 'ID_Jugadora ausente', tipoIncidencia: 'formato_invalido' }
   }
   const rawAliasValue = String(idRaw).trim()
   if (!rawAliasValue) {
-    return { isValid: false, errorMsg: 'ID_Jugadora vacío' }
+    return { isValid: false, errorMsg: 'ID_Jugadora vacío', tipoIncidencia: 'formato_invalido' }
   }
 
   let resolvedIdJugadora: string
-  let metodoResolucion: string = ''
+    let metodoResolucion: string = ''
 
   // Priority 1: Exact internal ID (active)
   if (context.jugadorasIds.includes(rawAliasValue)) {
@@ -437,7 +438,7 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
   else if (context.aliasesGoogleForms && context.aliasesGoogleForms.has(rawAliasValue)) {
     const aliasInfo = context.aliasesGoogleForms.get(rawAliasValue)!
     if (!aliasInfo.activo) {
-      return { isValid: false, errorMsg: `Alias '${rawAliasValue}' inactivo para el origen 'google_forms'` }
+      return { isValid: false, errorMsg: `Alias '${rawAliasValue}' inactivo para el origen 'google_forms'`, tipoIncidencia: 'jugadora_no_resuelta' }
     }
     resolvedIdJugadora = aliasInfo.id_jugadora
     metodoResolucion = 'Alias activo'
@@ -460,39 +461,39 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
       resolvedIdJugadora = matches[0]
       metodoResolucion = 'Nombre normalizado'
     } else if (matches.length > 1) {
-      return { isValid: false, errorMsg: `Ambigüedad: Múltiples jugadoras coinciden exactamente con el nombre '${rawAliasValue}'. Corrige el nombre o usa un alias.` }
+      return { isValid: false, errorMsg: `Ambigüedad: Múltiples jugadoras coinciden exactamente con el nombre '${rawAliasValue}'. Corrige el nombre o usa un alias.`, tipoIncidencia: 'alias_ambiguo' }
     } else {
-      return { isValid: false, errorMsg: `Jugadora no registrada. Añádela a la plantilla o configura un alias para '${rawAliasValue}'` }
+      return { isValid: false, errorMsg: `Jugadora no registrada. Añádela a la plantilla o configura un alias para '${rawAliasValue}'`, tipoIncidencia: 'jugadora_no_resuelta' }
     }
   }
 
   if (!context.jugadorasIds.includes(resolvedIdJugadora)) {
-    return { isValid: false, errorMsg: `La jugadora '${resolvedIdJugadora}' no existe en la base de datos` }
+    return { isValid: false, errorMsg: `La jugadora '${resolvedIdJugadora}' no existe en la base de datos`, tipoIncidencia: 'jugadora_no_resuelta' }
   }
 
   const fechaNorm = normalizarFecha(row.fecha)
   if (!fechaNorm) {
-    return { isValid: false, errorMsg: `Fecha '${row.fecha || ''}' inválida o vacía` }
+    return { isValid: false, errorMsg: `Fecha '${row.fecha || ''}' inválida o vacía`, tipoIncidencia: 'fecha_invalida' }
   }
 
   const errFechaISO = validateFechaLocalISO(fechaNorm, 'fecha')
   if (errFechaISO) {
-    return { isValid: false, errorMsg: errFechaISO }
+    return { isValid: false, errorMsg: errFechaISO, tipoIncidencia: 'fecha_invalida' }
   }
 
   // Prevent future dates
   const todayStr = getTodayLocalISO()
   if (fechaNorm > todayStr) {
-    return { isValid: false, errorMsg: `Fecha futura detectada: ${fechaNorm}` }
+    return { isValid: false, errorMsg: `Fecha futura detectada: ${fechaNorm}`, tipoIncidencia: 'fecha_invalida' }
   }
 
   // Validar Temporada Activa
   if (context.temporadaActiva === null) {
-    return { isValid: false, errorMsg: 'No existe una temporada activa. Crea o activa una temporada antes de importar wellness.' }
+    return { isValid: false, errorMsg: 'No existe una temporada activa. Crea o activa una temporada antes de importar wellness.', tipoIncidencia: 'temporada_no_activa' }
   } else if (context.temporadaActiva) {
     const { fecha_inicio, fecha_fin } = context.temporadaActiva
     if (fechaNorm < fecha_inicio || fechaNorm > fecha_fin) {
-      return { isValid: false, errorMsg: `Fecha '${fechaNorm}' fuera del rango de la temporada activa (${fecha_inicio} a ${fecha_fin})` }
+      return { isValid: false, errorMsg: `Fecha '${fechaNorm}' fuera del rango de la temporada activa (${fecha_inicio} a ${fecha_fin})`, tipoIncidencia: 'fecha_invalida' }
     }
   }
 
@@ -563,18 +564,18 @@ export function validarFilaWellness(row: RawImportRow, context: ValidationContex
     }
     normalRow.dolor_sn = dolorParsed as boolean | null
     if (normalRow.dolor_sn !== null) hasAnyWellness = true
-    
+
     normalRow.dolor_texto_semana = row.dolor_texto_semana ? String(row.dolor_texto_semana).trim() : null
-    
+
     const actividadParsed = parseBooleanStrict(row.actividad_sn, 'actividad_sn')
     if (actividadParsed && typeof actividadParsed === 'object' && 'error' in actividadParsed) {
       return { isValid: false, errorMsg: actividadParsed.error }
     }
     normalRow.actividad_sn = actividadParsed as boolean | null
     if (normalRow.actividad_sn !== null) hasAnyWellness = true
-    
+
     normalRow.actividad_texto_semana = row.actividad_texto_semana ? String(row.actividad_texto_semana).trim() : null
-    
+
     if (!hasAnyWellness) {
       return { isValid: false, errorMsg: 'Fila sin ningún dato de wellness semanal válido' }
     }
@@ -603,10 +604,10 @@ export function extraerValoresSemanalPersistidos(registro: import('@/types').Wel
     animo_semana: getValue('¿Cómo valorarías tu estado de ánimo esta semana?'),
     preparada_semana: getValue('¿Cómo de preparada te sientes para competir la próxima semana?'),
     sintomas_menstruales: getValue('Si eres mujer, ¿los síntomas menstruales han afectado tu rendimiento o bienestar esta semana?'),
-    
+
     dolor_sn: dolorSnRaw === true ? true : dolorSnRaw === false ? false : null,
     actividad_sn: actividadSnRaw === true ? true : actividadSnRaw === false ? false : null,
-    
+
     dolor_texto_semana: textos['¿Has tenido dolor, molestia o rigidez que haya limitado algo esta semana?'] || null,
     actividad_texto_semana: textos['Indica qué tipo de actividad e intensidad (si has respondido Sí a la anterior)'] || null,
   }
@@ -620,19 +621,19 @@ export function clasificarFilaImportacion(
   existingWellness: Wellness[],
   context?: ValidationContext
 ): 'NUEVO' | 'ACTUALIZACION_POSIBLE' | 'DUPLICADO_IDENTICO' {
-  
+
   if (context?.tipoCuestionario === 'SEMANAL') {
     const semana = getWeekId(row.fecha)
     const match = context.existingSemanal?.find(w => w.id_jugadora === row.id_jugadora && getWeekId(w.fecha) === semana)
     if (!match) return 'NUEVO'
 
     const fieldsSemanal: (keyof MappedWellnessRow)[] = [
-      'recuperacion_semana', 'sueno_semana', 'estres_fuera', 'energia_semana', 
-      'animo_semana', 'preparada_semana', 'sintomas_menstruales', 
+      'recuperacion_semana', 'sueno_semana', 'estres_fuera', 'energia_semana',
+      'animo_semana', 'preparada_semana', 'sintomas_menstruales',
       'dolor_sn', 'dolor_texto_semana', 'actividad_sn', 'actividad_texto_semana'
     ]
     const persistedVals = extraerValoresSemanalPersistidos(match)
-    
+
     const isIdentical = fieldsSemanal.every(f => {
       let incomingVal = row[f]
       let localVal = persistedVals[f as keyof typeof persistedVals]
@@ -646,13 +647,13 @@ export function clasificarFilaImportacion(
 
       if (incomingVal === undefined || incomingVal === '') incomingVal = null
       if (localVal === undefined || localVal === '') localVal = null
-      
+
       return incomingVal === localVal
     })
 
     return isIdentical ? 'DUPLICADO_IDENTICO' : 'ACTUALIZACION_POSIBLE'
   }
-  
+
   const match = existingWellness.find(w => w.id_jugadora === row.id_jugadora && w.fecha === row.fecha)
   if (!match) return 'NUEVO'
 
@@ -683,6 +684,32 @@ export interface PreviewResult {
 /**
  * Builds validation preview for UI, checks duplicates inside file.
  */
+
+function sonFilasIdenticas(a: MappedWellnessRow, b: MappedWellnessRow, tipoCuestionario?: 'DIARIO' | 'SEMANAL'): boolean {
+  const fieldsSemanal: (keyof MappedWellnessRow)[] = [
+    'recuperacion_semana', 'sueno_semana', 'estres_fuera', 'energia_semana',
+    'animo_semana', 'preparada_semana', 'sintomas_menstruales',
+    'dolor_sn', 'dolor_texto_semana', 'actividad_sn', 'actividad_texto_semana'
+  ]
+  const fieldsDiario: (keyof MappedWellnessRow)[] = [
+    'calidad_sueno', 'fatiga', 'dolor_muscular', 'estres', 'estado_animo',
+    'dolor_especifico', 'comentario_sesion'
+  ]
+  const fields = tipoCuestionario === 'SEMANAL' ? fieldsSemanal : fieldsDiario
+
+  return fields.every(f => {
+    let valA = a[f]
+    let valB = b[f]
+    if (valA === undefined || valA === '') valA = null
+    if (valB === undefined || valB === '') valB = null
+    const isTexto = f === 'dolor_texto_semana' || f === 'actividad_texto_semana' || f === 'dolor_especifico' || f === 'comentario_sesion'
+    if (isTexto) {
+      return (valA ? String(valA).trim() : '') === (valB ? String(valB).trim() : '')
+    }
+    return valA === valB
+  })
+}
+
 export function construirVistaPrevia(
   rawRows: RawImportRow[],
   mapping: ColumnMapping[],
@@ -705,7 +732,7 @@ export function construirVistaPrevia(
     jugadorasIds: Object.keys(jugadorasMap),
     jugadorasMap
   }
-  const fileKeys = new Set<string>()
+  const fileRows = new Map<string, MappedWellnessRow>()
 
   rawRows.forEach((rawRow, idx) => {
     const filaOriginal = idx + 2 // Assuming header is row 1
@@ -723,10 +750,11 @@ export function construirVistaPrevia(
     const val = validarFilaWellness(mappedRow, context)
 
     if (!val.isValid) {
-      result.errores++
+      let tipoInc = val.tipoIncidencia || 'formato_invalido'
       const baseEstado = 'ERROR'
       const finalEstado = omittedRowIndices?.has(filaOriginal) ? 'OMITIDA' : baseEstado
-      if (finalEstado === 'OMITIDA') result.omitidos++
+      if (finalEstado === 'OMITIDA') { result.omitidos++; tipoInc = 'omitida_manual' }
+      else result.errores++
       result.rows.push({
         filaOriginal,
         estado: finalEstado,
@@ -745,23 +773,36 @@ export function construirVistaPrevia(
         comentario_sesion: mappedRow.comentario_sesion ? String(mappedRow.comentario_sesion) : null,
         mensaje: finalEstado === 'OMITIDA' ? 'Excluido manualmente por el usuario' : (val.errorMsg || 'Error de validación'),
         rowOriginal: rawRow
-      } as any) // Cast as any because prevEstado is not in types
+      ,
+        tipo_incidencia: tipoInc as TipoIncidenciaImportacion
+      })
       return
     }
 
     const normRow = val.normalRow!
-    const fileKey = context.tipoCuestionario === 'SEMANAL' 
+    const fileKey = context.tipoCuestionario === 'SEMANAL'
       ? `${normRow.id_jugadora}::${getWeekId(normRow.fecha)}`
       : `${normRow.id_jugadora}::${normRow.fecha}`
 
-    if (fileKeys.has(fileKey)) {
-      result.errores++
-      const baseEstado = 'ERROR'
-      const finalEstado = omittedRowIndices?.has(filaOriginal) ? 'OMITIDA' : baseEstado
+    if (fileRows.has(fileKey)) {
+      const existingRow = fileRows.get(fileKey)!
+      const sonIdenticas = sonFilasIdenticas(normRow, existingRow, context.tipoCuestionario)
+
+      let tipoInc = sonIdenticas ? 'duplicado_interno_identico' : 'conflicto_interno'
+      let baseEstado = sonIdenticas ? 'DUPLICADO_IDENTICO' : 'ERROR'
+      let finalEstado = omittedRowIndices?.has(filaOriginal) ? 'OMITIDA' : baseEstado
+
       if (finalEstado === 'OMITIDA') result.omitidos++
+      else if (baseEstado === 'ERROR') result.errores++
+      else if (baseEstado === 'DUPLICADO_IDENTICO') result.duplicados++
+
+      let mensajeStr = finalEstado === 'OMITIDA' ? 'Excluido manualmente por el usuario' :
+                       (sonIdenticas ? 'Duplicado idéntico dentro del archivo' : 'Conflicto interno: Diferentes datos para misma jugadora y fecha')
+
       result.rows.push({
         filaOriginal,
-        estado: finalEstado,
+        estado: finalEstado as 'ERROR' | 'OMITIDA' | 'DUPLICADO_IDENTICO',
+        tipo_incidencia: (finalEstado === 'OMITIDA' ? 'omitida_manual' : tipoInc) as TipoIncidenciaImportacion,
         prevEstado: baseEstado,
         id_jugadora: normRow.id_jugadora,
         alias_origen: normRow.alias_origen,
@@ -786,28 +827,36 @@ export function construirVistaPrevia(
         dolor_texto_semana: normRow.dolor_texto_semana,
         actividad_sn: normRow.actividad_sn,
         actividad_texto_semana: normRow.actividad_texto_semana,
-        mensaje: finalEstado === 'OMITIDA' ? 'Excluido manualmente por el usuario' : 'Duplicado dentro del archivo',
+        mensaje: mensajeStr,
         rowOriginal: rawRow,
         normalRow: normRow
-      } as any)
+      })
       return
     }
 
-    fileKeys.add(fileKey)
+    fileRows.set(fileKey, normRow)
 
     const clasificacion = clasificarFilaImportacion(normRow, existingWellness, context)
     const finalEstado = omittedRowIndices?.has(filaOriginal) ? 'OMITIDA' : clasificacion
-    if (finalEstado === 'OMITIDA') result.omitidos++
+
+    let tipoInc: string = 'sin_incidencia'
+    if (clasificacion === 'ACTUALIZACION_POSIBLE') tipoInc = 'actualizacion_posible'
+    else if (clasificacion === 'DUPLICADO_IDENTICO') tipoInc = 'duplicado_existente'
+
+    if (finalEstado === 'OMITIDA') { result.omitidos++; tipoInc = 'omitida_manual' }
     else if (clasificacion === 'NUEVO') result.nuevos++
     else if (clasificacion === 'ACTUALIZACION_POSIBLE') result.actualizaciones++
     else if (clasificacion === 'DUPLICADO_IDENTICO') result.duplicados++
 
+
     result.rows.push({
       filaOriginal,
       estado: finalEstado,
+      tipo_incidencia: tipoInc as TipoIncidenciaImportacion,
       prevEstado: clasificacion,
       id_jugadora: normRow.id_jugadora,
       alias_origen: normRow.alias_origen,
+      metodo_resolucion_identidad: normRow.metodo_resolucion_identidad,
       id_temporada: normRow.id_temporada,
       nombreJugadora: (context.jugadorasMap && context.jugadorasMap[normRow.id_jugadora]) || jugadorasMap[normRow.id_jugadora] || '',
       fecha: normRow.fecha,
@@ -835,7 +884,7 @@ export function construirVistaPrevia(
                'Duplicado idéntico (se omitirá automáticamente)',
       rowOriginal: rawRow,
       normalRow: normRow
-    } as any)
+    })
   })
 
   return result
@@ -1015,7 +1064,7 @@ export async function aplicarImportacionWellness(
 
         if (row.estado === 'NUEVO') {
           const norm = row.normalRow!
-          
+
           if (tipoCuestionario === 'SEMANAL') {
              const textos: Record<string, string> = {}
              if (norm.dolor_texto_semana) textos['¿Has tenido dolor, molestia o rigidez que haya limitado algo esta semana?'] = norm.dolor_texto_semana
@@ -1035,7 +1084,7 @@ export async function aplicarImportacionWellness(
              }
 
              // Semana is implicitly derived from fecha
-             
+
              await dbInstance.wellness_semanal_importado.put({
                id_jugadora: norm.id_jugadora,
                fecha: norm.fecha,
@@ -1096,7 +1145,7 @@ export async function aplicarImportacionWellness(
             skipped++
           } else if (strategy === 'update') {
             const norm = row.normalRow!
-            
+
             if (tipoCuestionario === 'SEMANAL') {
               const textos: Record<string, string> = {}
               if (norm.dolor_texto_semana) textos['¿Has tenido dolor, molestia o rigidez que haya limitado algo esta semana?'] = norm.dolor_texto_semana
@@ -1121,7 +1170,7 @@ export async function aplicarImportacionWellness(
               // Como Dexie no tiene index simple por semana_deportiva, buscamos todos los de la jugadora y filtramos
               const allDeJugadora = await dbInstance.wellness_semanal_importado.where({ id_jugadora: norm.id_jugadora }).toArray()
               const existingImportado = allDeJugadora.find(w => getWeekId(w.fecha) === semana)
-              
+
               await dbInstance.wellness_semanal_importado.put({
                 id: existingImportado?.id,
                 id_jugadora: norm.id_jugadora,

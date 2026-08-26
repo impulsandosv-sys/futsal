@@ -24,8 +24,18 @@ import {
   type TipoCuestionarioWellness
 } from '@/utils/importEngine'
 import { getWeekId } from '@/domain/dates/dates'
+import type { TipoIncidenciaImportacion } from '@/types'
 import { recalcularReadinessJugadora } from '@/services/readiness'
 import { recalcularResumenSemanal } from '@/services/resumenSemanal'
+
+const INCIDENCIAS_BLOQUEANTES: TipoIncidenciaImportacion[] = [
+  'jugadora_no_resuelta',
+  'alias_ambiguo',
+  'fecha_invalida',
+  'formato_invalido',
+  'temporada_no_activa',
+  'conflicto_interno'
+]
 
 export function ImportPage() {
   const {
@@ -73,22 +83,60 @@ export function ImportPage() {
   // Derivación pura del resumen de previsualización (React State Pure Rule)
   const previewSummary = useMemo(() => {
     let nuevos = 0, actualizaciones = 0, duplicados = 0, errores = 0, omitidos = 0
+    let resIdExacto = 0, resAliasGuardado = 0, resCoincidenciaNombre = 0, resConflictosPendientes = 0
+    let aliasesNuevosCount = Object.keys(aliasesToSave).length
+
+    // Quality Counters
+    let duplicadosExistentes = 0
+    let duplicadosInternosIdenticos = 0
+    let omitidasManual = 0
+    let erroresFormato = 0
+    let pendientesIdentidad = 0
+    let aliasAmbiguos = 0
+    let conflictosInternos = 0
+
     previewData.forEach(r => {
+      // Legacy buckets for general logic
       if (r.estado === 'NUEVO') nuevos++
       else if (r.estado === 'ACTUALIZACION_POSIBLE') actualizaciones++
       else if (r.estado === 'DUPLICADO_IDENTICO') duplicados++
       else if (r.estado === 'ERROR') errores++
       else if (r.estado === 'OMITIDA') omitidos++
+
+      // Categorias separadas basadas en tipo_incidencia
+      const tipo = r.tipo_incidencia || 'sin_incidencia'
+
+      if (tipo === 'duplicado_existente') duplicadosExistentes++
+      if (tipo === 'duplicado_interno_identico') duplicadosInternosIdenticos++
+      if (tipo === 'omitida_manual') omitidasManual++
+      if (tipo === 'formato_invalido' || tipo === 'fecha_invalida' || tipo === 'temporada_no_activa') erroresFormato++
+      if (tipo === 'jugadora_no_resuelta') pendientesIdentidad++
+      if (tipo === 'alias_ambiguo') aliasAmbiguos++
+      if (tipo === 'conflicto_interno') conflictosInternos++
+
+      // Resolved identity counters
+      if (r.metodo_resolucion_identidad === 'ID exacto') resIdExacto++
+      if (r.metodo_resolucion_identidad === 'Alias activo') resAliasGuardado++
+      if (r.metodo_resolucion_identidad === 'Nombre normalizado') resCoincidenciaNombre++
+
+      // Conflictos pendientes for the old view (legacy)
+      if (r.estado === 'ERROR') resConflictosPendientes++
     })
+
+    const isBlocked = previewData.some(r => r.estado !== 'OMITIDA' && r.tipo_incidencia && INCIDENCIAS_BLOQUEANTES.includes(r.tipo_incidencia))
+
     return {
       total: previewData.length,
-      nuevos,
-      actualizaciones,
-      duplicados,
-      errores,
-      omitidos
+      nuevos, actualizaciones, duplicados, errores, omitidos,
+      resIdExacto, resAliasGuardado, resCoincidenciaNombre, resConflictosPendientes,
+      aliasesNuevosCount,
+
+      // Quality
+      duplicadosExistentes, duplicadosInternosIdenticos, omitidasManual,
+      erroresFormato, pendientesIdentidad, aliasAmbiguos, conflictosInternos, isBlocked
     }
-  }, [previewData])
+  }, [previewData, aliasesToSave])
+
 
   // Table pagination and filters
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
@@ -121,6 +169,17 @@ export function ImportPage() {
       }
     }
   }, [plantillas_importacion, selectedPlantillaId])
+
+  const prevIsBlocked = useRef<boolean>(false)
+
+  useEffect(() => {
+    if (!prevIsBlocked.current && previewSummary.isBlocked) {
+      setStatusFilter('ERROR')
+    } else if (prevIsBlocked.current && !previewSummary.isBlocked) {
+      setStatusFilter('ALL')
+    }
+    prevIsBlocked.current = previewSummary.isBlocked
+  }, [previewSummary.isBlocked])
 
   // Recalculate preview directly from Dexie jugadoras when rows or mappings change
   useEffect(() => {
@@ -268,7 +327,7 @@ export function ImportPage() {
   const readSheetData = (wb: any, sheetName: string, XLSX: any) => {
     const ws = wb.Sheets[sheetName]
     const headersRaw = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][]
-    
+
     const esFilaConContenido = (row: unknown[]) =>
       row.some((cell) => String(cell ?? '').trim() !== '')
 
@@ -277,7 +336,7 @@ export function ImportPage() {
       alert('Error: La hoja de cálculo está completamente vacía o no contiene cabeceras detectables.')
       return
     }
-    
+
     const headers = (headersRaw[indiceCabecera] as unknown[]).map(h => String(h ?? '').trim())
     setFileHeaders(headers)
     setCuestionarioError(null)
@@ -488,13 +547,13 @@ export function ImportPage() {
   }
 
   const handleJumpToNextError = () => {
-    const errorIndex = filteredPreview.findIndex((r, idx) => r.estado === 'ERROR' && idx >= currentPage * pageSize)
+    const errorIndex = filteredPreview.findIndex((r, idx) => r.estado !== 'OMITIDA' && r.tipo_incidencia && INCIDENCIAS_BLOQUEANTES.includes(r.tipo_incidencia) && idx >= currentPage * pageSize)
     if (errorIndex !== -1) {
       const page = Math.floor(errorIndex / pageSize) + 1
       setCurrentPage(page)
     } else {
       // Si no hay más en páginas siguientes, buscar desde el principio
-      const firstError = filteredPreview.findIndex(r => r.estado === 'ERROR')
+      const firstError = filteredPreview.findIndex(r => r.estado !== 'OMITIDA' && r.tipo_incidencia && INCIDENCIAS_BLOQUEANTES.includes(r.tipo_incidencia))
       if (firstError !== -1) {
         const page = Math.floor(firstError / pageSize) + 1
         setCurrentPage(page)
@@ -563,7 +622,7 @@ export function ImportPage() {
             await evaluarSeguimientoJugadora(jId)
           }
         } catch (err: any) {
-          console.error('Error en evaluación pos-commit de alertas:', err)
+
         } finally {
           setImporting(false)
         }
@@ -635,7 +694,7 @@ export function ImportPage() {
       await loadAll()
       setRecalcProgress(100)
     } catch (err: any) {
-      console.error(err)
+
       setRecalcError(err.message || 'Error al recalcular indicadores derivados')
       // Note: wellness records remain stored. Historial shows derivadosPendientes = true.
     } finally {
@@ -695,6 +754,9 @@ export function ImportPage() {
   // Preview filtering and pagination
   const filteredPreview = previewData.filter(r => {
     if (statusFilter === 'ALL') return true
+    if (statusFilter === 'ERROR') {
+      return r.estado !== 'OMITIDA' && r.tipo_incidencia && INCIDENCIAS_BLOQUEANTES.includes(r.tipo_incidencia)
+    }
     return r.estado === statusFilter
   })
 
@@ -704,8 +766,9 @@ export function ImportPage() {
   // Block Next in Step 2 if mapping of essential keys is missing, no valid rows, or unomitted ERROR rows exist
   const idMapped = activeMappings.find(m => m.internalField === 'id_jugadora')?.excelHeader
   const dateMapped = activeMappings.find(m => m.internalField === 'fecha')?.excelHeader
-  const hayErroresNoOmitidos = previewData.some(r => r.estado === 'ERROR')
-  const cannotGoToStep3 = !idMapped || !dateMapped || (previewSummary.nuevos + previewSummary.actualizaciones === 0) || hayErroresNoOmitidos
+
+  const cannotGoToStep3 = !idMapped || !dateMapped || (previewSummary.nuevos + previewSummary.actualizaciones === 0) || previewSummary.isBlocked
+
 
   return (
     <div className="container mx-auto p-4 max-w-6xl space-y-6">
@@ -895,33 +958,109 @@ export function ImportPage() {
                 </div>
               </div>
 
-              {/* VALIDATION STATUS SUMMARY */}
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-                <div className="bg-surface-50 border border-surface-200 p-3 rounded text-center">
-                  <span className="text-[10px] text-surface-500 uppercase block">Total Filas</span>
-                  <span data-testid="preview-count-total" className="text-xl font-bold text-surface-800">{previewSummary.total}</span>
+              {/* PANEL DE CALIDAD (PR-3) */}
+              <div className="bg-white border border-surface-200 rounded-lg shadow-sm overflow-hidden mb-4">
+                <div className="bg-surface-50 px-4 py-3 border-b border-surface-200 flex justify-between items-center">
+                  <h3 className="text-sm font-bold text-surface-800">Panel de calidad de importación</h3>
                 </div>
-                <div className="bg-green-50 border border-green-200 p-3 rounded text-center">
-                  <span className="text-[10px] text-green-700 uppercase block">Nuevos</span>
-                  <span data-testid="preview-count-nuevos" className="text-xl font-bold text-green-700">{previewSummary.nuevos}</span>
+                <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {/* Fila superior: Resumen General */}
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-surface-500 uppercase font-bold">Total Filas</span>
+                    <span data-testid="preview-count-total" className="text-2xl font-bold text-surface-800">{previewSummary.total}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-green-700 uppercase font-bold">Válidas / Nuevas</span>
+                    <span data-testid="preview-count-nuevos" className="text-2xl font-bold text-green-700">{previewSummary.nuevos}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-blue-700 uppercase font-bold">Actualizables</span>
+                    <span data-testid="preview-count-actualizaciones" className="text-2xl font-bold text-blue-700">{previewSummary.actualizaciones}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-amber-700 uppercase font-bold">Omitidas / Duplicadas</span>
+                    <span data-testid="preview-count-omitidas" className="text-2xl font-bold text-amber-700">
+                      {previewSummary.omitidos + previewSummary.duplicados}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-red-700 uppercase font-bold">Errores</span>
+                    <span data-testid="preview-count-errores" className="text-2xl font-bold text-red-700">{previewSummary.errores}</span>
+                  </div>
                 </div>
-                <div className="bg-blue-50 border border-blue-200 p-3 rounded text-center">
-                  <span className="text-[10px] text-blue-700 uppercase block">Actualizaciones</span>
-                  <span data-testid="preview-count-actualizaciones" className="text-xl font-bold text-blue-700">{previewSummary.actualizaciones}</span>
-                </div>
-                <div className="bg-surface-100 border border-surface-300 p-3 rounded text-center">
-                  <span className="text-[10px] text-surface-600 uppercase block">Duplicados</span>
-                  <span data-testid="preview-count-duplicados" className="text-xl font-bold text-surface-700">{previewSummary.duplicados}</span>
-                </div>
-                <div className="bg-red-50 border border-red-200 p-3 rounded text-center">
-                  <span className="text-[10px] text-red-700 uppercase block">Errores</span>
-                  <span data-testid="preview-count-errores" className="text-xl font-bold text-red-700">{previewSummary.errores}</span>
-                </div>
-                <div className="bg-amber-50 border border-amber-200 p-3 rounded text-center">
-                  <span className="text-[10px] text-amber-700 uppercase block">Omitidas</span>
-                  <span data-testid="preview-count-omitidas" className="text-xl font-bold text-amber-750">{previewSummary.omitidos}</span>
+
+                {/* Sub-métricas de identidad y errores */}
+                <div className="bg-surface-50 px-4 py-3 border-t border-surface-200 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-bold text-surface-600 uppercase mb-2 border-b border-surface-200 pb-1">Resolución de Identidad</div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-surface-600">ID exacto:</span>
+                      <span data-testid="quality-resIdExacto" className="font-semibold">{previewSummary.resIdExacto}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-surface-600">Por alias guardado:</span>
+                      <span className="font-semibold text-primary-700">{previewSummary.resAliasGuardado}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-surface-600">Coincidencia de nombre:</span>
+                      <span className="font-semibold">{previewSummary.resCoincidenciaNombre}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-bold text-surface-600 uppercase mb-2 border-b border-surface-200 pb-1">Conflictos y Nuevos Datos</div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-red-700 font-medium">Jugadoras no resueltas:</span>
+                      <span data-testid="quality-resConflictosPendientes" className="font-bold text-red-700">{previewSummary.resConflictosPendientes}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-green-700 font-medium">Nuevos aliases a guardar:</span>
+                      <span className="font-bold text-green-700">{previewSummary.aliasesNuevosCount}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-bold text-surface-600 uppercase mb-2 border-b border-surface-200 pb-1">Calidad del Formato</div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-red-700 font-medium">Errores de formato/datos:</span>
+                      <span className="font-bold text-red-700">{previewSummary.erroresFormato}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
+
+              {cannotGoToStep3 ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 flex items-start gap-3">
+                  <span className="text-red-600 text-lg mt-0.5">⚠️</span>
+                  <div>
+                    <h4 className="text-red-800 font-bold text-sm mb-1">No puedes aplicar la importación todavía:</h4>
+                    <ul className="list-disc pl-4 text-xs text-red-700 space-y-1">
+                      {!idMapped && <li>Falta mapear la columna obligatoria: ID Jugadora.</li>}
+                      {!dateMapped && <li>Falta mapear la columna obligatoria: Fecha.</li>}
+                      {idMapped && dateMapped && previewSummary.nuevos + previewSummary.actualizaciones === 0 && (
+                        <li>No hay filas válidas nuevas ni actualizables para importar.</li>
+                      )}
+                      {previewSummary.pendientesIdentidad > 0 && <li>{previewSummary.pendientesIdentidad} fila(s) requiere(n) asignar jugadora.</li>}
+                      {previewSummary.erroresFormato > 0 && <li>{previewSummary.erroresFormato} fila(s) tiene(n) un formato de fecha o dato inválido.</li>}
+                      {previewSummary.aliasAmbiguos > 0 && <li>{previewSummary.aliasAmbiguos} fila(s) tiene(n) alias ambiguo.</li>}
+                      {previewSummary.conflictosInternos > 0 && <li>{previewSummary.conflictosInternos} conflicto(s) interno(s) dentro del archivo.</li>}
+                    </ul>
+                    <div className="mt-3">
+                      <button
+                        onClick={handleJumpToNextError}
+                        className="bg-white hover:bg-red-100 text-red-700 text-[11px] font-semibold py-1.5 px-3 border border-red-300 rounded shadow-sm"
+                      >
+                        Saltar a la siguiente incidencia &rarr;
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex items-center gap-3">
+                  <span className="text-green-600 text-lg">✅</span>
+                  <div className="text-green-800 font-bold text-sm">Archivo listo para aplicar.</div>
+                </div>
+              )}
 
               {/* INTERACTIVE PREVIEW TABLE */}
               <div className="space-y-3">
@@ -1056,8 +1195,8 @@ export function ImportPage() {
                                           </td>
                                         ))}
                                         <td className="p-1 text-center">
-                                          <select 
-                                            value={draftEditData.dolor_sn === true ? 'si' : draftEditData.dolor_sn === false ? 'no' : ''} 
+                                          <select
+                                            value={draftEditData.dolor_sn === true ? 'si' : draftEditData.dolor_sn === false ? 'no' : ''}
                                             onChange={e => setDraftEditData({ ...draftEditData, dolor_sn: e.target.value === 'si' ? true : e.target.value === 'no' ? false : null })}
                                             className="w-12 text-xs border border-primary-300 rounded p-1"
                                           >
@@ -1066,8 +1205,8 @@ export function ImportPage() {
                                           <input type="text" value={draftEditData.dolor_texto_semana} onChange={e => setDraftEditData({ ...draftEditData, dolor_texto_semana: e.target.value })} className="w-full text-[10px] mt-1 border border-primary-300 rounded p-0.5" placeholder="Desc..." />
                                         </td>
                                         <td className="p-1 text-center">
-                                          <select 
-                                            value={draftEditData.actividad_sn === true ? 'si' : draftEditData.actividad_sn === false ? 'no' : ''} 
+                                          <select
+                                            value={draftEditData.actividad_sn === true ? 'si' : draftEditData.actividad_sn === false ? 'no' : ''}
                                             onChange={e => setDraftEditData({ ...draftEditData, actividad_sn: e.target.value === 'si' ? true : e.target.value === 'no' ? false : null })}
                                             className="w-12 text-xs border border-primary-300 rounded p-1"
                                           >
@@ -1206,7 +1345,15 @@ export function ImportPage() {
               {cannotGoToStep3 && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded flex justify-between items-center">
                   <div className="text-amber-800 text-xs leading-relaxed max-w-3xl">
-                    ⚠️ <strong>Asistente bloqueado:</strong> Hay {previewSummary.errores} fila(s) con ERROR. Asegúrate de asignar las columnas obligatorias, tener al menos una fila válida ("Nuevos" o "Actualizaciones") y omitir o corregir los errores para continuar.
+                    ⚠️ <strong>Asistente bloqueado:</strong>
+  <ul className="list-disc pl-4 mt-1 font-medium">
+    {previewSummary.pendientesIdentidad > 0 && <li>{previewSummary.pendientesIdentidad} fila(s) requieren asignar jugadora.</li>}
+    {previewSummary.erroresFormato > 0 && <li>{previewSummary.erroresFormato} fila(s) contienen fecha u otro formato inválido.</li>}
+    {previewSummary.aliasAmbiguos > 0 && <li>{previewSummary.aliasAmbiguos} fila(s) tienen un alias ambiguo.</li>}
+    {previewSummary.conflictosInternos > 0 && <li>{previewSummary.conflictosInternos} conflicto(s) interno(s) requieren decidir qué registro conservar.</li>}
+    {previewSummary.errores > 0 && previewSummary.pendientesIdentidad === 0 && previewSummary.erroresFormato === 0 && previewSummary.aliasAmbiguos === 0 && previewSummary.conflictosInternos === 0 && <li>{previewSummary.errores} incidencia(s) general(es) bloqueando.</li>}
+  </ul>
+
                   </div>
                   {previewSummary.errores > 0 && (
                     <button
@@ -1354,8 +1501,16 @@ export function ImportPage() {
             <div className="space-y-6">
               {importOutcome?.success && (
                 <div className="p-4 bg-green-50 border border-green-200 text-green-800 rounded-lg">
-                  <h3 className="font-bold text-sm">🎉 ¡Importación aplicada en la base de datos local!</h3>
-                  <p className="text-xs mt-1">Registros añadidos: <strong>{importOutcome.inserted}</strong> | Actualizados: <strong>{importOutcome.updated}</strong> | Omitidos: {importOutcome.skipped} | Errores: {importOutcome.errors}{importOutcome.nuevos_aliases ? ` | Nuevos Alias Guardados: ${importOutcome.nuevos_aliases}` : ''}</p>
+                  <h3 className="font-bold text-sm mb-2">🎉 ¡Importación aplicada en la base de datos local!</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                    <div>Registros añadidos: <strong>{importOutcome.inserted}</strong></div>
+                    <div>Actualizados: <strong>{importOutcome.updated}</strong></div>
+                    <div>Duplicados (ignorados): <strong>{previewSummary.duplicados}</strong></div>
+                    <div>Omitidos manualmente: <strong>{previewSummary.omitidos}</strong></div>
+                    <div className="text-red-700">Errores: <strong>{importOutcome.errors}</strong></div>
+                    <div className="text-green-700">Nuevos Alias guardados: <strong>{importOutcome.nuevos_aliases || 0}</strong></div>
+                    <div className="text-blue-700 col-span-2">Identidades resueltas automáticamente: <strong>{previewSummary.resAliasGuardado + previewSummary.resCoincidenciaNombre}</strong></div>
+                  </div>
                 </div>
               )}
 
@@ -1468,7 +1623,7 @@ export function ImportPage() {
                   <td colSpan={6} className="p-4 text-center text-surface-400 italic">No hay historial de importaciones disponible.</td>
                 </tr>
               ) : (
-                historial_importaciones.map((hist, idx) => (
+                historial_importaciones.slice(0, 10).map((hist, idx) => (
                   <tr key={idx} className="hover:bg-surface-50/50">
                     <td className="p-3 font-mono">{new Date(hist.fechaHora).toLocaleString()}</td>
                     <td className="p-3 font-semibold text-surface-800">

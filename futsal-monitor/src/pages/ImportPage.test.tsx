@@ -284,7 +284,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       // 2. Comprueba contadores (Nuevos: 1, Errores: 1) y bloqueo
       expect(screen.getByTestId('preview-count-nuevos').textContent).toBe('1')
       expect(screen.getByTestId('preview-count-errores').textContent).toBe('1')
-      expect(screen.getByText(/Asistente bloqueado/i)).toBeInTheDocument()
+      expect(screen.getByText(/No puedes aplicar la importaci.n todav.a/i)).toBeInTheDocument()
 
       const stepNextBtn = screen.getByRole('button', { name: /^siguiente →$/i })
       expect(stepNextBtn).toBeDisabled()
@@ -296,7 +296,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       await waitFor(() => {
         expect(screen.getByTestId('preview-count-errores').textContent).toBe('0')
         expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('1')
-        expect(screen.queryByText(/Asistente bloqueado/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/No puedes aplicar la importaci.n todav.a/i)).not.toBeInTheDocument()
         expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
       })
 
@@ -333,7 +333,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       // 1. Wait for ERROR state and block
       await waitFor(() => {
         expect(screen.getByTestId('preview-count-errores')).toHaveTextContent('1')
-        expect(screen.getByText(/Asistente bloqueado/i)).toBeInTheDocument()
+        expect(screen.getByText(/No puedes aplicar la importaci.n todav.a/i)).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /^siguiente →$/i })).toBeDisabled()
       })
 
@@ -358,7 +358,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       await waitFor(() => {
         expect(screen.getByTestId('preview-count-errores')).toHaveTextContent('0')
         expect(screen.getByTestId('preview-count-nuevos')).toHaveTextContent('1')
-        expect(screen.queryByText(/Asistente bloqueado/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/No puedes aplicar la importaci.n todav.a/i)).not.toBeInTheDocument()
         expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
       })
     })
@@ -614,7 +614,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       // Debe haber error
       await waitFor(() => {
         expect(screen.getByTestId('preview-count-errores')).toHaveTextContent('1')
-        expect(screen.getByText(/Asistente bloqueado/i)).toBeInTheDocument()
+        expect(screen.getByText(/No puedes aplicar la importaci.n todav.a/i)).toBeInTheDocument()
       })
 
       // Omitir la fila con error
@@ -722,7 +722,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       fireEvent.change(selects[2], { target: { value: 'Fecha' } })
 
       await waitFor(() => {
-        expect(screen.getByText(/asistente bloqueado/i)).toBeInTheDocument()
+        expect(screen.getByText(/No puedes aplicar la importaci.n todav.a/i)).toBeInTheDocument()
       })
 
       return alertMock
@@ -774,7 +774,9 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       let saveBtn = screen.getByRole('button', { name: /revalidar/i })
       fireEvent.click(saveBtn)
       await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
       await waitFor(() => { expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
 
       // 3. Reabrir edicion
       editBtn = await screen.findByRole('button', { name: /editar/i })
@@ -791,6 +793,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       saveBtn = screen.getByRole('button', { name: /revalidar/i })
       fireEvent.click(saveBtn)
       await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
 
       await completeImport()
 
@@ -809,7 +812,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       ])
 
       // Asignar ambas a J001
-      const editBtns = await screen.findAllByRole('button', { name: /editar/i })
+      let editBtns = await screen.findAllByRole('button', { name: /editar/i })
 
       // Fila 2 (Ani)
       fireEvent.click(editBtns[0])
@@ -820,9 +823,12 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       if (!checkbox.checked) fireEvent.click(checkbox)
       fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
       await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
 
       // Fila 3 (Ana G.)
+      editBtns = await screen.findAllByRole('button', { name: /editar/i })
       fireEvent.click(editBtns[1])
+
       await waitFor(() => { expect(screen.getByRole('button', { name: /revalidar/i })).toBeInTheDocument() })
       idSelects = screen.getAllByRole('combobox')
       fireEvent.change(idSelects[idSelects.length - 1], { target: { value: 'J001' } })
@@ -830,8 +836,10 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       if (!checkbox.checked) fireEvent.click(checkbox)
       fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
       await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
 
       await waitFor(() => { expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
 
       // Reabrir solo fila 2 (Ani)
       const reopenBtns = await screen.findAllByRole('button', { name: /editar/i })
@@ -843,6 +851,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       if (checkbox.checked) fireEvent.click(checkbox)
       fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
       await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
 
       await completeImport()
 
@@ -875,7 +884,9 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
 
       fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
       await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
       await waitFor(() => { expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
 
       // Reabrir misma fila
       editBtn = await screen.findByRole('button', { name: /editar/i })
@@ -892,6 +903,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
 
       fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
       await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
 
       await completeImport()
 
@@ -905,6 +917,65 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       expect(aniJ001).toBeUndefined()
 
       alertMock.mockRestore()
+    })
+  })
+
+  describe('BLOCK E - PR-3 Calidad del Dato', () => {
+    it('Muestra los contadores correctos del Panel de Calidad y verifica mensaje de bloqueo', async () => {
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
+        'J001,2026-01-15,8,3,4,2,9',
+        'J002,2026-01-15,8,3,4,2,9',
+        'NO_EXISTE,2026-01-15,8,3,4,2,9',
+        'J001,2026-01-15,8,3,4,2,10' // Conflicto/Actualizacion
+      ].join('\n')
+
+      await db.wellness.add({
+        id_jugadora: 'J001',
+        fecha: '2026-01-15',
+        calidad_sueno: 8,
+        fatiga: 3,
+        dolor_muscular: 4,
+        estres: 2,
+        estado_animo: 9,
+        score_wellness: 8.0,
+        dolor_especifico: ''
+      })
+
+      useStore.setState({ wellness: await db.wellness.toArray() })
+
+      const file = new File([csvContent], 'wellness_pr3.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente/i }))
+
+      // Esperar a que se calcule la previsualizacion (async)
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-total').textContent).toBe('4')
+      })
+
+      // Verificar contadores del panel de calidad (id=quality-*)
+      expect(screen.getByTestId('quality-resIdExacto').textContent).toBe('1') // J001 (x2) - 1 duplicado identico que cuenta, y 1 duplicado de archivo que da ERROR
+      expect(screen.getByTestId('quality-resConflictosPendientes').textContent).toBe('3') // J002 y NO_EXISTE
+
+      // Verificar que el asistente está bloqueado con un mensaje accionable
+      expect(screen.getByText(/No puedes aplicar la importación todavía:/i)).toBeInTheDocument()
+      expect(screen.getByText(/2 fila\(s\) requiere\(n\) asignar jugadora/i)).toBeInTheDocument()
     })
   })
 })
