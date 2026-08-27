@@ -107,7 +107,11 @@ describe('Menstrual Fase 4B - Modelo y Store', () => {
     // Impacto alto no crea wellness ni modifica nada
     const state = useStore.getState()
     expect(state.wellness.length).toBe(0)
-    expect(state.lesiones.length).toBe(0)
+    expect(state.readiness.length).toBe(0)
+    expect(state.rpe_partido.length).toBe(0)
+    expect(state.sesion_rpe.length).toBe(0)
     expect(state.carga_gps.length).toBe(0)
+    expect(state.lesiones.length).toBe(0)
+    // Nota: Disponibilidad (activa) no tiene escritura aislada en este flujo
   })
 })

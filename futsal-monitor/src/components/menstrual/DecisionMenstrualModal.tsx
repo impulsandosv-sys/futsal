@@ -56,8 +56,8 @@ export function DecisionMenstrualModal({ open, onClose, registroId, jugadoraName
       }
       await updateRegistroMenstrual(registroId, updateData)
       onClose()
-    } catch (err: any) {
-      setError(err.message || 'Error al guardar la decisión.')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error al guardar la decisión.')
     }
   }
 

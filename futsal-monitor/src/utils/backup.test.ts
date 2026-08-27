@@ -543,9 +543,11 @@ describe('backup utility - strict validation & security', () => {
       accion_ajuste: 'AJUSTE_VOLUMEN',
       fecha_decision: '2026-08-27',
       nota_ajuste: 'Reducir volumen un 20%',
-      comentario: 'Molestias pélvicas'
+      comentario: 'Molestias pélvicas',
+      creado_en: '2026-08-27T00:00:00Z',
+      actualizado_en: '2026-08-27T00:00:00Z'
     }
-    vi.mocked(db.registro_menstrual.toArray).mockResolvedValue([regCon4B] as any)
+    vi.mocked(db.registro_menstrual.toArray).mockResolvedValue([regCon4B] as unknown as import('@/types').RegistroMenstrual[])
 
     const backup = await createBackupData()
     expect(backup.data.registro_menstrual).toHaveLength(1)
@@ -568,7 +570,7 @@ describe('backup utility - strict validation & security', () => {
       nota_ajuste: 'Nota restaurada'
     }
 
-    const backupData: any = {
+    const backupData = {
       version: '1.0.0',
       timestamp: '2026-08-27T00:00:00Z',
       backupFormatVersion: 1,
@@ -586,7 +588,7 @@ describe('backup utility - strict validation & security', () => {
       }
     }
 
-    vi.mocked(db.registro_menstrual.toArray).mockResolvedValue([] as any)
+    vi.mocked(db.registro_menstrual.toArray).mockResolvedValue([])
     const putMock = vi.mocked(db.registro_menstrual.put).mockResolvedValue(1)
 
     const result = await restoreFromData(backupData, 'merge', 'replace')
@@ -611,7 +613,7 @@ describe('backup utility - strict validation & security', () => {
       fecha_decision: '2026-08-21'
     }
 
-    const backupData: any = {
+    const backupData = {
       version: '1.0.0', timestamp: '2026-08-27T00:00:00Z',
       backupFormatVersion: 1, databaseSchemaVersion: 16,
       data: {
