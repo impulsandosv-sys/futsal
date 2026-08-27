@@ -69,7 +69,7 @@ describe('SeguimientoMenstrualPage — Pruebas de Interfaz y Flujos', () => {
     }
 
     const deleteMock = vi.fn().mockRejectedValue(new Error('Error fingido al eliminar'))
-    useStore.setState({ registros_menstruales: [reg as any], deleteRegistroMenstrual: deleteMock })
+    useStore.setState({ registros_menstruales: [reg as unknown as import('@/types').RegistroMenstrual], deleteRegistroMenstrual: deleteMock })
     renderComponent()
 
     const btnEliminar = screen.getByRole('button', { name: /eliminar/i })

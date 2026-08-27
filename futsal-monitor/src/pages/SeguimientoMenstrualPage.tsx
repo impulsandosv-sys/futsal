@@ -119,8 +119,12 @@ export function SeguimientoMenstrualPage() {
         await deleteRegistroMenstrual(registroToDelete.id)
         setDeleteModalOpen(false)
         setRegistroToDelete(null)
-      } catch (err: any) {
-        setDeleteError(err.message || 'Error al eliminar el registro.')
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'Error al eliminar el registro.'
+        setDeleteError(message)
       }
     }
   }

@@ -357,7 +357,7 @@ describe('Dominio Menstrual — menstrualEngine', () => {
   })
 
   it('23. El modelo legacy ciclo_menstrual es completamente ignorado en las estimaciones y alertas', () => {
-    const p1 = evaluarAlertaMenstrualJugadora([], {} as any, '2026-05-15', '2026-05-15')
+    const p1 = evaluarAlertaMenstrualJugadora([], {} as unknown as import('@/types').Jugadora, '2026-05-15', '2026-05-15')
     expect(p1).toBeNull()
   })
 
@@ -385,7 +385,7 @@ describe('Dominio Menstrual — menstrualEngine', () => {
       ]
       const regFuturo = { fecha_inicio: '2026-09-01' } as RegistroMenstrual
 
-      const alerta = evaluarAlertaMenstrualJugadora([...regPasados, regFuturo], { id_jugadora: 'J1', nombre: 'Test' } as any, hoyStr, hoyStr)
+      const alerta = evaluarAlertaMenstrualJugadora([...regPasados, regFuturo], { id_jugadora: 'J1', nombre: 'Test' } as unknown as import('@/types').Jugadora, hoyStr, hoyStr)
       expect(alerta).not.toBeNull()
       expect(alerta?.fecha).toBe('2026-08-26')
     })

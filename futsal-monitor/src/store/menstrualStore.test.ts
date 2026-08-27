@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
@@ -8,10 +8,10 @@ import { useStore, reconciliarAlertasMenstruales } from './store'
 import { db } from '@/db/database'
 import type { Jugadora } from '@/types'
 
-describe('Store Menstrual — Acciones y Ciclo de Vida de Alertas', () => {
+describe('Store Menstrual â€” Acciones y Ciclo de Vida de Alertas', () => {
   const jugadora1: Jugadora = {
     id_jugadora: 'J01',
-    nombre: 'Ana López',
+    nombre: 'Ana LÃ³pez',
     posicion: 'Ala',
     activa: true
   }
@@ -41,7 +41,7 @@ describe('Store Menstrual — Acciones y Ciclo de Vida de Alertas', () => {
       fecha_inicio: '2026-05-10',
       impacto_percibido: 3,
       comentario: 'Inicio normal',
-      nota_ajuste: 'Carga estándar'
+      nota_ajuste: 'Carga estÃ¡ndar'
     })
 
     expect(reg.id).toBeDefined()
@@ -56,7 +56,7 @@ describe('Store Menstrual — Acciones y Ciclo de Vida de Alertas', () => {
     expect(enStore[0].fecha_inicio).toBe('2026-05-10')
   })
 
-  it('2. addRegistroMenstrual rechaza datos inválidos sin persistir', async () => {
+  it('2. addRegistroMenstrual rechaza datos invÃ¡lidos sin persistir', async () => {
     // Fecha futura
     await expect(
       useStore.getState().addRegistroMenstrual({
@@ -66,7 +66,7 @@ describe('Store Menstrual — Acciones y Ciclo de Vida de Alertas', () => {
       })
     ).rejects.toThrow()
 
-    // Impacto inválido
+    // Impacto invÃ¡lido
     await expect(
       useStore.getState().addRegistroMenstrual({
         id_jugadora: 'J01',
@@ -158,11 +158,11 @@ it('5. deleteRegistroMenstrual elimina el registro de una jugadora sin afectar a
     expect(enStore[0].id_jugadora).toBe('J02')
   })
 
-  it('6. Sincronización de alerta: crea alerta estimada e invalida alerta previa al registrar nuevo inicio real', async () => {
+  it('6. SincronizaciÃ³n de alerta: crea alerta estimada e invalida alerta previa al registrar nuevo inicio real', async () => {
     // Registros calculados:
     // Registro 1: 2026-07-01
-    // Registro 2: 2026-07-29 (28 días)
-    // Estimación: 2026-08-26 (hoy en fecha de tests) -> Ventana activa: 2026-08-23 a 2026-09-02
+    // Registro 2: 2026-07-29 (28 dÃ­as)
+    // EstimaciÃ³n: 2026-08-26 (hoy en fecha de tests) -> Ventana activa: 2026-08-23 a 2026-09-02
     await useStore.getState().addRegistroMenstrual({
       id_jugadora: 'J01',
       fecha_inicio: '2026-07-01',
@@ -260,16 +260,16 @@ it('5. deleteRegistroMenstrual elimina el registro de una jugadora sin afectar a
   })
 
 
-  describe('Fase 4A.3 - Reconciliaci�n de Alertas', () => {
+  describe('Fase 4A.3 - Reconciliaciï¿½n de Alertas', () => {
 
 
     beforeEach(async () => {
-      // Configuramos dos registros para J01: 01 de abril y 29 de abril (28 d�as de mediana)
+      // Configuramos dos registros para J01: 01 de abril y 29 de abril (28 dï¿½as de mediana)
       await db.registro_menstrual.bulkAdd([
         { id_jugadora: 'J01', fecha_inicio: '2026-04-01', impacto_percibido: 3, comentario: '', nota_ajuste: '', creado_en: 'X', actualizado_en: 'X' },
         { id_jugadora: 'J01', fecha_inicio: '2026-04-29', impacto_percibido: 3, comentario: '', nota_ajuste: '', creado_en: 'X', actualizado_en: 'X' }
       ])
-      // Pr�xima fecha estimada = 2026-05-27
+      // Prï¿½xima fecha estimada = 2026-05-27
       // Ventana: 2026-05-24 a 2026-06-03
     })
 
@@ -289,7 +289,7 @@ it('5. deleteRegistroMenstrual elimina el registro de una jugadora sin afectar a
       expect(alertas.filter(a => a.tipo === 'MENSTRUACION_PROXIMA_ESTIMADA')).toHaveLength(0)
     })
 
-    it('2. App cargada en fecha_estimada - 3: Se crea una �nica alerta abierta', async () => {
+    it('2. App cargada en fecha_estimada - 3: Se crea una ï¿½nica alerta abierta', async () => {
       mockHoy('2026-05-24')
       await reconciliarAlertasMenstruales(useStore.setState)
       const alertas = await db.alertas.toArray()
@@ -298,7 +298,7 @@ it('5. deleteRegistroMenstrual elimina el registro de una jugadora sin afectar a
       expect(estimadas[0].estado).toBe('abierta')
     })
 
-    it('3. App cargada dentro de la ventana: Existe una �nica alerta abierta', async () => {
+    it('3. App cargada dentro de la ventana: Existe una ï¿½nica alerta abierta', async () => {
       mockHoy('2026-05-29') // Dentro de la ventana
       await reconciliarAlertasMenstruales(useStore.setState)
       await reconciliarAlertasMenstruales(useStore.setState) // Varias veces (Test 9)
@@ -324,7 +324,7 @@ it('5. deleteRegistroMenstrual elimina el registro de una jugadora sin afectar a
       let estimadas = (await db.alertas.toArray()).filter(a => a.tipo === 'MENSTRUACION_PROXIMA_ESTIMADA')
       expect(estimadas[0].estado).toBe('abierta')
 
-      // Ahora simulamos el d�a +8
+      // Ahora simulamos el dï¿½a +8
       mockHoy('2026-06-04')
       await reconciliarAlertasMenstruales(useStore.setState)
 
@@ -339,7 +339,7 @@ it('5. deleteRegistroMenstrual elimina el registro de una jugadora sin afectar a
 
       await db.alertas.update(estimadas[0].id!, { estado: 'descartada' })
 
-      // Volvemos a reconciliar ese mismo d�a
+      // Volvemos a reconciliar ese mismo dï¿½a
       await reconciliarAlertasMenstruales(useStore.setState)
 
       estimadas = (await db.alertas.toArray()).filter(a => a.tipo === 'MENSTRUACION_PROXIMA_ESTIMADA')
@@ -349,7 +349,7 @@ it('5. deleteRegistroMenstrual elimina el registro de una jugadora sin afectar a
     it('7 y 8. No toca alertas de otras jugadoras ni otros tipos', async () => {
       mockHoy('2026-05-29')
       await db.alertas.add({
-        tipo: 'OTRO_TIPO' as any,
+        tipo: 'OTRO_TIPO' as unknown as import('@/types').TipoAlerta,
         id_jugadora: 'J01',
         fecha: '2026-05-29',
         mensaje: 'Otra',
@@ -380,3 +380,112 @@ it('5. deleteRegistroMenstrual elimina el registro de una jugadora sin afectar a
     })
   })
 })
+
+describe('Fase 4A.6 - IntegraciÃ³n de loadAll con reconciliaciÃ³n', () => {
+  beforeEach(async () => {
+    await db.alertas.clear()
+    await db.registro_menstrual.clear()
+    await db.jugadoras.clear()
+    useStore.setState({ hasData: false, registros_menstruales: [], alertas: [], jugadoras: [] })
+    await db.jugadoras.add({
+      id_jugadora: 'J01',
+      nombre: 'Jugadora 1',
+      posicion: 'ALA',
+      fecha_nacimiento: '2000-01-01',
+      dorsal: 10,
+      activa: true
+    })
+  })
+
+  it('1. loadAll() con dos registros previos y fecha dentro de la ventana: Crea una Ãºnica alerta menstrual activa.', async () => {
+    await db.registro_menstrual.bulkAdd([
+      { id_jugadora: 'J01', fecha_inicio: '2026-04-01', impacto_percibido: 3, creado_en: 'X', actualizado_en: 'X' },
+      { id_jugadora: 'J01', fecha_inicio: '2026-05-01', impacto_percibido: 3, creado_en: 'X', actualizado_en: 'X' }
+    ])
+    mockHoy('2026-05-29')
+
+    await useStore.getState().loadAll()
+
+    const alertas = await db.alertas.toArray()
+    const alerta = alertas.find(a => a.tipo === 'MENSTRUACION_PROXIMA_ESTIMADA' && a.id_jugadora === 'J01')
+    expect(alerta).toBeDefined()
+    expect(alerta?.estado).toBe('abierta')
+    expect(alerta?.fecha).toBe('2026-05-31')
+  })
+
+  it('2. loadAll() antes de la ventana: No crea alerta.', async () => {
+    await db.registro_menstrual.bulkAdd([
+      { id_jugadora: 'J01', fecha_inicio: '2026-04-01', impacto_percibido: 3, creado_en: 'X', actualizado_en: 'X' },
+      { id_jugadora: 'J01', fecha_inicio: '2026-05-01', impacto_percibido: 3, creado_en: 'X', actualizado_en: 'X' }
+    ])
+    mockHoy('2026-05-20')
+
+    await useStore.getState().loadAll()
+
+    const alertas = await db.alertas.toArray()
+    const alerta = alertas.find(a => a.tipo === 'MENSTRUACION_PROXIMA_ESTIMADA' && a.id_jugadora === 'J01')
+    expect(alerta).toBeUndefined()
+  })
+
+  it('3. loadAll() en fecha_estimada + 8: Resuelve una alerta menstrual abierta.', async () => {
+    await db.registro_menstrual.bulkAdd([
+      { id_jugadora: 'J01', fecha_inicio: '2026-04-01', impacto_percibido: 3, creado_en: 'X', actualizado_en: 'X' },
+      { id_jugadora: 'J01', fecha_inicio: '2026-05-01', impacto_percibido: 3, creado_en: 'X', actualizado_en: 'X' }
+    ])
+    await db.alertas.add({
+      id_jugadora: 'J01',
+      tipo: 'MENSTRUACION_PROXIMA_ESTIMADA',
+      fecha: '2026-05-31',
+      estado: 'abierta',
+      creada: 'X',
+      mensaje: 'Test'
+    } as import('@/types').Alerta)
+
+    mockHoy('2026-06-08')
+
+    await useStore.getState().loadAll()
+
+    const alertas = await db.alertas.toArray()
+    const alerta = alertas.find(a => a.tipo === 'MENSTRUACION_PROXIMA_ESTIMADA' && a.id_jugadora === 'J01')
+    expect(alerta?.estado).toBe('resuelta')
+  })
+
+  it('4. loadAll() con una alerta descartada: No la reabre.', async () => {
+    await db.registro_menstrual.bulkAdd([
+      { id_jugadora: 'J01', fecha_inicio: '2026-04-01', impacto_percibido: 3, creado_en: 'X', actualizado_en: 'X' },
+      { id_jugadora: 'J01', fecha_inicio: '2026-05-01', impacto_percibido: 3, creado_en: 'X', actualizado_en: 'X' }
+    ])
+    await db.alertas.add({
+      id_jugadora: 'J01',
+      tipo: 'MENSTRUACION_PROXIMA_ESTIMADA',
+      fecha: '2026-05-31',
+      estado: 'descartada',
+      creada: 'X',
+      mensaje: 'Test'
+    } as import('@/types').Alerta)
+
+    mockHoy('2026-05-31')
+
+    await useStore.getState().loadAll()
+
+    const alertas = await db.alertas.toArray()
+    const alerta = alertas.find(a => a.tipo === 'MENSTRUACION_PROXIMA_ESTIMADA' && a.id_jugadora === 'J01')
+    expect(alerta?.estado).toBe('descartada')
+  })
+
+  it('5. loadAll() con mock sin db.registro_menstrual: No falla, no registra errores de consola y mantiene los demÃ¡s datos cargados.', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const realTable = db.registro_menstrual
+    Object.defineProperty(db, 'registro_menstrual', { value: undefined, configurable: true })
+
+    mockHoy('2026-05-31')
+
+    await expect(useStore.getState().loadAll()).resolves.not.toThrow()
+
+    expect(consoleSpy).not.toHaveBeenCalled()
+    expect(useStore.getState().hasData).toBe(true)
+
+    Object.defineProperty(db, 'registro_menstrual', { value: realTable, configurable: true })
+    consoleSpy.mockRestore()
+  })
+})\n

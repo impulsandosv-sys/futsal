@@ -417,7 +417,7 @@ let activeLoadsCount = 0
 const sincronizarWellnessIncremental = async (
   jugadoraId: string,
   fecha: string,
-  setFn: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
+  setFn: SetAppState,
   getFn: () => AppState,
 ): Promise<void> => {
   // Incrementar loadEpoch invalida snapshots antiguos de loadAll() iniciados antes del commit
@@ -476,7 +476,7 @@ const sincronizarWellnessIncremental = async (
 const sincronizarWellnessEditadoIncremental = async (
   wellnessId: number,
   affectedPairs: Array<{ id_jugadora: string; fecha: string }>,
-  setFn: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
+  setFn: SetAppState,
   getFn: () => AppState,
 ): Promise<void> => {
   loadEpoch++
@@ -931,7 +931,7 @@ initializeAuth()
  */
 const sincronizarAlertaMenstrual = async (
   idJugadora: string,
-  setFn: any,
+  setFn: SetAppState,
   skipStateSync: boolean = false
 ): Promise<void> => {
   try {

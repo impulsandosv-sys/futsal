@@ -665,7 +665,7 @@ export function PlayerProfilePage() {
                 </div>
                 {estimacionMenstrual.variabilidad_reciente && (
                   <div className="text-[11px] text-amber-800 bg-amber-50 p-2 rounded border border-amber-200">
-                    ⚠️ Estimación con variabilidad reciente en los intervalos registrados. Confirmar contexto con la jugadora si procede.
+                    Estimación con variabilidad reciente en los intervalos registrados. Confirmar contexto con la jugadora si procede.
                   </div>
                 )}
               </div>
