@@ -300,6 +300,23 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
         expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
       })
 
+      // 5. Restaura la fila de error
+      await waitFor(() => {
+        expect(screen.queryAllByRole('checkbox').length).toBeGreaterThan(0)
+      })
+      const newCheckboxes = screen.getAllByRole('checkbox')
+      const newTargetErrorCb = newCheckboxes[newCheckboxes.length - 1] as HTMLInputElement
+      fireEvent.click(newTargetErrorCb)
+
+      // 6. Comprueba contadores (Errores: 1, Omitidas: 0) y bloqueo del paso 3
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-errores').textContent).toBe('1')
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('0')
+        expect(screen.getByText(/No puedes aplicar la importaci.n todav.a/i)).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).toBeDisabled()
+        expect(screen.getAllByText('ERROR').length).toBeGreaterThan(0)
+      })
+
       // Pureza Dexie: 0 escrituras
       expect(await db.wellness.count()).toBe(0)
     })
@@ -1144,6 +1161,80 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       expect(screen.getByText(/No puedes aplicar la importación todavía:/i)).toBeInTheDocument()
       expect(screen.getByText(/1 fila\(s\) requiere\(n\) asignar jugadora/i)).toBeInTheDocument()
       expect(screen.getByText(/1 conflicto\(s\) interno\(s\) dentro del archivo/i)).toBeInTheDocument()
+    })
+
+    // Nota: Un DUPLICADO_IDENTICO no tiene checkbox en la UI y no se puede omitir directamente.
+    // Este test demuestra que al omitir un NUEVO y aparecer un duplicado en la BD en segundo plano,
+    // restaurar la fila la empuja orgánicamente a DUPLICADO_IDENTICO por recálculo puro.
+    it('5. NUEVO -> OMITIDA -> DUPLICADO_IDENTICO tras cambio de BD y recálculo', async () => {
+      // 1. Dataset con un solo registro NUEVO
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
+        'J001,2026-02-01,8,3,4,2,9'
+      ].join('\n')
+
+      const testFile = new File([csvContent], 'duplicados.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+      fireEvent.change(importInput, { target: { files: [testFile] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente/i }))
+
+      // Estado 1: Fila 1 es NUEVA
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-nuevos').textContent).toBe('1')
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('0')
+      })
+
+      // Omitimos Fila 1
+      let checkboxes = screen.getAllByRole('checkbox')
+      fireEvent.click(checkboxes[0])
+
+      // Estado 2: Fila 1 OMITIDA
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('1')
+        expect(screen.getByTestId('preview-count-nuevos').textContent).toBe('0')
+      })
+
+      // Inyectamos el duplicado en la base de datos simulando un cambio en background
+      await db.wellness.add({
+        id: 'W_DUP_1',
+        id_jugadora: 'J001',
+        fecha: '2026-02-01',
+        calidad_sueno: 8,
+        fatiga: 3,
+        dolor_muscular: 4,
+        estres: 2,
+        estado_animo: 9,
+        score_wellness: 8.0,
+        dolor_especifico: ''
+      })
+      // Actualizamos store manual (useLiveQuery simulado)
+      useStore.setState({ wellness: await db.wellness.toArray() })
+
+      // Restauramos Fila 1
+      checkboxes = screen.getAllByRole('checkbox')
+      fireEvent.click(checkboxes[0])
+
+      // Estado 3: La fila ahora se detecta como DUPLICADO_IDENTICO por recálculo puro
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-nuevos').textContent).toBe('0')
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('0')
+        expect(screen.getByTestId('preview-count-duplicados-existentes').textContent).toBe('1')
+        expect(screen.queryAllByRole('checkbox').length).toBe(0) // Ya no tiene checkbox
+      })
     })
   })
 })
