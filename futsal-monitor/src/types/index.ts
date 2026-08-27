@@ -320,6 +320,7 @@ export type TipoIncidenciaImportacion =
 export interface PreviewRow {
   filaOriginal: number
   estado: 'NUEVO' | 'ACTUALIZACION_POSIBLE' | 'DUPLICADO_IDENTICO' | 'ERROR' | 'OMITIDA'
+  prevEstado?: 'NUEVO' | 'ACTUALIZACION_POSIBLE' | 'DUPLICADO_IDENTICO' | 'ERROR' | 'OMITIDA'
   tipo_incidencia?: TipoIncidenciaImportacion
   id_jugadora: string
   alias_origen?: string

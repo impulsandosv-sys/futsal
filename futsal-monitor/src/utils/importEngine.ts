@@ -789,8 +789,8 @@ export function construirVistaPrevia(
       const sonIdenticas = sonFilasIdenticas(normRow, existingRow, context.tipoCuestionario)
 
       let tipoInc = sonIdenticas ? 'duplicado_interno_identico' : 'conflicto_interno'
-      let baseEstado = sonIdenticas ? 'DUPLICADO_IDENTICO' : 'ERROR'
-      let finalEstado = omittedRowIndices?.has(filaOriginal) ? 'OMITIDA' : baseEstado
+      const baseEstado: 'DUPLICADO_IDENTICO' | 'ERROR' = sonIdenticas ? 'DUPLICADO_IDENTICO' : 'ERROR'
+      const finalEstado: PreviewRow['estado'] = omittedRowIndices?.has(filaOriginal) ? 'OMITIDA' : baseEstado
 
       if (finalEstado === 'OMITIDA') result.omitidos++
       else if (baseEstado === 'ERROR') result.errores++
