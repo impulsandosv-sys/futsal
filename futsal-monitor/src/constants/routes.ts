@@ -19,4 +19,5 @@ export const ROUTES = {
   DECISION_DIARIA: '/decision-diaria',
   IMPORTAR: '/importar',
   TEMPORADAS: '/temporadas',
+  SEGUIMIENTO_MENSTRUAL: '/seguimiento-menstrual',
 } as const

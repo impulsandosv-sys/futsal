@@ -169,10 +169,11 @@ export function AlertsPage() {
     return true
   })
 
-  // Separate into 3 categories
+  // Separate into categories
   const loadAlerts = filteredAlertas.filter(a => a.tipo === 'wellness_bajo' || a.tipo === 'carga_alta')
   const injuryAlerts = filteredAlertas.filter(a => a.tipo === 'lesion' || a.tipo === 'readaptacion')
   const dataAlerts = filteredAlertas.filter(a => a.tipo === 'datos_faltantes')
+  const menstrualAlerts = filteredAlertas.filter(a => a.tipo === 'MENSTRUACION_PROXIMA_ESTIMADA')
 
   const renderAlertTable = (tableAlertas: Alerta[], emptyMsg: string) => (
     <DataTable
@@ -356,6 +357,7 @@ export function AlertsPage() {
             <option value="lesion">Lesión</option>
             <option value="readaptacion">Readaptación</option>
             <option value="datos_faltantes">Datos Faltantes</option>
+            <option value="MENSTRUACION_PROXIMA_ESTIMADA">Recordatorio Menstrual Estimado</option>
           </select>
         </div>
 
@@ -426,6 +428,22 @@ export function AlertsPage() {
           </h2>
         </div>
         {renderAlertTable(dataAlerts, 'No hay alertas de calidad o completitud de datos.')}
+      </div>
+
+      {/* Group 4: Contexto Individual y Recordatorios Estimados */}
+      <div className="space-y-2">
+        <div className="border-b border-surface-200 pb-1 flex items-center justify-between">
+          <h2 className="text-xs font-bold text-surface-700 uppercase tracking-wide">
+            4. Contexto Individual y Recordatorios Estimados ({menstrualAlerts.length})
+          </h2>
+          <button
+            onClick={() => navigate('/seguimiento-menstrual')}
+            className="text-[11px] text-primary-600 hover:underline font-medium"
+          >
+            Ir a Seguimiento Menstrual →
+          </button>
+        </div>
+        {renderAlertTable(menstrualAlerts, 'No hay recordatorios menstruales estimados activos.')}
       </div>
 
       {/* Decision Modal */}

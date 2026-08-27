@@ -6,7 +6,8 @@ import type {
   CicloMenstrual, CargaGPS, FuerzaVBT, Hidratacion,
   RTPChecklist, TestPsicologico, HistorialCopia, PlantillaImportacion,
   ProtocoloCMJ, MedicionCMJ, EjercicioFuerza, TrabajoFuerzaIndividual, PlantillaFuerza, SesionFuerzaIndividual,
-  Temporada, AliasJugadora, WellnessDiarioImportado, WellnessSemanalImportado, CompensacionPostPartido
+  Temporada, AliasJugadora, WellnessDiarioImportado, WellnessSemanalImportado, CompensacionPostPartido,
+  RegistroMenstrual
 } from '@/types'
 
 // ============================================================================
@@ -23,6 +24,9 @@ export class FutsalDB extends Dexie {
 
   // Operativa postpartido (v17+)
   compensacion_postpartido!: Dexie.Table<CompensacionPostPartido, number>
+
+  // Fase 4A - Seguimiento Menstrual (v18+)
+  registro_menstrual!: Dexie.Table<RegistroMenstrual, number>
 
   // Jugadoras: clave primaria única por ID, índices por nombre/posición para búsqueda rápida
   jugadoras!: Dexie.Table<Jugadora, string>
@@ -272,6 +276,11 @@ export class FutsalDB extends Dexie {
     // Versión 17.0 - Compensación Postpartido
     this.version(17).stores({
       compensacion_postpartido: '++id, [id_partido+id_jugadora], id_partido, id_jugadora, estado'
+    })
+
+    // Versión 18.0 - Fase 4A: Seguimiento Menstrual
+    this.version(18).stores({
+      registro_menstrual: '++id, [id_jugadora+fecha_inicio], id_jugadora, fecha_inicio'
     })
 
     this.on('populate', async (tx) => {

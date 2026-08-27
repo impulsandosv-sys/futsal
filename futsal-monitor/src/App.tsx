@@ -25,6 +25,7 @@ import { CMJPage } from '@/pages/CMJPage'
 import { FollowUpDashboardPage } from '@/pages/FollowUpDashboardPage'
 import { GovernancePage } from '@/pages/GovernancePage'
 import { DailyDecisionPage } from '@/pages/DailyDecisionPage'
+import { SeguimientoMenstrualPage } from '@/pages/SeguimientoMenstrualPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useStore((s) => s.isAuthenticated)
@@ -61,6 +62,7 @@ const routes = [
   { path: ROUTES.CMJ, Component: CMJPage },
   { path: ROUTES.SEGUIMIENTO, Component: FollowUpDashboardPage },
   { path: ROUTES.TEMPORADAS, Component: GovernancePage },
+  { path: ROUTES.SEGUIMIENTO_MENSTRUAL, Component: SeguimientoMenstrualPage },
 ]
 
 function App() {

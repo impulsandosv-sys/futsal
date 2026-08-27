@@ -1,3 +1,5 @@
+import { validarRegistroMenstrual, evaluarAlertaMenstrualJugadora } from '@/domain/menstrual/menstrualEngine'
+import { getTodayLocalISO } from '@/domain/dates/dates'
 import { create } from 'zustand'
 import { db } from '@/db/database'
 import { seedDatabase } from '@/utils/seed'
@@ -27,7 +29,7 @@ import type {
   HistorialImportacion, CicloMenstrual, CargaGPS, FuerzaVBT, Hidratacion,
   RTPChecklist, TestPsicologico, HistorialCopia, PlantillaImportacion,
   ProtocoloCMJ, MedicionCMJ, EjercicioFuerza, TrabajoFuerzaIndividual, PlantillaFuerza, SesionFuerzaIndividual,
-  CompensacionPostPartido
+  CompensacionPostPartido, RegistroMenstrual
 } from '@/types'
 
 interface AppState {
@@ -58,6 +60,11 @@ interface AppState {
     plantillas_fuerza: PlantillaFuerza[]
     sesiones_fuerza_individual: SesionFuerzaIndividual[]
     compensacion_postpartido: CompensacionPostPartido[]
+  registros_menstruales: RegistroMenstrual[]
+
+  addRegistroMenstrual: (reg: Omit<RegistroMenstrual, 'id' | 'creado_en' | 'actualizado_en'>) => Promise<RegistroMenstrual>
+  updateRegistroMenstrual: (id: number, cambios: { fecha_inicio: string, impacto_percibido: number, comentario?: string | null, nota_ajuste?: string | null }) => Promise<void>
+  deleteRegistroMenstrual: (id: number) => Promise<void>
   filters: FiltersState
   loading: boolean
   isAuthenticated: boolean
@@ -919,6 +926,93 @@ if (typeof window !== 'undefined') {
 }
 initializeAuth()
 
+/**
+ * Sincroniza las alertas estimadas de seguimiento menstrual.
+ */
+const sincronizarAlertaMenstrual = async (
+  idJugadora: string,
+  setFn: any,
+  skipStateSync: boolean = false
+): Promise<void> => {
+  try {
+    const [registrosJugadora, jugadora, todasAlertas] = await Promise.all([
+      db.registro_menstrual.where("id_jugadora").equals(idJugadora).toArray(),
+      db.jugadoras.get(idJugadora),
+      db.alertas.toArray()
+    ])
+
+    if (!jugadora) return
+
+    const hoyStr = getTodayLocalISO()
+    const ahoraStr = new Date().toISOString()
+    const nuevaAlertaCalculada = evaluarAlertaMenstrualJugadora(registrosJugadora, jugadora, hoyStr, ahoraStr)
+
+    const alertasMenstrualesPrevias = todasAlertas.filter(
+      (a) => a.id_jugadora === idJugadora && a.tipo === "MENSTRUACION_PROXIMA_ESTIMADA"
+    )
+
+    if (!nuevaAlertaCalculada) {
+      for (const a of alertasMenstrualesPrevias) {
+        if (a.id !== undefined && (a.estado === "abierta" || a.estado === "en_revision")) {
+          await db.alertas.update(a.id, {
+            estado: "resuelta",
+            fecha_resolucion: hoyStr
+          })
+        }
+      }
+    } else {
+      for (const a of alertasMenstrualesPrevias) {
+        if (a.id !== undefined && a.fecha !== nuevaAlertaCalculada.fecha) {
+          if (a.estado === "abierta" || a.estado === "en_revision") {
+            await db.alertas.update(a.id, {
+              estado: "resuelta",
+              fecha_resolucion: hoyStr
+            })
+          }
+        }
+      }
+
+      const existenteMismaFecha = alertasMenstrualesPrevias.find(
+        (a) => a.fecha === nuevaAlertaCalculada.fecha
+      )
+
+      if (!existenteMismaFecha) {
+        await db.alertas.add(nuevaAlertaCalculada)
+      }
+    }
+
+    if (!skipStateSync) {
+      const alertasActualizadas = await db.alertas.toArray()
+      const ordenadas = alertasActualizadas.sort((a, b) => b.creada.localeCompare(a.creada))
+      setFn({ alertas: ordenadas })
+    }
+  } catch (err) {
+  }
+}
+
+export const reconciliarAlertasMenstruales = async (
+  setFn: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Promise<void> => {
+  try {
+    const tablaRegistrosMenstruales = db.registro_menstrual
+    if (!tablaRegistrosMenstruales || typeof tablaRegistrosMenstruales.toArray !== "function") {
+      return
+    }
+    const todosRegistros = await tablaRegistrosMenstruales.toArray()
+    const jugadorasIdsUnicas = Array.from(new Set(todosRegistros.map(r => r.id_jugadora)))
+    for (const jId of jugadorasIdsUnicas) {
+      await sincronizarAlertaMenstrual(jId, setFn, true)
+    }
+    if (jugadorasIdsUnicas.length > 0) {
+      const alertasActualizadas = await db.alertas.toArray()
+      const ordenadas = alertasActualizadas.sort((a, b) => b.creada.localeCompare(a.creada))
+      setFn({ alertas: ordenadas })
+    }
+  } catch (err) {
+  }
+}
+
+
 export const useStore = create<AppState>((set, get) => ({
   jugadoras: [],
   wellness: [],
@@ -951,6 +1045,7 @@ export const useStore = create<AppState>((set, get) => ({
   plantillas_fuerza: [],
   sesiones_fuerza_individual: [],
   compensacion_postpartido: [],
+  registros_menstruales: [],
 
   loadAll: async () => {
     activeLoadsCount++
@@ -968,7 +1063,8 @@ export const useStore = create<AppState>((set, get) => ({
         ciclo_menstrual, carga_gps, fuerza_vbt, hidratacion,
         rtp_checklist, test_psicologico, plantillas_importacion,
         protocolos_cmj, pruebas_cmj, ejercicios_fuerza, trabajos_fuerza, plantillas_fuerza, sesiones_fuerza_individual,
-        compensacion_postpartido
+        compensacion_postpartido,
+        registros_menstruales
       ] =
         await Promise.all([
           db.jugadoras.toArray(),
@@ -997,7 +1093,8 @@ export const useStore = create<AppState>((set, get) => ({
           db.trabajos_fuerza.toArray(),
           db.plantillas_fuerza.toArray(),
           db.sesiones_fuerza_individual.toArray(),
-          db.compensacion_postpartido.toArray()
+          db.compensacion_postpartido.toArray(),
+          (db.registro_menstrual ? db.registro_menstrual.toArray() : [])
         ])
 
       // Si loadEpoch cambió durante la lectura I/O, este snapshot está obsoleto y se omite el set global
@@ -1038,6 +1135,7 @@ export const useStore = create<AppState>((set, get) => ({
         plantillas_fuerza,
         sesiones_fuerza_individual: sesiones_fuerza_individual.sort((a, b) => b.fecha.localeCompare(a.fecha)),
         compensacion_postpartido,
+        registros_menstruales: registros_menstruales.sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio)),
         hasData: true
       })
     } finally {
@@ -2009,5 +2107,82 @@ export const useStore = create<AppState>((set, get) => ({
     })
     await get().loadAll()
   },
+
+  addRegistroMenstrual: async (reg) => {
+    const existentes = await db.registro_menstrual.toArray()
+    const validacion = validarRegistroMenstrual(reg, existentes)
+    if (!validacion.valid) {
+      throw new Error(validacion.errors.join('. '))
+    }
+
+    const ahora = new Date().toISOString()
+    const nuevoRegistro: RegistroMenstrual = {
+      ...reg,
+      comentario: reg.comentario ?? null,
+      nota_ajuste: reg.nota_ajuste ?? null,
+      creado_en: ahora,
+      actualizado_en: ahora
+    }
+
+    const id = await db.registro_menstrual.add(nuevoRegistro)
+    nuevoRegistro.id = id
+
+    await sincronizarAlertaMenstrual(nuevoRegistro.id_jugadora, set)
+
+    const todosRegistros = await db.registro_menstrual.toArray()
+    todosRegistros.sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio))
+    set({ registros_menstruales: todosRegistros })
+    return nuevoRegistro
+  },
+
+  updateRegistroMenstrual: async (id, cambios) => {
+    const registroExistente = await db.registro_menstrual.get(id)
+    if (!registroExistente) {
+      throw new Error('Registro menstrual no encontrado.')
+    }
+
+    const registroParcial: RegistroMenstrual = {
+      ...registroExistente,
+      fecha_inicio: cambios.fecha_inicio,
+      impacto_percibido: cambios.impacto_percibido,
+      comentario: cambios.comentario ?? null,
+      nota_ajuste: cambios.nota_ajuste ?? null
+    }
+
+    const existentes = await db.registro_menstrual.toArray()
+    const validacion = validarRegistroMenstrual(registroParcial, existentes)
+    if (!validacion.valid) {
+      throw new Error(validacion.errors.join('. '))
+    }
+
+    const ahora = new Date().toISOString()
+    const registroActualizado: RegistroMenstrual = {
+      ...registroParcial,
+      actualizado_en: ahora,
+      creado_en: registroExistente.creado_en
+    }
+
+    await db.registro_menstrual.put(registroActualizado)
+
+    await sincronizarAlertaMenstrual(registroActualizado.id_jugadora, set)
+
+    const todosRegistros = await db.registro_menstrual.toArray()
+    todosRegistros.sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio))
+    set({ registros_menstruales: todosRegistros })
+  },
+
+  deleteRegistroMenstrual: async (id) => {
+    const registro = await db.registro_menstrual.get(id)
+    if (!registro) return
+    await db.registro_menstrual.delete(id)
+
+    await sincronizarAlertaMenstrual(registro.id_jugadora, set)
+
+    const todosRegistros = await db.registro_menstrual.toArray()
+    todosRegistros.sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio))
+    set({ registros_menstruales: todosRegistros })
+  },
+
+
 
 }))

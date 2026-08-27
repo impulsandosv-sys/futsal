@@ -75,7 +75,8 @@ describe('Bloque E — Integración real Dexie de Backups y Restauración (Merge
     expect(backup.version).toBeDefined()
     expect(backup.data.jugadoras).toHaveLength(1)
     expect(backup.data.jugadoras[0].id_jugadora).toBe('J001')
-    expect(Object.keys(backup.data).length).toBe(31)
+    expect(backup.data.registro_menstrual).toBeDefined()
+    expect(Object.keys(backup.data).length).toBe(32)
   })
 
   it('2. Validación de backup: rechaza JSON inválido, versión no soportada y ausencia de tablas críticas', () => {

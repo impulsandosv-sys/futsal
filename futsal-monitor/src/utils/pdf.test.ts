@@ -31,7 +31,8 @@ describe('T-03 — Integration pdf.ts: Generador PDF Staff basado en DTOs', () =
     wellness_medio: 78,
     estado: 'Óptimo',
     dolor_especifico: 'Dolor en rodilla',
-    ciclo_menstrual: { fase: 'Lútea' }
+    ciclo_menstrual: { fase: 'Lútea' },
+    registro_menstrual: { fecha_inicio: '2026-07-01', impacto_percibido: 3, comentario: 'Molestia confidencial', nota_ajuste: 'Ajuste interno' }
   })
 
   beforeEach(() => {
@@ -55,6 +56,9 @@ describe('T-03 — Integration pdf.ts: Generador PDF Staff basado en DTOs', () =
       expect(texto).not.toContain('Dolor en rodilla')
       expect(texto).not.toContain('Lútea')
       expect(texto).not.toContain('ciclo_menstrual')
+      expect(texto).not.toContain('registro_menstrual')
+      expect(texto).not.toContain('Molestia confidencial')
+      expect(texto).not.toContain('Ajuste interno')
     }
   })
 

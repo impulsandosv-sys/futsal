@@ -42,6 +42,7 @@ vi.mock('@/db/database', () => {
     historial_importaciones: mockTable(),
     historial_copias: mockTable(),
     ciclo_menstrual: mockTable(),
+    registro_menstrual: mockTable(),
     carga_gps: mockTable(),
     fuerza_vbt: mockTable(),
     hidratacion: mockTable(),
@@ -330,7 +331,7 @@ describe('backup utility - strict validation & security', () => {
         temporadas: [],
         formulario_respuestas: [], wellness: [], tests_fisicos: [], rpe_partido: [],
         sesion_rpe: [], alertas: [], historial_importaciones: [], historial_copias: [],
-        ciclo_menstrual: [], carga_gps: [], fuerza_vbt: [], hidratacion: [],
+        ciclo_menstrual: [], registro_menstrual: [], carga_gps: [], fuerza_vbt: [], hidratacion: [],
         rtp_checklist: [], test_psicologico: [], protocolos_cmj: [], pruebas_cmj: [], wellness_diario_importado: [], wellness_semanal_importado: [],
         ejercicios_fuerza: [], trabajos_fuerza: [], plantillas_fuerza: [],
         sesiones_fuerza_individual: [], plantillas_importacion: [], alias_jugadora: []
@@ -361,7 +362,7 @@ describe('backup utility - strict validation & security', () => {
         temporadas: [],
         formulario_respuestas: [], wellness: [], tests_fisicos: [], rpe_partido: [],
         sesion_rpe: [], alertas: [], historial_importaciones: [], historial_copias: [],
-        ciclo_menstrual: [], carga_gps: [], fuerza_vbt: [], hidratacion: [],
+        ciclo_menstrual: [], registro_menstrual: [], carga_gps: [], fuerza_vbt: [], hidratacion: [],
         rtp_checklist: [], test_psicologico: [], protocolos_cmj: [], pruebas_cmj: [], wellness_diario_importado: [], wellness_semanal_importado: [],
         ejercicios_fuerza: [], trabajos_fuerza: [], plantillas_fuerza: [],
         sesiones_fuerza_individual: [], plantillas_importacion: [], alias_jugadora: []
@@ -381,5 +382,154 @@ describe('backup utility - strict validation & security', () => {
     const backupModule = await import('./backup')
     expect((backupModule as any).restoreBackup).toBeUndefined()
     expect((backupModule as any).restoreBackupDangerousLegacy).toBeUndefined()
+  })
+
+  it('12. Un backup completo incluye registro_menstrual con todos sus campos', async () => {
+    const mockRegMenstrual = [
+      {
+        id: 1,
+        id_jugadora: 'J01',
+        fecha_inicio: '2026-05-10',
+        impacto_percibido: 3,
+        comentario: 'Molestia leve',
+        nota_ajuste: 'Carga reducida',
+        creado_en: '2026-05-10T10:00:00Z',
+        actualizado_en: '2026-05-10T10:00:00Z'
+      }
+    ]
+
+    vi.mocked(db.registro_menstrual.toArray).mockResolvedValueOnce(mockRegMenstrual as any)
+
+    const backup = await createBackupData()
+    expect(backup.data.registro_menstrual).toBeDefined()
+    expect(backup.data.registro_menstrual).toHaveLength(1)
+    expect(backup.data.registro_menstrual[0]).toEqual(mockRegMenstrual[0])
+  })
+
+  it('13. Restaurar recupera registro_menstrual y no altera ciclo_menstrual', async () => {
+    const incomingReg = [
+      {
+        id: 1,
+        id_jugadora: 'J01',
+        fecha_inicio: '2026-05-10',
+        impacto_percibido: 4,
+        comentario: 'Nota',
+        nota_ajuste: 'Ajuste',
+        creado_en: '2026-05-10T10:00:00Z',
+        actualizado_en: '2026-05-10T10:00:00Z'
+      }
+    ]
+
+    const backupData = {
+      backupFormatVersion: 1,
+      databaseSchemaVersion: 16,
+      data: {
+        jugadoras: [{ id_jugadora: 'J01', nombre: 'Jugadora Existente' }],
+        sesiones: [],
+        partidos: [],
+        lesiones: [],
+        temporadas: [],
+        formulario_respuestas: [], wellness: [], tests_fisicos: [], rpe_partido: [],
+        sesion_rpe: [], alertas: [], historial_importaciones: [], historial_copias: [],
+        ciclo_menstrual: [],
+        registro_menstrual: incomingReg,
+        carga_gps: [], fuerza_vbt: [], hidratacion: [],
+        rtp_checklist: [], test_psicologico: [], protocolos_cmj: [], pruebas_cmj: [], wellness_diario_importado: [], wellness_semanal_importado: [],
+        ejercicios_fuerza: [], trabajos_fuerza: [], plantillas_fuerza: [],
+        sesiones_fuerza_individual: [], plantillas_importacion: [], alias_jugadora: []
+      }
+    }
+
+    vi.mocked(db.jugadoras.toArray).mockResolvedValue([{ id_jugadora: 'J01', nombre: 'Jugadora Existente' }] as any)
+    vi.mocked(db.registro_menstrual.toArray).mockResolvedValue([] as any)
+    vi.mocked(db.ciclo_menstrual.toArray).mockResolvedValue([{ id: 99, id_jugadora: 'J01', fecha: '2025-01-01', fase: 'Folicular', sintomas: '', notas: '' }] as any)
+
+    const result = await restoreFromData(backupData, 'merge', 'skip')
+
+    expect(result.success).toBe(true)
+    expect(result.stats.registro_menstrual.inserted).toBe(1)
+    // ciclo_menstrual no debe ser borrado ni alterado en merge
+    expect(db.ciclo_menstrual.clear).not.toHaveBeenCalled()
+  })
+
+  it('14. Restaurar ciclo_menstrual no altera registro_menstrual', async () => {
+    const incomingCiclo = [
+      { id: 10, id_jugadora: 'J01', fecha: '2025-02-01', fase: 'Lutea', sintomas: '', notas: '' }
+    ]
+
+    const backupData = {
+      backupFormatVersion: 1,
+      databaseSchemaVersion: 16,
+      data: {
+        jugadoras: [{ id_jugadora: 'J01', nombre: 'Jugadora Existente' }],
+        sesiones: [],
+        partidos: [],
+        lesiones: [],
+        temporadas: [],
+        formulario_respuestas: [], wellness: [], tests_fisicos: [], rpe_partido: [],
+        sesion_rpe: [], alertas: [], historial_importaciones: [], historial_copias: [],
+        ciclo_menstrual: incomingCiclo,
+        registro_menstrual: [],
+        carga_gps: [], fuerza_vbt: [], hidratacion: [],
+        rtp_checklist: [], test_psicologico: [], protocolos_cmj: [], pruebas_cmj: [], wellness_diario_importado: [], wellness_semanal_importado: [],
+        ejercicios_fuerza: [], trabajos_fuerza: [], plantillas_fuerza: [],
+        sesiones_fuerza_individual: [], plantillas_importacion: [], alias_jugadora: []
+      }
+    }
+
+    vi.mocked(db.jugadoras.toArray).mockResolvedValue([{ id_jugadora: 'J01', nombre: 'Jugadora Existente' }] as any)
+    vi.mocked(db.ciclo_menstrual.toArray).mockResolvedValue([] as any)
+    vi.mocked(db.registro_menstrual.toArray).mockResolvedValue([{ id: 1, id_jugadora: 'J01', fecha_inicio: '2026-05-10', impacto_percibido: 3 }] as any)
+
+    const result = await restoreFromData(backupData, 'merge', 'skip')
+
+    expect(result.success).toBe(true)
+    expect(result.stats.ciclo_menstrual.inserted).toBe(1)
+    expect(db.registro_menstrual.clear).not.toHaveBeenCalled()
+  })
+
+  it('15. Restaurar omite duplicados lógicos en registro_menstrual para misma jugadora y fecha_inicio', async () => {
+    const incomingReg = [
+      {
+        id: 1,
+        id_jugadora: 'J01',
+        fecha_inicio: '2026-05-10',
+        impacto_percibido: 3,
+        comentario: 'Mismo dato',
+        nota_ajuste: '',
+        creado_en: '2026-05-10T10:00:00Z',
+        actualizado_en: '2026-05-10T10:00:00Z'
+      }
+    ]
+
+    const backupData = {
+      backupFormatVersion: 1,
+      databaseSchemaVersion: 16,
+      data: {
+        jugadoras: [{ id_jugadora: 'J01', nombre: 'Jugadora Existente' }],
+        sesiones: [],
+        partidos: [],
+        lesiones: [],
+        temporadas: [],
+        formulario_respuestas: [], wellness: [], tests_fisicos: [], rpe_partido: [],
+        sesion_rpe: [], alertas: [], historial_importaciones: [], historial_copias: [],
+        ciclo_menstrual: [],
+        registro_menstrual: incomingReg,
+        carga_gps: [], fuerza_vbt: [], hidratacion: [],
+        rtp_checklist: [], test_psicologico: [], protocolos_cmj: [], pruebas_cmj: [], wellness_diario_importado: [], wellness_semanal_importado: [],
+        ejercicios_fuerza: [], trabajos_fuerza: [], plantillas_fuerza: [],
+        sesiones_fuerza_individual: [], plantillas_importacion: [], alias_jugadora: []
+      }
+    }
+
+    vi.mocked(db.jugadoras.toArray).mockResolvedValue([{ id_jugadora: 'J01', nombre: 'Jugadora Existente' }] as any)
+    // Ya existe localmente el mismo registro id_jugadora + fecha_inicio
+    vi.mocked(db.registro_menstrual.toArray).mockResolvedValue([incomingReg[0]] as any)
+
+    const result = await restoreFromData(backupData, 'merge', 'skip')
+
+    expect(result.success).toBe(true)
+    expect(result.stats.registro_menstrual.inserted).toBe(0)
+    expect(result.stats.registro_menstrual.skipped).toBe(1)
   })
 })

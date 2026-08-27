@@ -9,6 +9,7 @@ import { Modal } from '@/components/shared/Modal'
 import { StrengthDetailModal } from '@/components/fuerza/StrengthDetailModal'
 import { calcularResumenSesionFuerza } from '@/domain/neuromuscular/fuerzaEngine'
 import { calcularExposicionCompetitiva } from '@/domain/exposure/matchExposure'
+import { calcularProximoInicioEstimado } from '@/domain/menstrual/menstrualEngine'
 import type { Wellness, FinalidadSesionFuerza } from '@/types'
 
 import { PlayerAliasSection } from '@/components/player/PlayerAliasSection'
@@ -36,13 +37,30 @@ export function PlayerProfilePage() {
     updateWellness, addTest, sesion_rpe, sesiones,
     ciclo_menstrual, carga_gps, fuerza_vbt, hidratacion, test_psicologico,
     pruebas_cmj, sesiones_fuerza_individual, trabajos_fuerza, ejercicios_fuerza,
-    addCicloMenstrual, addCargaGPS, addFuerzaVBT, addHidratacion, addTestPsicologico
+    registros_menstruales,
+    addCargaGPS, addFuerzaVBT, addHidratacion, addTestPsicologico
   } = useStore()
 
   const hoyStr = useMemo(() => getTodayLocalISO(), [])
   const [wellnessRange, setWellnessRange] = useState<7 | 28>(7)
 
   const jugadora = jugadoras.find((j) => j.id_jugadora === id)
+
+  const registrosMenstrualesJug = useMemo(() => {
+    return (registros_menstruales || [])
+      .filter((r) => r.id_jugadora === id)
+      .sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio))
+  }, [registros_menstruales, id])
+
+  const estimacionMenstrual = useMemo(() => {
+    return calcularProximoInicioEstimado(registrosMenstrualesJug)
+  }, [registrosMenstrualesJug])
+
+  const cicloLegadoJug = useMemo(() => {
+    return (ciclo_menstrual || [])
+      .filter((c) => c.id_jugadora === id)
+      .sort((a, b) => b.fecha.localeCompare(a.fecha))
+  }, [ciclo_menstrual, id])
   const [activeTabCache, setActiveTabCache] = useState<Record<string, string>>({})
   const tab = (activeTabCache[id || ''] as 'resumen' | 'wellness' | 'carga' | 'tests' | 'lesiones' | 'semanal' | 'readiness' | 'ciclo' | 'gps' | 'vbt' | 'hidratacion' | 'psicologia' | 'cmj' | 'fuerza' | 'alias') || (initialTabParam && ['resumen', 'wellness', 'carga', 'tests', 'lesiones', 'semanal', 'readiness', 'ciclo', 'gps', 'vbt', 'hidratacion', 'psicologia', 'cmj', 'fuerza', 'alias'].includes(initialTabParam) ? initialTabParam : 'resumen')
   const [editWellness, setEditWellness] = useState<Wellness | null>(null)
@@ -57,9 +75,6 @@ export function PlayerProfilePage() {
     id_ejercicio: '',
   })
   const [fuerzaDetailId, setFuerzaDetailId] = useState<string | null>(null)
-
-  const [newCicloOpen, setNewCicloOpen] = useState(false)
-  const [cicloForm, setCicloForm] = useState<any>({ fecha: '', fase: 'Menstruacion', sintomas: '', notas: '' })
   
   const [newGPSOpen, setNewGPSOpen] = useState(false)
   const [gpsForm, setGpsForm] = useState<any>({ fecha: '', distancia_total: 0, distancia_hsr: 0, aceleraciones: 0, deceleraciones: 0, player_load: 0 })
@@ -89,7 +104,6 @@ export function PlayerProfilePage() {
   const lesionesJug = useMemo(() => lesiones.filter((l) => l.id_jugadora === id).sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio)), [lesiones, id])
   const testsJug = useMemo(() => tests.filter((t) => t.id_jugadora === id).sort((a, b) => b.fecha.localeCompare(a.fecha)), [tests, id])
   const resumenJug = useMemo(() => resumen_semanal.filter((rs) => rs.id_jugadora === id).sort((a, b) => b.semana.localeCompare(a.semana)), [resumen_semanal, id])
-  const cicloJug = useMemo(() => ciclo_menstrual.filter((c) => c.id_jugadora === id).sort((a, b) => b.fecha.localeCompare(a.fecha)), [ciclo_menstrual, id])
   const gpsJug = useMemo(() => carga_gps.filter((g) => g.id_jugadora === id).sort((a, b) => a.fecha.localeCompare(b.fecha)), [carga_gps, id])
   const vbtJug = useMemo(() => fuerza_vbt.filter((v) => v.id_jugadora === id).sort((a, b) => a.fecha.localeCompare(b.fecha)), [fuerza_vbt, id])
   const hidratacionJug = useMemo(() => hidratacion.filter((h) => h.id_jugadora === id).sort((a, b) => a.fecha.localeCompare(b.fecha)), [hidratacion, id])
@@ -618,20 +632,144 @@ export function PlayerProfilePage() {
 
       {tab === 'ciclo' && (
         <div className="space-y-4">
-          <div className="flex justify-end">
-            <button onClick={() => setNewCicloOpen(true)} className="bg-primary-600 text-white text-xs font-medium px-3 py-1.5 rounded hover:bg-primary-700">
-              + Añadir Ciclo
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white p-4 rounded-lg border border-surface-200">
+            <div>
+              <h3 className="text-sm font-bold text-surface-900">Contexto menstrual comunicado</h3>
+              <p className="text-xs text-surface-500 mt-0.5">
+                Registros de inicio comunicados voluntariamente por la jugadora. Uso exclusivo para contexto del preparador físico.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/seguimiento-menstrual')}
+              className="text-xs text-primary-600 hover:underline font-medium self-start sm:self-auto"
+            >
+              Ir a Seguimiento Menstrual →
             </button>
           </div>
-          <div className="bg-white rounded-lg border border-surface-200 p-4">
-            <h3 className="text-xs font-semibold text-surface-700 mb-3">Historial de Ciclo Menstrual</h3>
-            {cicloJug.length > 0 ? (
-              <table className="w-full text-xs">
-                <thead><tr className="bg-surface-50 border-b border-surface-200"><th className="text-left px-3 py-2">Fecha</th><th className="text-left px-3 py-2">Fase</th><th className="text-left px-3 py-2">Síntomas</th></tr></thead>
-                <tbody>{cicloJug.map(c => <tr key={c.id} className="border-b"><td className="px-3 py-2">{c.fecha}</td><td className="px-3 py-2">{c.fase}</td><td className="px-3 py-2">{c.sintomas}</td></tr>)}</tbody>
-              </table>
-            ) : <p className="text-xs text-surface-400 text-center py-8">Sin datos de ciclo</p>}
+
+          {/* Tarjeta de Estimación */}
+          <div className="bg-white p-4 rounded-lg border border-surface-200">
+            <h4 className="text-xs font-bold text-surface-700 uppercase tracking-wide mb-2">
+              Próximo inicio estimado
+            </h4>
+            {estimacionMenstrual ? (
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-surface-600">Fecha estimada:</span>
+                  <span className="font-bold text-surface-900 bg-amber-50 text-amber-900 px-2 py-0.5 rounded border border-amber-200">
+                    {estimacionMenstrual.fecha_estimada}
+                  </span>
+                  <span className="text-[10px] text-surface-400">
+                    (Intervalo mediano: {estimacionMenstrual.mediana_intervalos} días)
+                  </span>
+                </div>
+                {estimacionMenstrual.variabilidad_reciente && (
+                  <div className="text-[11px] text-amber-800 bg-amber-50 p-2 rounded border border-amber-200">
+                    ⚠️ Estimación con variabilidad reciente en los intervalos registrados. Confirmar contexto con la jugadora si procede.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-surface-500 italic">
+                Sin estimación disponible — se requieren al menos 2 registros de inicio para calcular una estimación.
+              </p>
+            )}
           </div>
+
+          {/* Historial de Inicios */}
+          <div className="bg-white rounded-lg border border-surface-200 p-4">
+            <h4 className="text-xs font-bold text-surface-700 uppercase tracking-wide mb-3">
+              Inicios comunicados ({registrosMenstrualesJug.length})
+            </h4>
+            {registrosMenstrualesJug.length > 0 ? (
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-surface-50 border-b border-surface-200 text-surface-600 font-semibold">
+                    <th className="text-left px-3 py-2">Fecha inicio</th>
+                    <th className="text-left px-3 py-2">Impacto percibido</th>
+                    <th className="text-left px-3 py-2">Comentario</th>
+                    <th className="text-left px-3 py-2">Nota de ajuste</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-surface-100">
+                  {registrosMenstrualesJug.map((r) => {
+                    const badgeClass =
+                      r.impacto_percibido <= 3
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : r.impacto_percibido <= 6
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-rose-50 text-rose-700 border-rose-200'
+
+                    return (
+                      <tr key={r.id} className="hover:bg-surface-50">
+                        <td className="px-3 py-2.5 font-semibold text-surface-800 whitespace-nowrap">
+                          {r.fecha_inicio}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-block border rounded px-1.5 py-0.5 text-[10px] font-bold ${badgeClass}`}>
+                            {r.impacto_percibido}/10
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-surface-600 max-w-xs">
+                          {r.comentario || <span className="text-surface-300 italic">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-surface-600 max-w-xs">
+                          {r.nota_ajuste || <span className="text-surface-300 italic">—</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-xs text-surface-400 text-center py-6">
+                Sin registros menstruales comunicados para esta jugadora.
+              </p>
+            )}
+          </div>
+
+          {/* Registro histórico legado */}
+          {cicloLegadoJug.length > 0 && (
+            <div className="bg-white rounded-lg border border-surface-200 p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-surface-100 pb-2">
+                <div>
+                  <h4 className="text-xs font-bold text-surface-700 uppercase tracking-wide">
+                    Registro histórico legado
+                  </h4>
+                  <p className="text-[11px] text-surface-500">
+                    Datos históricos anteriores. Los nuevos registros de contexto menstrual se gestionan desde Seguimiento menstrual.
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/seguimiento-menstrual')}
+                  className="text-xs text-primary-600 hover:underline font-medium self-start sm:self-auto"
+                >
+                  Ir a Seguimiento Menstrual →
+                </button>
+              </div>
+
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-surface-50 border-b border-surface-200 text-surface-600 font-semibold">
+                    <th className="text-left px-3 py-2">Fecha</th>
+                    <th className="text-left px-3 py-2">Fase</th>
+                    <th className="text-left px-3 py-2">Síntomas</th>
+                    <th className="text-left px-3 py-2">Notas</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-surface-100">
+                  {cicloLegadoJug.map((c) => (
+                    <tr key={c.id} className="hover:bg-surface-50">
+                      <td className="px-3 py-2 text-surface-800 whitespace-nowrap">{c.fecha}</td>
+                      <td className="px-3 py-2 text-surface-700">{c.fase}</td>
+                      <td className="px-3 py-2 text-surface-600">{c.sintomas || <span className="text-surface-300 italic">—</span>}</td>
+                      <td className="px-3 py-2 text-surface-600">{c.notas || <span className="text-surface-300 italic">—</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -1245,20 +1383,6 @@ export function PlayerProfilePage() {
           <button onClick={handleAddTest} className="text-xs text-white bg-primary-600 px-3 py-1.5 rounded hover:bg-primary-700">
             Añadir test
           </button>
-        </div>
-      </Modal>
-
-      <Modal open={newCicloOpen} onClose={() => setNewCicloOpen(false)} title="Nuevo registro de ciclo">
-        <div className="space-y-4">
-          <input type="date" className="w-full border p-2 text-xs" value={cicloForm.fecha} onChange={e => setCicloForm({...cicloForm, fecha: e.target.value})} />
-          <select className="w-full border p-2 text-xs" value={cicloForm.fase} onChange={e => setCicloForm({...cicloForm, fase: e.target.value})}>
-            <option value="Menstruacion">Menstruación</option>
-            <option value="Folicular">Folicular</option>
-            <option value="Ovulacion">Ovulación</option>
-            <option value="Lutea">Lútea</option>
-          </select>
-          <input type="text" placeholder="Síntomas" className="w-full border p-2 text-xs" value={cicloForm.sintomas} onChange={e => setCicloForm({...cicloForm, sintomas: e.target.value})} />
-          <button onClick={() => { addCicloMenstrual({...cicloForm, id_jugadora: id!}); setNewCicloOpen(false) }} className="w-full bg-primary-600 text-white py-2 rounded text-xs">Guardar</button>
         </div>
       </Modal>
 

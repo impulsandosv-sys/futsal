@@ -18,7 +18,8 @@ const navItems = [
   { to: ROUTES.PLANTILLAS_FUERZA, label: 'Plantillas Fuerza', icon: '📋' },
   { to: ROUTES.SEMANAL, label: 'Resumen Semanal', icon: '◍' },
   { to: ROUTES.ALERTAS, label: 'Alertas', icon: '◉' },
-  { to: ROUTES.TEMPORADAS, label: 'Temporadas', icon: '🗓' },
+  { to: ROUTES.SEGUIMIENTO_MENSTRUAL, label: 'Seguimiento Menstrual', icon: '🗓' },
+  { to: ROUTES.TEMPORADAS, label: 'Temporadas', icon: '⚙' },
   { to: ROUTES.IMPORTAR, label: 'Importar', icon: '⇧' },
 ]
 

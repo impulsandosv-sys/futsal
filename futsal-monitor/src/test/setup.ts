@@ -63,6 +63,15 @@ vi.mock('@/db/database', () => ({
     test_psicologico: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
     protocolos_cmj: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
     pruebas_cmj: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
+    registro_menstrual: {
+      toArray: vi.fn(() => Promise.resolve([])),
+      where: vi.fn(mockWhereClause),
+      clear: vi.fn(() => Promise.resolve()),
+      put: vi.fn(() => Promise.resolve()),
+      add: vi.fn(() => Promise.resolve(1)),
+      get: vi.fn(() => Promise.resolve(null)),
+      delete: vi.fn(() => Promise.resolve()),
+    },
     transaction: vi.fn(async (mode, tables, cb) => {
       return await cb()
     }),

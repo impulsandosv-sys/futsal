@@ -214,7 +214,7 @@ export interface ResumenSemanal {
   wellness_medio: number
 }
 
-export type AlertaTipo = 'wellness_bajo' | 'carga_alta' | 'lesion' | 'readaptacion' | 'datos_faltantes'
+export type AlertaTipo = 'wellness_bajo' | 'carga_alta' | 'lesion' | 'readaptacion' | 'datos_faltantes' | 'MENSTRUACION_PROXIMA_ESTIMADA'
 export type AlertaEstado = 'abierta' | 'en_revision' | 'resuelta' | 'descartada'
 export type AlertaPrioridad = 'bajo' | 'medio' | 'alto'
 
@@ -408,6 +408,17 @@ export interface CicloMenstrual {
   fase: FaseMenstrual
   sintomas: string
   notas: string
+}
+
+export interface RegistroMenstrual {
+  id?: number
+  id_jugadora: string
+  fecha_inicio: string // ISO local: YYYY-MM-DD
+  impacto_percibido: number // entero de 0 a 10
+  comentario?: string | null
+  nota_ajuste?: string | null
+  creado_en: string
+  actualizado_en: string
 }
 
 export interface CargaGPS {
