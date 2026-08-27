@@ -9,12 +9,13 @@ Se ha implementado el módulo de dominio puro para el cálculo de métricas de e
 
 ## 3. Comportamiento Semántico de Datos
 El algoritmo se atiene de manera absoluta a la semántica de la capa persistente, separando la disponibilidad del cálculo de la calidad/confianza del dato:
-* **no_convocada**: Produce exactamente `0` minutos. No computa como partido. **No afecta** a la estadística total de convocatorias.
+* **no_convocada**: Produce exactamente `0` minutos. No computa como partido ni suma convocatorias, pero el registro certifica evaluación válida (aporta a la calidad `'completa'`).
 * **convocada_sin_minutos**: Produce exactamente `0` minutos. Tampoco es un partido *jugado*, pero **SÍ** suma en la cuenta de total de convocatorias.
 * **Valores parciales/completos**: Agregan a la bolsa de minutos, suman convocatorias y partidos jugados.
 * **Datos Nulos o Faltantes (sin participación)**:
   - `minutos 1-39`: Se infiere como participación 'parcial' (para no bloquear el cálculo) pero se degrada la `calidadDato` a `'parcial'`.
   - `minutos 40`: Se infiere como participación 'completa' pero degrada la `calidadDato` a `'parcial'`.
+  - `minutos > 40`: Se considera inconsistente (falta regla explícita de prórroga) y degrada la calidad a `'insuficiente'`.
   - `minutos 0`: No se infiere `no_convocada` ni `convocada_sin_minutos`. Se degrada a `'insuficiente'` (se cuenta como dato ausente/inválido).
   - `minutos null`: Degrada la `calidadDato` a `'insuficiente'` y no se calcula.
 

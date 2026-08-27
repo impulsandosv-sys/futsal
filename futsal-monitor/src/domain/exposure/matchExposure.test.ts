@@ -1,19 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import { calcularExposicionCompetitiva } from './matchExposure'
-import type { RPE_Partido } from '@/types'
+import type { ParticipacionPartido, RPE_Partido } from '@/types'
 
 describe('calcularExposicionCompetitiva', () => {
   const defaultFechaCorte = '2026-08-07'
 
   const makeRecord = (
     fecha: string,
-    participacion?: string,
+    participacion?: ParticipacionPartido,
     minutos: number | null | undefined = undefined
   ): RPE_Partido => ({
     id_partido: 'P_' + fecha,
     id_jugadora: 'J1',
     fecha,
-    participacion: participacion as any,
+    participacion,
     minutos_jugados: minutos,
     rpe: 5, // irrelevant for exposure
     carga_ua: 100
@@ -25,7 +25,7 @@ describe('calcularExposicionCompetitiva', () => {
     expect(result.convocatorias7d).toBe(0)
     expect(result.partidosJugados7d).toBe(0)
     expect(result.minutos7d).toBe(0)
-    expect(result.calidadDato).toBe('sin_competicion')
+    expect(result.calidadDato).toBe('completa')
   })
 
   it('2. Convocada sin minutos: cuenta como convocatoria, no partido jugado', () => {

@@ -1,5 +1,5 @@
-import type { RPE_Partido } from '@/types'
-import { isAfter, isBefore, subDays, startOfDay } from 'date-fns'
+import type { ParticipacionPartido, RPE_Partido } from '@/types'
+import { parseISO, isAfter, isBefore, subDays, startOfDay } from 'date-fns'
 
 export interface ExposicionCompetitiva {
   minutos7d: number
@@ -30,7 +30,7 @@ export function calcularExposicionCompetitiva(
   registros: RPE_Partido[],
   fechaCorteISO: string
 ): ExposicionCompetitiva {
-  const fechaCorte = startOfDay(new Date(fechaCorteISO))
+  const fechaCorte = startOfDay(parseISO(fechaCorteISO))
   const fecha7d = startOfDay(subDays(fechaCorte, 6)) // Ventana inclusiva de 7 días (hoy + 6 atrás)
   const fecha28d = startOfDay(subDays(fechaCorte, 27)) // Ventana inclusiva de 28 días
 
@@ -58,15 +58,16 @@ export function calcularExposicionCompetitiva(
   })
 
   let datosIncompletos = false
-  let registrosRelevantes = 0 // Partidos donde al menos estaba registrada la jugadora
+  let registrosRelevantes = 0
+  let registrosValidos = 0 // Partidos donde al menos estaba registrada la jugadora
 
   for (const r of registros28d) {
-    const fecha = startOfDay(new Date(r.fecha))
+    const fecha = startOfDay(parseISO(r.fecha))
     const is7d = (isAfter(fecha, fecha7d) || fecha.getTime() === fecha7d.getTime())
 
     // Evaluar calidad del registro
     const mins = r.minutos_jugados
-    let participacion = r.participacion
+    let participacion: ParticipacionPartido | undefined = r.participacion
 
     registrosRelevantes++
 
@@ -86,13 +87,17 @@ export function calcularExposicionCompetitiva(
       }
 
       if (mins >= 1 && mins <= 39) {
-        participacion = 'parcial' as any
+        participacion = "parcial"
         datosIncompletos = true
         resultado.motivosCalidadDato.push(`Partido ${r.id_partido} inferido como parcial por tener ${mins} minutos.`)
-      } else if (mins >= 40) {
-        participacion = 'completa' as any
+      } else if (mins === 40) {
+        participacion = "completa"
         datosIncompletos = true
         resultado.motivosCalidadDato.push(`Partido ${r.id_partido} inferido como completa por tener ${mins} minutos.`)
+      } else if (mins > 40) {
+        datosIncompletos = true
+        resultado.motivosCalidadDato.push(`Partido ${r.id_partido} inconsistente: minutos > 40 sin participación explícita.`)
+        continue
       } else {
         datosIncompletos = true
         resultado.motivosCalidadDato.push(`Partido ${r.id_partido} con minutos inválidos (${mins}).`)
@@ -104,6 +109,8 @@ export function calcularExposicionCompetitiva(
       if (mins !== 0) {
         datosIncompletos = true
         resultado.motivosCalidadDato.push(`Registro de partido ${r.id_partido} inconsistente: no_convocada con minutos != 0.`)
+      } else {
+        registrosValidos++
       }
       continue // No es convocatoria, no cuenta
     }
@@ -114,6 +121,7 @@ export function calcularExposicionCompetitiva(
         resultado.motivosCalidadDato.push(`Registro de partido ${r.id_partido} inconsistente: convocada_sin_minutos con minutos != 0.`)
         continue
       }
+      registrosValidos++
 
       resultado.convocatorias28d++
       resultado.convocadaSinMinutos28d++
@@ -135,6 +143,7 @@ export function calcularExposicionCompetitiva(
         resultado.motivosCalidadDato.push(`Partido ${r.id_partido} sin datos de minutos.`)
         continue
       }
+      registrosValidos++
 
       resultado.convocatorias28d++
       if (mins > 0) {
@@ -163,10 +172,10 @@ export function calcularExposicionCompetitiva(
   }
 
   // Determinar calidad final
-  if (registrosRelevantes === 0 || (resultado.convocatorias28d === 0 && !datosIncompletos)) {
+  if (registrosRelevantes === 0) {
     resultado.calidadDato = 'sin_competicion'
   } else if (datosIncompletos) {
-    if (resultado.convocatorias28d > 0) {
+    if (registrosValidos > 0) {
       resultado.calidadDato = 'parcial'
     } else {
       resultado.calidadDato = 'insuficiente'
