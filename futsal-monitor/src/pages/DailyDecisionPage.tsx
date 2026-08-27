@@ -1,3 +1,4 @@
+import { CompetitiveExposureCard } from '@/components/exposure/CompetitiveExposureCard'
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '@/store/store'
@@ -278,28 +279,8 @@ export function DailyDecisionPage() {
 
                         {(() => {
                           const rpeJug = rpe_partido.filter(r => r.id_jugadora === j.id_jugadora)
-                          const exp = calcularExposicionCompetitiva(rpeJug, fechaOperativa)
-                          if (exp.calidadDato === 'sin_competicion') {
-                            return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-medium bg-surface-100 text-surface-600 border border-surface-200">Sin competición</span>
-                          }
-                          if (exp.calidadDato === 'insuficiente') {
-                            return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-medium bg-red-50 text-red-700 border border-red-200">Datos competitivos incompletos</span>
-                          }
-                          return (
-                            <div className="flex flex-wrap items-center gap-1">
-                              <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-medium ${
-                                exp.calidadDato === 'completa' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
-                              }`}>
-                                {exp.minutos7d ?? '—'} min / {exp.convocatorias7d} conv.
-                              </span>
-                              {exp.ratioCambioExposicion !== null && (
-                                <span className="text-[9px] text-surface-500 font-medium">
-                                  Ratio: {exp.ratioCambioExposicion.toFixed(2)}
-                                </span>
-                              )}
-                            </div>
-                          )
-                        })()}
+                          return <CompetitiveExposureCard registros={rpeJug} fechaCorteISO={fechaOperativa} modo="compacto" />
+                          })()}
                       </div>
                     </td>
 

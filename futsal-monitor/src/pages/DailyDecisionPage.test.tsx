@@ -396,5 +396,28 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
     expect(select).toBeInTheDocument()
   })
 
-})
 
+  it("Decision diaria: integra exposicion sin crear alertas ni modificar RPE/Wellness", async () => {
+    const customStore = {
+      jugadoras: [{ id_jugadora: "j1", nombre: "Jugadora 1", estado_activo: true }],
+      wellness: [],
+      lesiones: [],
+      alertas: [],
+      pruebas_cmj: [],
+      sesion_rpe: [],
+      rpe_partido: [{ id_registro: "rp1", id_jugadora: "j1", id_partido: "p1", fecha: "2026-08-10", minutos_jugados: 40 }],
+      isInitialized: true,
+      filters: {}, setFilter: vi.fn(), resetFilters: vi.fn(), generarDecisionDiaria: vi.fn(), isLoading: false, error: null
+    }
+    vi.mocked(useStore).mockReturnValue(customStore as any)
+
+    render(
+      <MemoryRouter>
+        <DailyDecisionPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText(/40 min/i)).toBeInTheDocument()
+    expect(screen.queryByText(/riesgo elevado/i)).not.toBeInTheDocument()
+  })
+})

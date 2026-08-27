@@ -1,3 +1,4 @@
+import { CompetitiveExposureCard } from '@/components/exposure/CompetitiveExposureCard'
 import { useMemo, useState } from 'react'
 import { useStore } from '@/store/store'
 import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
@@ -203,16 +204,16 @@ export function WeeklySummaryPage() {
 
       {semanaActual && (
         <DataTable
-          headers={['Jugadora', 'Posición', 'Carga Entreno', 'Carga Partido', 'Carga Total', 'Carga Crónica', 'ACWR', 'Wellness', 'Sesiones', 'Minutos (7d)', 'Partidos (7d)', 'Conv. (7d)', 'Estado']}
+          headers={['Jugadora', 'Posición', 'Carga Entreno', 'Carga Partido', 'Carga Total', 'Carga Crónica', 'ACWR', 'Wellness', 'Sesiones', 'Minutos (7d)', 'Partidos (7d)', 'Conv. (7d)', 'Calidad Exp.', 'Estado']}
           emptyMessage="No hay datos para esta semana. Genera el resumen primero."
         >
           {resumenSemana.map((rs) => {
             const jug = jugadoras.find((j) => j.id_jugadora === rs.id_jugadora)
             const status = getLoadStatus(rs.acwr)
-            
+
             const weekEndStr = getWeekEndDateISO(semanaActual)
             const rpePartidoJug = rpe_partido.filter(r => r.id_jugadora === rs.id_jugadora)
-            const exp = weekEndStr ? calcularExposicionCompetitiva(rpePartidoJug, weekEndStr) : null
+
 
             return (
               <DataRow key={rs.id} onClick={() => navigate(`/jugadoras/${rs.id_jugadora}`)}>
@@ -229,9 +230,7 @@ export function WeeklySummaryPage() {
                 </DataCell>
                 <DataCell>{rs.wellness_medio > 0 ? rs.wellness_medio : '—'}</DataCell>
                 <DataCell>{rs.num_sesiones}</DataCell>
-                <DataCell>{exp?.minutos7d ?? '—'}</DataCell>
-                <DataCell>{exp?.partidosJugados7d ?? '—'}</DataCell>
-                <DataCell>{exp?.convocatorias7d ?? '—'}</DataCell>
+                <CompetitiveExposureCard registros={rpePartidoJug} fechaCorteISO={weekEndStr} modo="fila" />
                 <DataCell>
                   <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${status.color}`}>
                     {status.label}
