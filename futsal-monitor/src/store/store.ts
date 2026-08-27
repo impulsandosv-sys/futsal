@@ -1138,6 +1138,10 @@ export const useStore = create<AppState>((set, get) => ({
         registros_menstruales: registros_menstruales.sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio)),
         hasData: true
       })
+
+      if (currentEpoch === loadEpoch) {
+        await reconciliarAlertasMenstruales(set)
+      }
     } finally {
       activeLoadsCount = Math.max(0, activeLoadsCount - 1)
       set({ loading: activeLoadsCount > 0 })
