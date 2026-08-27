@@ -7,7 +7,11 @@ import { sumarDias, calcularDiferenciaDias } from '@/domain/menstrual/menstrualE
 import type { RegistroMenstrual } from '@/types'
 import { Link } from 'react-router-dom'
 
+import { DecisionMenstrualModal } from '@/components/menstrual/DecisionMenstrualModal'
+
 export function SeguimientoMenstrualPage() {
+  const [modalMenstrualOpen, setModalMenstrualOpen] = useState(false)
+  const [modalMenstrualData, setModalMenstrualData] = useState<{id: number, name: string} | null>(null)
   const {
     registros_menstruales,
     jugadoras,
@@ -476,7 +480,7 @@ export function SeguimientoMenstrualPage() {
                     )}
                   </div>
 
-                  <div className="flex justify-end gap-1.5 pt-1 border-t border-amber-200/50">
+                  <div className="flex justify-end gap-1.5 pt-1 border-t border-amber-200/50 flex-wrap">
                     <button
                       onClick={() => alerta.id !== undefined && updateAlertaEstado(alerta.id, 'descartada')}
                       className="text-[10px] px-2 py-1 rounded bg-white text-surface-700 border border-surface-300 hover:bg-surface-100 font-medium"
@@ -489,6 +493,20 @@ export function SeguimientoMenstrualPage() {
                     >
                       Resolver
                     </button>
+                    {(() => {
+                      const ultimoRegistro = registros_menstruales
+                        .filter(r => r.id_jugadora === alerta.id_jugadora)
+                        .sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio))[0]
+
+                      return ultimoRegistro ? (
+                        <button
+                          onClick={() => { setModalMenstrualData({id: ultimoRegistro.id!, name: jug?.nombre || alerta.id_jugadora}); setModalMenstrualOpen(true); }}
+                          className="text-[10px] px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700 font-medium"
+                        >
+                          Decisión
+                        </button>
+                      ) : null
+                    })()}
                   </div>
                 </div>
               )
@@ -529,7 +547,7 @@ export function SeguimientoMenstrualPage() {
         </div>
 
         <DataTable
-          headers={['Fecha inicio', 'Jugadora', 'Impacto', 'Comentario', 'Nota de ajuste', 'Acciones']}
+          headers={['Fecha inicio', 'Jugadora', 'Impacto', 'Comentario', 'Acción registrada', 'Nota de ajuste', 'Acciones']}
           emptyMessage="No hay registros menstruales en el historial."
         >
           {historialFiltrado.map((reg) => {
@@ -560,11 +578,27 @@ export function SeguimientoMenstrualPage() {
                 <DataCell className="text-xs text-surface-600 max-w-xs">
                   {reg.comentario || <span className="text-surface-300 italic">—</span>}
                 </DataCell>
+                <DataCell className="text-xs text-surface-600">
+                  {reg.accion_ajuste ? (
+                    <span className="inline-block bg-surface-100 text-surface-700 px-2 py-0.5 rounded text-[10px] font-medium border border-surface-200">
+                      {reg.accion_ajuste.replace(/_/g, ' ')}
+                    </span>
+                  ) : (
+                    <span className="text-surface-300 italic">—</span>
+                  )}
+                  {reg.fecha_decision && <div className="text-[9px] text-surface-400 mt-0.5">{reg.fecha_decision}</div>}
+                </DataCell>
                 <DataCell className="text-xs text-surface-600 max-w-xs">
                   {reg.nota_ajuste || <span className="text-surface-300 italic">—</span>}
                 </DataCell>
                 <DataCell>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => { setModalMenstrualData({id: reg.id!, name: jug?.nombre || reg.id_jugadora}); setModalMenstrualOpen(true); }}
+                      className="text-[11px] text-surface-700 bg-white border border-surface-300 font-medium px-1.5 py-0.5 rounded hover:bg-surface-50"
+                    >
+                      Decisión
+                    </button>
                     <button
                       onClick={() => handleEditClick(reg)}
                       className="text-[11px] text-primary-600 hover:text-primary-800 font-medium px-1.5 py-0.5 rounded hover:bg-primary-50"
@@ -627,6 +661,15 @@ export function SeguimientoMenstrualPage() {
           </div>
         </div>
       </Modal>
+
+      {modalMenstrualData && (
+        <DecisionMenstrualModal
+          open={modalMenstrualOpen}
+          onClose={() => setModalMenstrualOpen(false)}
+          registroId={modalMenstrualData.id}
+          jugadoraName={modalMenstrualData.name}
+        />
+      )}
     </div>
   )
 }

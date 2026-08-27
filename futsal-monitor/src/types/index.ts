@@ -410,6 +410,14 @@ export interface CicloMenstrual {
   notas: string
 }
 
+export type AccionAjusteMenstrual =
+  | 'SIN_CAMBIOS'
+  | 'CONVERSACION_MANTENIDA'
+  | 'AJUSTE_TAREA_INDIVIDUAL'
+  | 'AJUSTE_VOLUMEN'
+  | 'AJUSTE_INTENSIDAD'
+  | 'RECUPERACION_SEGUIMIENTO'
+
 export interface RegistroMenstrual {
   id?: number
   id_jugadora: string
@@ -417,6 +425,8 @@ export interface RegistroMenstrual {
   impacto_percibido: number // entero de 0 a 10
   comentario?: string | null
   nota_ajuste?: string | null
+  accion_ajuste?: AccionAjusteMenstrual | null
+  fecha_decision?: string | null
   creado_en: string
   actualizado_en: string
 }

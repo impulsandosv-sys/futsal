@@ -32,6 +32,12 @@ export function validarRegistroMenstrual(
     errors.push('El impacto percibido debe ser un número entero entre 0 y 10')
   }
 
+  if (reg.fecha_decision && !isFechaLocalISO(reg.fecha_decision)) {
+    errors.push('La fecha de decisión debe ser una fecha ISO válida (YYYY-MM-DD)')
+  } else if (reg.fecha_decision && reg.fecha_decision > hoyStr) {
+    errors.push('No se permiten fechas de decisión futuras')
+  }
+
   // Deduplicación estricta por id_jugadora + fecha_inicio
   if (reg.id_jugadora && reg.fecha_inicio && isFechaLocalISO(reg.fecha_inicio)) {
     const duplicado = existentes.find(

@@ -24,7 +24,11 @@ const FINALIDADES_MAP: Record<FinalidadSesionFuerza, string> = {
   otro: 'Otro',
 }
 
+import { DecisionMenstrualModal } from '@/components/menstrual/DecisionMenstrualModal'
+
 export function PlayerProfilePage() {
+  const [modalMenstrualOpen, setModalMenstrualOpen] = useState(false)
+  const [modalMenstrualId, setModalMenstrualId] = useState<number | null>(null)
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -688,7 +692,9 @@ export function PlayerProfilePage() {
                     <th className="text-left px-3 py-2">Fecha inicio</th>
                     <th className="text-left px-3 py-2">Impacto percibido</th>
                     <th className="text-left px-3 py-2">Comentario</th>
+                    <th className="text-left px-3 py-2">Acción registrada</th>
                     <th className="text-left px-3 py-2">Nota de ajuste</th>
+                    <th className="text-left px-3 py-2"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-100">
@@ -713,8 +719,26 @@ export function PlayerProfilePage() {
                         <td className="px-3 py-2.5 text-surface-600 max-w-xs">
                           {r.comentario || <span className="text-surface-300 italic">—</span>}
                         </td>
+                        <td className="px-3 py-2.5 text-surface-600">
+                          {r.accion_ajuste ? (
+                            <span className="inline-block bg-surface-100 text-surface-700 px-2 py-0.5 rounded text-[10px] font-medium border border-surface-200">
+                              {r.accion_ajuste.replace(/_/g, ' ')}
+                            </span>
+                          ) : (
+                            <span className="text-surface-300 italic">—</span>
+                          )}
+                          {r.fecha_decision && <div className="text-[9px] text-surface-400 mt-0.5">{r.fecha_decision}</div>}
+                        </td>
                         <td className="px-3 py-2.5 text-surface-600 max-w-xs">
                           {r.nota_ajuste || <span className="text-surface-300 italic">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <button
+                            onClick={() => { setModalMenstrualId(r.id!); setModalMenstrualOpen(true); }}
+                            className="px-2 py-1 bg-white border border-surface-300 text-surface-700 text-[10px] font-medium rounded hover:bg-surface-100 transition-colors"
+                          >
+                            Decisión
+                          </button>
                         </td>
                       </tr>
                     )
@@ -1425,6 +1449,15 @@ export function PlayerProfilePage() {
           <button onClick={() => { addTestPsicologico({...psicologiaForm, id_jugadora: id!}); setNewPsicologiaOpen(false) }} className="w-full bg-primary-600 text-white py-2 rounded text-xs">Guardar</button>
         </div>
       </Modal>
+
+      {modalMenstrualId && jugadora && (
+        <DecisionMenstrualModal
+          open={modalMenstrualOpen}
+          onClose={() => setModalMenstrualOpen(false)}
+          registroId={modalMenstrualId}
+          jugadoraName={jugadora.nombre}
+        />
+      )}
     </div>
   )
 }

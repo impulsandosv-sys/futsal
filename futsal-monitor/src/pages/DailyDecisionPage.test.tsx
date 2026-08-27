@@ -262,5 +262,139 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
 
     expect(screen.queryByText(/wellness_bajo/i)).not.toBeInTheDocument()
   })
+
+  // FASE 4B - Contexto Menstrual
+  it('Fase 4B. Panel diario muestra "Inicios comunicados hoy" si hay registros de hoy', () => {
+    useStore.setState({
+      jugadoras: mockJugadoras,
+      wellness: [],
+      alertas: [],
+      registros_menstruales: [
+        {
+          id: 1,
+          id_jugadora: 'J1',
+          fecha_inicio: new Date().toISOString().split('T')[0],
+          impacto_percibido: 8,
+          comentario: 'Fuerte dolor lumbar',
+          nota_ajuste: 'Bajar carga 50%',
+          creado_en: '2023-01-01',
+          actualizado_en: '2023-01-01'
+        },
+        {
+          id: 2,
+          id_jugadora: 'J2',
+          fecha_inicio: '2023-01-01', // Pasado
+          impacto_percibido: 4,
+          creado_en: '2023-01-01',
+          actualizado_en: '2023-01-01'
+        }
+      ]
+    })
+
+    render(
+      <MemoryRouter>
+        <DailyDecisionPage />
+      </MemoryRouter>
+    )
+
+    // Aparece el título del widget
+    expect(screen.getByText('Contexto menstrual del día')).toBeInTheDocument()
+    // Aparece Ana (J1) que fue hoy
+    expect(screen.getAllByText('Ana Lopez').length).toBeGreaterThan(0)
+    // No aparece el comentario ni la nota de ajuste (privacidad / neutralidad)
+    expect(screen.queryByText('Fuerte dolor lumbar')).not.toBeInTheDocument()
+    expect(screen.queryByText('Bajar carga 50%')).not.toBeInTheDocument()
+    // Aparece el impacto
+    expect(screen.getByText('Impacto percibido: 8/10')).toBeInTheDocument()
+    // No aparece Beatriz (J2) en el widget (solo en la lista principal)
+    expect(screen.getAllByText('Beatriz Gomez').length).toBe(1)
+    // Ana aparece 2 veces: en la lista principal y en el widget
+    expect(screen.getAllByText('Ana Lopez').length).toBe(2)
+  })
+
+  it('Fase 4B. Panel diario muestra "Recordatorios estimados activos" solo para alertas abiertas', () => {
+    useStore.setState({
+      jugadoras: mockJugadoras,
+      wellness: [],
+      registros_menstruales: [
+        {
+          id: 3,
+          id_jugadora: 'J2',
+          fecha_inicio: '2023-01-01',
+          impacto_percibido: 4,
+          creado_en: '2023-01-01',
+          actualizado_en: '2023-01-01'
+        }
+      ],
+      alertas: [
+        {
+          id: 1,
+          id_jugadora: 'J2',
+          tipo: 'MENSTRUACION_PROXIMA_ESTIMADA',
+          fecha: new Date().toISOString().split('T')[0],
+          mensaje: 'Alerta',
+          estado: 'abierta'
+        },
+        {
+          id: 2,
+          id_jugadora: 'J1',
+          tipo: 'MENSTRUACION_PROXIMA_ESTIMADA',
+          fecha: new Date().toISOString().split('T')[0],
+          mensaje: 'Alerta resuelta',
+          estado: 'resuelta'
+        }
+      ]
+    })
+
+    render(
+      <MemoryRouter>
+        <DailyDecisionPage />
+      </MemoryRouter>
+    )
+
+    // J2 tiene alerta abierta, J1 la tiene resuelta
+    expect(screen.getAllByText('Beatriz Gomez').length).toBeGreaterThan(0)
+    expect(screen.getByText(new RegExp(`Ventana estimada activa.*`))).toBeInTheDocument()
+
+    // Ana (J1) solo aparece 1 vez en la tabla (no en el widget menstrual)
+    expect(screen.getAllByText('Ana Lopez').length).toBe(1)
+  })
+
+  it('Fase 4B. Modal de decisión se abre y muestra datos correctos (solo lectura)', () => {
+    useStore.setState({
+      jugadoras: mockJugadoras,
+      wellness: [],
+      registros_menstruales: [
+        {
+          id: 1,
+          id_jugadora: 'J1',
+          fecha_inicio: new Date().toISOString().split('T')[0],
+          impacto_percibido: 8,
+          creado_en: '2023-01-01',
+          actualizado_en: '2023-01-01'
+        }
+      ],
+      alertas: []
+    })
+
+    render(
+      <MemoryRouter>
+        <DailyDecisionPage />
+      </MemoryRouter>
+    )
+
+    const btn = screen.getByText('Registrar decisión')
+    fireEvent.click(btn)
+
+    // Se abre el modal
+    expect(screen.getByText('Decisión operativa menstrual')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Ana Lopez')).toHaveAttribute('readonly')
+    expect(screen.getAllByDisplayValue(new Date().toISOString().split('T')[0]).length).toBeGreaterThan(1)
+
+    // El select de accion existe
+    const select = screen.getByRole('combobox')
+    expect(select).toBeInTheDocument()
+  })
+
 })
 

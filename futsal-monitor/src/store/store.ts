@@ -29,8 +29,11 @@ import type {
   HistorialImportacion, CicloMenstrual, CargaGPS, FuerzaVBT, Hidratacion,
   RTPChecklist, TestPsicologico, HistorialCopia, PlantillaImportacion,
   ProtocoloCMJ, MedicionCMJ, EjercicioFuerza, TrabajoFuerzaIndividual, PlantillaFuerza, SesionFuerzaIndividual,
-  CompensacionPostPartido, RegistroMenstrual
+  CompensacionPostPartido, RegistroMenstrual, AccionAjusteMenstrual
 } from '@/types'
+import type { StoreApi } from 'zustand'
+
+export type SetAppState = StoreApi<AppState>['setState']
 
 interface AppState {
   jugadoras: Jugadora[]
@@ -63,7 +66,7 @@ interface AppState {
   registros_menstruales: RegistroMenstrual[]
 
   addRegistroMenstrual: (reg: Omit<RegistroMenstrual, 'id' | 'creado_en' | 'actualizado_en'>) => Promise<RegistroMenstrual>
-  updateRegistroMenstrual: (id: number, cambios: { fecha_inicio: string, impacto_percibido: number, comentario?: string | null, nota_ajuste?: string | null }) => Promise<void>
+  updateRegistroMenstrual: (id: number, cambios: { fecha_inicio: string, impacto_percibido: number, comentario?: string | null, nota_ajuste?: string | null, accion_ajuste?: AccionAjusteMenstrual | null, fecha_decision?: string | null }) => Promise<void>
   deleteRegistroMenstrual: (id: number) => Promise<void>
   filters: FiltersState
   loading: boolean
@@ -429,7 +432,7 @@ const sincronizarWellnessIncremental = async (
       db.readiness.where({ id_jugadora: jugadoraId, fecha }).first(),
     ])
 
-    setFn((state) => {
+    setFn((state: AppState) => {
       const wellnessFiltrados = state.wellness.filter(
         (x) => !((wSaved && x.id === wSaved.id) || (x.id_jugadora === jugadoraId && x.fecha === fecha)),
       )
@@ -499,7 +502,7 @@ const sincronizarWellnessEditadoIncremental = async (
       return
     }
 
-    setFn((state) => {
+    setFn((state: AppState) => {
       // 1. Reemplazar wellness editado por su id
       const wellnessFiltrados = state.wellness.filter((x) => x.id !== wUpdated.id)
       const nuevosWellness = [...wellnessFiltrados, wUpdated]
@@ -582,7 +585,7 @@ const sincronizarRpePartidoIncremental = async (
       return
     }
 
-    setFn((state) => {
+    setFn((state: AppState) => {
       // 1. rpe_partido
       const rpeFiltrados = state.rpe_partido.filter(
         (x) => !((rpeSaved.id && x.id === rpeSaved.id) || (x.id_partido === idPartido && x.id_jugadora === jugadoraId)),
@@ -672,7 +675,7 @@ const sincronizarSesionRpeIncremental = async (
       return
     }
 
-    setFn((state) => {
+    setFn((state: AppState) => {
       // 1. sesion_rpe
       const srpeFiltrados = state.sesion_rpe.filter(
         (x) => !((srpeSaved.id && x.id === srpeSaved.id) || (x.id_sesion === idSesion && x.id_jugadora === jugadoraId)),
@@ -768,7 +771,7 @@ const sincronizarSesionRpeEditadoIncremental = async (
       return
     }
 
-    setFn((state) => {
+    setFn((state: AppState) => {
       // 1. sesion_rpe: descartar por id y por clave lógica previa
       const srpeFiltrados = state.sesion_rpe.filter(
         (x) => !(x.id === srpeId || (x.id_sesion === srpeUpdated.id_sesion && x.id_jugadora === srpeUpdated.id_jugadora)),
@@ -879,7 +882,7 @@ const sincronizarSesionRpeEliminadoIncremental = async (
       return
     }
 
-    setFn((state) => {
+    setFn((state: AppState) => {
       // 1. sesion_rpe: eliminar deletedId
       const nuevosSrpe = state.sesion_rpe.filter((x) => x.id !== deletedId)
 
@@ -2124,6 +2127,8 @@ export const useStore = create<AppState>((set, get) => ({
       ...reg,
       comentario: reg.comentario ?? null,
       nota_ajuste: reg.nota_ajuste ?? null,
+      accion_ajuste: reg.accion_ajuste ?? null,
+      fecha_decision: reg.fecha_decision ?? null,
       creado_en: ahora,
       actualizado_en: ahora
     }
@@ -2150,7 +2155,9 @@ export const useStore = create<AppState>((set, get) => ({
       fecha_inicio: cambios.fecha_inicio,
       impacto_percibido: cambios.impacto_percibido,
       comentario: cambios.comentario ?? null,
-      nota_ajuste: cambios.nota_ajuste ?? null
+      nota_ajuste: cambios.nota_ajuste ?? null,
+      accion_ajuste: cambios.accion_ajuste !== undefined ? cambios.accion_ajuste : registroExistente.accion_ajuste,
+      fecha_decision: cambios.fecha_decision !== undefined ? cambios.fecha_decision : registroExistente.fecha_decision
     }
 
     const existentes = await db.registro_menstrual.toArray()

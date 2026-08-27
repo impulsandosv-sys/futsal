@@ -5,6 +5,7 @@ import { parseISO, subDays, addDays, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { construirDecisionDiaria } from '@/domain/dailyDecision/dailyDecisionEngine'
 import { calcularExposicionCompetitiva } from '@/domain/exposure/matchExposure'
+import { ContextoMenstrualWidget } from '@/components/menstrual/ContextoMenstrualWidget'
 
 export function DailyDecisionPage() {
   const {
@@ -130,6 +131,8 @@ export function DailyDecisionPage() {
           <span className="text-[10px] text-surface-400 block mt-0.5">Con restricción de disponibilidad</span>
         </div>
       </div>
+
+      <ContextoMenstrualWidget />
 
       {/* 3. Banner informativo de regla de ordenación */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-xs text-blue-900 flex items-center gap-2">
