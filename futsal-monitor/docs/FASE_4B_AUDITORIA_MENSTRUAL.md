@@ -1,11 +1,13 @@
-﻿# Auditoría Operativa - Fase 4B: Contexto Menstrual y Decisión Manual
+# Auditoría Operativa - Fase 4B: Contexto Menstrual y Decisión Manual
+
 ## 1. Finalidad y límites del módulo
 La finalidad de esta fase es evolucionar el módulo menstrual ya existente para convertirlo en una herramienta de **contexto operativo diario** para el preparador físico, sin entrar en automatismos clínicos ni de carga. Sirve para revisar rápidamente quién ha reportado un inicio hoy, o quién se encuentra en una ventana estimada, y permite registrar una decisión manual si procede.
 
 ## 2. Modelo legado vs modelo nuevo
-- **Modelo legado (Fase 4A):** RegistroMenstrual contaba con fecha_inicio, impacto_percibido, comentario y nota_ajuste.
-- **Modelo nuevo (Fase 4B):** Se amplía la interfaz de RegistroMenstrual añadiendo accion_ajuste (una enumeración estructurada) y fecha_decision (la fecha en que el profesional toma la decisión).
-Ambos se preservan y conviven. Los registros históricos sin los nuevos campos se comportan como nulos para la decisión. No se ha requerido crear migración de esquema en IndexedDB dado que los nuevos campos no son índices de búsqueda directa y Dexie almacena objetos flexibles.
+- **Modelo legado:** Se utilizaba el tipo `CicloMenstrual` y la tabla `ciclo_menstrual` para registrar fases sintomáticas.
+- **Modelo nuevo (Fase 4A):** Se introdujo `RegistroMenstrual` (tabla `registro_menstrual`) con fecha_inicio, impacto_percibido, comentario y nota_ajuste, dejando atrás las fases clínicas.
+- **Modelo nuevo (Fase 4B):** Se amplía la interfaz de `RegistroMenstrual` añadiendo `accion_ajuste` (una enumeración estructurada) y `fecha_decision` (la fecha en que el profesional toma la decisión).
+Ambos (Fase 4A y 4B) se preservan y conviven en la misma tabla. Los registros históricos sin los nuevos campos se comportan como nulos para la decisión. No se ha requerido crear migración de esquema en IndexedDB dado que los nuevos campos no son índices de búsqueda directa y Dexie almacena objetos flexibles.
 
 ## 3. Reglas de estimación y alertas
 - Se requieren al menos 2 registros reales de una jugadora para estimar su próximo inicio.
