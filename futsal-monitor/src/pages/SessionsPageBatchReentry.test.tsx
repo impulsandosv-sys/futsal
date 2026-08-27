@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { SessionsPage } from './SessionsPage'
 import { useStore } from '@/store/store'
 
@@ -63,7 +64,7 @@ describe('SessionsPage - Batch RPE Protection', () => {
 
     useStore.setState({ saveRpeBatch: saveRpeBatchMock })
 
-    render(<SessionsPage />)
+    render(<MemoryRouter><SessionsPage /></MemoryRouter>)
 
     // Cambiar a vista Historial
     const historialBtn = screen.getByText('Historial')
@@ -107,7 +108,7 @@ describe('SessionsPage - Batch RPE Protection', () => {
 
     useStore.setState({ saveRpeBatch: saveRpeBatchMock })
 
-    render(<SessionsPage />)
+    render(<MemoryRouter><SessionsPage /></MemoryRouter>)
 
     // Cambiar a vista Historial
     const historialBtn = screen.getByText('Historial')
@@ -145,7 +146,7 @@ describe('SessionsPage - Batch RPE Protection', () => {
     })
     useStore.setState({ saveRpeBatch: saveRpeBatchMock })
 
-    render(<SessionsPage />)
+    render(<MemoryRouter><SessionsPage /></MemoryRouter>)
 
     // Cambiar a vista Historial
     const historialBtn = screen.getByText('Historial')
