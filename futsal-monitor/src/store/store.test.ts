@@ -40,7 +40,8 @@ vi.mock('@/db/database', () => ({
         const filtered = wellnessArr.filter(x => !q || (!q.id_jugadora || x.id_jugadora === q.id_jugadora) && (!q.fecha || x.fecha === q.fecha))
         return {
           first: vi.fn(() => Promise.resolve(filtered[0] || null)),
-          toArray: vi.fn(() => Promise.resolve(filtered))
+          toArray: vi.fn(() => Promise.resolve(filtered)),
+          equals: vi.fn(() => ({ toArray: vi.fn(() => Promise.resolve(filtered)) }))
         }
       })
     },
@@ -63,7 +64,7 @@ vi.mock('@/db/database', () => ({
         }
       })
     },
-    resumen_semanal: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(() => ({ toArray: vi.fn(() => Promise.resolve([])) })) },
+    resumen_semanal: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(() => ({ equals: vi.fn(() => ({ toArray: vi.fn(() => Promise.resolve([])) })), toArray: vi.fn(() => Promise.resolve([])) })) },
     alertas: { 
       put: vi.fn(), 
       toArray: vi.fn(() => Promise.resolve([])), 
@@ -76,12 +77,12 @@ vi.mock('@/db/database', () => ({
         }))
       }))
     },
-    sesion_rpe: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(() => ({ toArray: vi.fn(() => Promise.resolve([])) })) },
-    readiness: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(() => ({ first: vi.fn(() => Promise.resolve(null)), toArray: vi.fn(() => Promise.resolve([])) })) },
+    sesion_rpe: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(() => ({ equals: vi.fn(() => ({ toArray: vi.fn(() => Promise.resolve([])) })), toArray: vi.fn(() => Promise.resolve([])) })) },
+    readiness: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(() => ({ equals: vi.fn(() => ({ toArray: vi.fn(() => Promise.resolve([])) })), first: vi.fn(() => Promise.resolve(null)), toArray: vi.fn(() => Promise.resolve([])) })) },
     historial_importaciones: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])) },
     historial_copias: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])) },
-    ciclo_menstrual: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])) },
-    carga_gps: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])) },
+    ciclo_menstrual: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(() => ({ equals: vi.fn(() => ({ toArray: vi.fn(() => Promise.resolve([])) })), toArray: vi.fn(() => Promise.resolve([])) })) },
+    carga_gps: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(() => ({ equals: vi.fn(() => ({ toArray: vi.fn(() => Promise.resolve([])) })), toArray: vi.fn(() => Promise.resolve([])) })) },
     fuerza_vbt: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])) },
     hidratacion: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])) },
     rtp_checklist: { put: vi.fn(), toArray: vi.fn(() => Promise.resolve([])) },
