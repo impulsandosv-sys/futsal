@@ -24,7 +24,7 @@ El algoritmo se atiene de manera absoluta a la semántica de la capa persistente
 - `partidosJugados7d` y `partidosJugados28d`
 - `convocatorias7d` y `convocatorias28d`
 - `convocadaSinMinutos7d` y `convocadaSinMinutos28d`
-- `calidadDato`: Puede ser `'completa'`, `'parcial'`, `'insuficiente'` o `'sin_competicion'`. Actúa como nivel de confianza del dato.
+- `calidadDato`: Puede ser `'completa'`, `'parcial'`, `'insuficiente'` o `'sin_registros_competitivos'`. Actúa como nivel de confianza del dato.
 - `porcentajeExposicion7d`: Sólo computa si hay convocatorias en los últimos 7 días. Representa la fracción de exposición real sobre la máxima posible.
 - `referenciaSemanal28d`: Se calcula (media simple `/4`) siempre que la `calidadDato` en la ventana de 28 días sea `'completa'` o `'parcial'`.
 - `ratioCambioExposicion`: Representa el aumento o descarga (`minutos7d / referenciaSemanal28d`). Exige que exista exposición (`referencia > 0`) y que la calidad sea al menos `'parcial'`.
@@ -33,4 +33,4 @@ El algoritmo se atiene de manera absoluta a la semántica de la capa persistente
 1. **Datos Históricos Incompletos**:
    Al permitir el cálculo de `referenciaSemanal28d` con calidad `'parcial'`, se flexibiliza enormemente la herramienta. Si hay un registro con `mins=20` pero sin estado de participación (legacy data), ahora entra en el sumatorio, se refleja en la UI que la calidad es 'parcial', pero **no se pierde** la analítica de tendencia general como ocurría en la versión estricta anterior.
 2. **Semana Sin Competición vs. Falta de Datos**:
-   Se ha introducido el estado explícito `'sin_competicion'`. Esto permite que el motor (o la UI en el futuro) distinga inequívocamente entre "esta jugadora no tiene partidos programados este mes" y "esta jugadora tiene partidos programados pero nadie los rellenó".
+   Se ha introducido el estado explícito `'sin_registros_competitivos'`. Significa exactamente: "No existen registros RPE_Partido disponibles en la ventana de 28 días; no se puede inferir si hubo o no competición."

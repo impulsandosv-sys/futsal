@@ -13,7 +13,7 @@ export interface ExposicionCompetitiva {
   porcentajeExposicion7d: number | null
   referenciaSemanal28d: number | null
   ratioCambioExposicion: number | null
-  calidadDato: 'completa' | 'parcial' | 'insuficiente' | 'sin_competicion'
+  calidadDato: 'completa' | 'parcial' | 'insuficiente' | 'sin_registros_competitivos'
   motivosCalidadDato: string[]
 }
 
@@ -173,7 +173,7 @@ export function calcularExposicionCompetitiva(
 
   // Determinar calidad final
   if (registrosRelevantes === 0) {
-    resultado.calidadDato = 'sin_competicion'
+    resultado.calidadDato = 'sin_registros_competitivos'
   } else if (datosIncompletos) {
     if (registrosValidos > 0) {
       resultado.calidadDato = 'parcial'

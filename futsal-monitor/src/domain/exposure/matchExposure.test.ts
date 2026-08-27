@@ -86,7 +86,7 @@ describe('calcularExposicionCompetitiva', () => {
     const result = calcularExposicionCompetitiva(records, defaultFechaCorte)
     expect(result.convocatorias7d).toBe(0)
     expect(result.porcentajeExposicion7d).toBeNull()
-    expect(result.calidadDato).toBe('sin_competicion')
+    expect(result.calidadDato).toBe('sin_registros_competitivos')
   })
 
   it('8. Datos nulos o incompletos que no se transforman en 0', () => {
@@ -147,7 +147,7 @@ describe('calcularExposicionCompetitiva', () => {
     // Testeamos referencia = 0 (historial insuficiente en minutos)
     const emptyRecords: RPE_Partido[] = []
     const emptyResult = calcularExposicionCompetitiva(emptyRecords, defaultFechaCorte)
-    expect(emptyResult.referenciaSemanal28d).toBeNull() // Antes era 0, ahora con 'sin_competicion' es null (no entra en if 'completa' o 'parcial')
+    expect(emptyResult.referenciaSemanal28d).toBeNull() // Antes era 0, ahora con 'sin_registros_competitivos' es null (no entra en if 'completa' o 'parcial')
     expect(emptyResult.ratioCambioExposicion).toBeNull()
   })
 
@@ -172,5 +172,17 @@ describe('calcularExposicionCompetitiva', () => {
     expect(result0.convocatorias7d).toBe(0)
     expect(result0.minutos7d).toBe(0)
     expect(result0.calidadDato).toBe('insuficiente')
+  })
+
+  it("13. Registro legacy con minutos > 40 sin participacion explicita", () => {
+    const records = [makeRecord("2026-08-05", undefined, 50)]
+    const result = calcularExposicionCompetitiva(records, defaultFechaCorte)
+    expect(result.minutos7d).toBe(0)
+    expect(result.minutos28d).toBe(0)
+    expect(result.convocatorias7d).toBe(0)
+    expect(result.partidosJugados7d).toBe(0)
+    expect(result.calidadDato).toBe("insuficiente")
+    expect(result.motivosCalidadDato.length).toBeGreaterThan(0)
+    expect(result.motivosCalidadDato[0]).toContain("> 40")
   })
 })
