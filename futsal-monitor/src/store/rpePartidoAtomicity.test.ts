@@ -131,6 +131,7 @@ vi.mock('@/db/database', () => ({
     trabajos_fuerza: { toArray: vi.fn(() => Promise.resolve([])) },
     plantillas_fuerza: { toArray: vi.fn(() => Promise.resolve([])) },
     sesiones_fuerza_individual: { toArray: vi.fn(() => Promise.resolve([])) },
+    compensacion_postpartido: { toArray: vi.fn(() => Promise.resolve([])) },
     transaction: vi.fn((_mode, _tables, cb) => {
       const fn = typeof _tables === 'function' ? _tables : cb
       return typeof fn === 'function' ? fn() : Promise.resolve()
@@ -189,7 +190,9 @@ describe('addRPE_Partido - Tests Estructurales/Unitarios (Bloque 2F)', () => {
   })
 
   it('5. Éxito: declara exactamente las 8 tablas requeridas en la transacción Dexie', async () => {
-    const rpe = { id_partido: 'P1', id_jugadora: 'J1', fecha: '2026-05-10', rpe: 7, minutos_jugados: 20, carga_ua: 140 }
+    const rpe = { id_partido: 'P1', id_jugadora: 'J1', fecha: '2026-05-10', rpe: 7, minutos_jugados: 20,
+      participacion: 'parcial',
+      participacion_inferida: true, carga_ua: 140 }
 
     await useStore.getState().addRPE_Partido(rpe as any)
 
@@ -214,6 +217,8 @@ describe('addRPE_Partido - Tests Estructurales/Unitarios (Bloque 2F)', () => {
       fecha: '2026-05-10',
       rpe: 7,
       minutos_jugados: 20,
+      participacion: 'parcial',
+      participacion_inferida: true,
       carga_ua: 140,
     })
     expect(resumenService.recalcularResumenSemanal).toHaveBeenCalledWith('J1', '2026-05-10', expect.any(Object))

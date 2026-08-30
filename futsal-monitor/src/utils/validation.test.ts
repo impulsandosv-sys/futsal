@@ -228,3 +228,45 @@ describe('validateWellness', () => {
     expect(result.some(e => e.field === 'fatiga')).toBe(true)
   })
 })
+
+import { validateSesion, inferirParticipacionPartido, validateRPE_Partido } from '@/utils/validation'
+import type { Sesion, RPE_Partido } from '@/types'
+
+describe('validateSesion (regresiones)', () => {
+  it('Sesión sin id_sesion rechazada', () => {
+    const s: Sesion = { id_sesion: '', fecha: '2026-08-01', tipo_sesion: 'Gimnasio', estado: 'completada' }
+    const result = validateSesion(s)
+    expect(result.some(e => e.field === 'id_sesion')).toBe(true)
+  })
+  it('Sesión sin fecha rechazada', () => {
+    const s: Sesion = { id_sesion: 'S1', fecha: '', tipo_sesion: 'Gimnasio', estado: 'completada' }
+    const result = validateSesion(s)
+    expect(result.some(e => e.field === 'fecha')).toBe(true)
+  })
+})
+
+describe('inferirParticipacionPartido y validateRPE_Partido (regresiones)', () => {
+  it('0 minutos no infiere convocada_sin_minutos', () => {
+    const rpe: RPE_Partido = { id: 1, id_partido: 'P1', id_jugadora: 'J1', minutos_jugados: 0 }
+    inferirParticipacionPartido(rpe)
+    expect(rpe.participacion).toBeUndefined()
+  })
+
+  it('Estados de 0 minutos rechazan null y minutos_jugados distintos a 0', () => {
+    const result = validateRPE_Partido({ id_partido: 'P1', id_jugadora: 'J1', participacion: 'no_convocada' } as any)
+    expect(result.some(e => e.field === 'minutos_jugados')).toBe(true)
+
+    const result2 = validateRPE_Partido({ id_partido: 'P1', id_jugadora: 'J1', participacion: 'convocada_sin_minutos', minutos_jugados: 10 } as any)
+    expect(result2.some(e => e.field === 'minutos_jugados')).toBe(true)
+  })
+
+  it('Modificada con 40 minutos rechazada', () => {
+    const result = validateRPE_Partido({ id_partido: 'P1', id_jugadora: 'J1', participacion: 'modificada', minutos_jugados: 40, rpe: 5, motivo_participacion_reducida: 'golpe' } as any)
+    expect(result.some(e => e.field === 'minutos_jugados')).toBe(true)
+  })
+
+  it('Modificada con 0 minutos y RPE presente rechazada', () => {
+    const result = validateRPE_Partido({ id_partido: 'P1', id_jugadora: 'J1', participacion: 'modificada', minutos_jugados: 0, rpe: 5, motivo_participacion_reducida: 'golpe' } as any)
+    expect(result.some(e => e.field === 'rpe')).toBe(true)
+  })
+})

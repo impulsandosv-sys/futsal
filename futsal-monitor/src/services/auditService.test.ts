@@ -110,4 +110,51 @@ describe('Servicio de Auditoría de Cambios (auditService.ts)', () => {
       ;(reg as any).usuario = 'Intruso'
     }).toThrow()
   })
+
+  it('5. Nota vacía, con espacios o nula normaliza a "Sin comentario"', () => {
+    const regVacio = registrarCambioAuditoria({
+      usuario: 'Preparador Físico',
+      entidad: 'alerta',
+      idEntidad: '10',
+      campoModificado: 'estado',
+      valorAnterior: 'abierta',
+      valorNuevo: 'resuelta',
+      motivo: ''
+    })
+    expect(regVacio.motivo).toBe('Sin comentario')
+
+    const regEspacios = registrarCambioAuditoria({
+      usuario: 'Preparador Físico',
+      entidad: 'alerta',
+      idEntidad: '11',
+      campoModificado: 'estado',
+      valorAnterior: 'abierta',
+      valorNuevo: 'descartada',
+      motivo: '    \n\t   '
+    })
+    expect(regEspacios.motivo).toBe('Sin comentario')
+
+    const regUndefined = registrarCambioAuditoria({
+      usuario: 'Preparador Físico',
+      entidad: 'alerta',
+      idEntidad: '12',
+      campoModificado: 'estado',
+      valorAnterior: 'abierta',
+      valorNuevo: 'resuelta'
+    } as any)
+    expect(regUndefined.motivo).toBe('Sin comentario')
+  })
+
+  it('6. Nota escrita se almacena recortada con trim()', () => {
+    const reg = registrarCambioAuditoria({
+      usuario: 'Preparador Físico',
+      entidad: 'alerta',
+      idEntidad: '20',
+      campoModificado: 'estado',
+      valorAnterior: 'abierta',
+      valorNuevo: 'resuelta',
+      motivo: '  Alerta gestionada en sesión matutina   '
+    })
+    expect(reg.motivo).toBe('Alerta gestionada en sesión matutina')
+  })
 })

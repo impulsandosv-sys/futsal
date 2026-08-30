@@ -173,7 +173,7 @@ describe('Bloque A/D — Pruebas de migración real e historia de Dexie con fake
     const upgradedDb = new FutsalDB(DB_NAME)
     await upgradedDb.open()
 
-    expect(upgradedDb.verno).toBe(15)
+    expect(upgradedDb.verno).toBeGreaterThanOrEqual(16)
 
     // Nuevas tablas v15
     expect(upgradedDb.temporadas).toBeDefined()

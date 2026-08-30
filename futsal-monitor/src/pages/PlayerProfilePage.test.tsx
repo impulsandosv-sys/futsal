@@ -142,6 +142,7 @@ describe('PlayerProfilePage (Pestaña e Historial de Fuerza)', () => {
       sesiones_fuerza_individual: mockSesionesFuerza,
       trabajos_fuerza: mockTrabajos,
       ejercicios_fuerza: mockEjercicios,
+      registros_menstruales: [],
     }
     vi.mocked(useStore).mockImplementation((selector?: any) => {
       return selector ? selector(mockState) : mockState
@@ -422,10 +423,10 @@ describe('PlayerProfilePage (Pestaña e Historial de Fuerza)', () => {
   })
 
   it('26 & 27 (Ajuste 6). Ausencia estricta de escrituras Dexie y de cambios en dominios externos durante la consulta', () => {
-    if (!db.sesiones_fuerza_individual) {
+    if (!db.sesiones_fuerza_individual || !('add' in db.sesiones_fuerza_individual)) {
       ;(db as any).sesiones_fuerza_individual = { add: vi.fn(), put: vi.fn(), update: vi.fn(), delete: vi.fn() }
     }
-    if (!db.trabajos_fuerza) {
+    if (!db.trabajos_fuerza || !('add' in db.trabajos_fuerza)) {
       ;(db as any).trabajos_fuerza = { add: vi.fn(), put: vi.fn(), update: vi.fn(), delete: vi.fn() }
     }
 
@@ -494,6 +495,168 @@ describe('PlayerProfilePage (Pestaña e Historial de Fuerza)', () => {
     )
 
     expect(screen.getByText('Laura García')).toBeInTheDocument()
+  })
+
+  it('29. Pestaña Ciclo/Contexto menstrual muestra estimación prudente y registros comunicados', () => {
+    const mockRegistros = [
+      {
+        id: 1,
+        id_jugadora: 'J1',
+        fecha_inicio: '2026-05-01',
+        impacto_percibido: 3,
+        comentario: 'Molestia lumbar leve',
+        nota_ajuste: 'Trabajo adaptado',
+        creado_en: '',
+        actualizado_en: ''
+      },
+      {
+        id: 2,
+        id_jugadora: 'J1',
+        fecha_inicio: '2026-05-29',
+        impacto_percibido: 4,
+        comentario: '',
+        nota_ajuste: '',
+        creado_en: '',
+        actualizado_en: ''
+      }
+    ]
+
+    const mockState = {
+      jugadoras: mockJugadoras,
+      wellness: [],
+      lesiones: [],
+      tests: [],
+      rpe_partido: [],
+      resumen_semanal: [],
+      readiness: [],
+      sesion_rpe: [],
+      sesiones: [],
+      ciclo_menstrual: [],
+      carga_gps: [],
+      fuerza_vbt: [],
+      hidratacion: [],
+      test_psicologico: [],
+      pruebas_cmj: [],
+      sesiones_fuerza_individual: mockSesionesFuerza,
+      trabajos_fuerza: mockTrabajos,
+      ejercicios_fuerza: mockEjercicios,
+      registros_menstruales: mockRegistros,
+    }
+    vi.mocked(useStore).mockImplementation((selector?: any) => {
+      return selector ? selector(mockState) : mockState
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/jugadoras/J1']}>
+        <Routes>
+          <Route path="/jugadoras/:id" element={<PlayerProfilePage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ciclo' }))
+
+    expect(screen.getByText('Contexto menstrual comunicado')).toBeInTheDocument()
+    expect(screen.getByText('Próximo inicio estimado')).toBeInTheDocument()
+    expect(screen.getByText('2026-06-26')).toBeInTheDocument() // 2026-05-29 + 28d = 2026-06-26
+    expect(screen.getByText('Molestia lumbar leve')).toBeInTheDocument()
+    expect(screen.getByText('Trabajo adaptado')).toBeInTheDocument()
+  })
+
+  it('30. Pestaña Ciclo muestra historial legado bajo "Registro histórico legado" si existen datos antiguos', () => {
+    const mockCicloLegado = [
+      {
+        id: 10,
+        id_jugadora: 'J1',
+        fecha: '2025-11-15',
+        fase: 'Folicular' as const,
+        sintomas: 'Ninguno',
+        notas: 'Registro anterior'
+      }
+    ]
+
+    const mockState = {
+      jugadoras: mockJugadoras,
+      wellness: [],
+      lesiones: [],
+      tests: [],
+      rpe_partido: [],
+      resumen_semanal: [],
+      readiness: [],
+      sesion_rpe: [],
+      sesiones: [],
+      ciclo_menstrual: mockCicloLegado,
+      carga_gps: [],
+      fuerza_vbt: [],
+      hidratacion: [],
+      test_psicologico: [],
+      pruebas_cmj: [],
+      sesiones_fuerza_individual: mockSesionesFuerza,
+      trabajos_fuerza: mockTrabajos,
+      ejercicios_fuerza: mockEjercicios,
+      registros_menstruales: [],
+    }
+    vi.mocked(useStore).mockImplementation((selector?: any) => {
+      return selector ? selector(mockState) : mockState
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/jugadoras/J1']}>
+        <Routes>
+          <Route path="/jugadoras/:id" element={<PlayerProfilePage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ciclo' }))
+
+    expect(screen.getByText('Registro histórico legado')).toBeInTheDocument()
+    expect(screen.getByText('Folicular')).toBeInTheDocument()
+    expect(screen.getByText('Registro anterior')).toBeInTheDocument()
+    expect(screen.getByText(/Los nuevos registros de contexto menstrual se gestionan desde Seguimiento menstrual/i)).toBeInTheDocument()
+  })
+
+  it('31. No existe botón o control funcional para dar de alta nuevo CicloMenstrual legado', () => {
+    const mockState = {
+      jugadoras: mockJugadoras,
+      wellness: [],
+      lesiones: [],
+      tests: [],
+      rpe_partido: [],
+      resumen_semanal: [],
+      readiness: [],
+      sesion_rpe: [],
+      sesiones: [],
+      ciclo_menstrual: [],
+      carga_gps: [],
+      fuerza_vbt: [],
+      hidratacion: [],
+      test_psicologico: [],
+      pruebas_cmj: [],
+      sesiones_fuerza_individual: mockSesionesFuerza,
+      trabajos_fuerza: mockTrabajos,
+      ejercicios_fuerza: mockEjercicios,
+      registros_menstruales: [],
+    }
+    vi.mocked(useStore).mockImplementation((selector?: any) => {
+      return selector ? selector(mockState) : mockState
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/jugadoras/J1']}>
+        <Routes>
+          <Route path="/jugadoras/:id" element={<PlayerProfilePage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ciclo' }))
+
+    // No debe haber botón de "+ Añadir Ciclo" o similar
+    expect(screen.queryByText(/Añadir ciclo/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Nuevo registro de ciclo/i)).not.toBeInTheDocument()
+    // En cambio debe existir enlace a seguimiento menstrual
+    expect(screen.getByRole('button', { name: /Ir a Seguimiento Menstrual/i })).toBeInTheDocument()
   })
 })
 

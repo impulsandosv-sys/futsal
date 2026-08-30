@@ -1,19 +1,21 @@
 import { useStore } from '@/store/store'
 import { useNavigate } from 'react-router-dom'
+import { esAlertaActiva } from '@/utils/alerts'
 
 export function AlertsWidget() {
   const { alertas } = useStore()
   const navigate = useNavigate()
 
-  const noLeidas = alertas.filter((a) => !a.leida).slice(0, 8)
+  const activas = alertas.filter(esAlertaActiva)
+  const alertasVisibles = activas.slice(0, 8)
 
-  if (noLeidas.length === 0) {
+  if (activas.length === 0) {
     return <div className="text-xs text-surface-400 text-center py-6">No hay alertas activas</div>
   }
 
   return (
     <div className="space-y-1">
-      {noLeidas.map((a) => (
+      {alertasVisibles.map((a) => (
         <div
           key={a.id}
           className={`text-xs px-3 py-2 rounded cursor-pointer transition-colors ${
@@ -28,9 +30,9 @@ export function AlertsWidget() {
           {a.mensaje}
         </div>
       ))}
-      {alertas.filter((a) => !a.leida).length > 8 && (
+      {activas.length > 8 && (
         <div className="text-xs text-surface-500 text-center pt-1">
-          +{alertas.filter((a) => !a.leida).length - 8} más
+          +{activas.length - 8} más
         </div>
       )}
     </div>

@@ -1,0 +1,6 @@
+Marca temporal,ID jugadora,Fecha del entreno,Calidad de sueño,Fatiga,Dolor Muscular,Estrés,Estado de Ánimo,Dolor especifico o nota importante (opcional),Comentario sobre la sesión (opcional)
+"12/08/2026 10:15:30",Lucía,"11/08/2026",8,3,4,2,9,"Ligeras molestias en el cuádriceps","Buena sesión, me sentí rápida"
+"12/08/2026 10:20:00",SARA,"11/08/2026",7,4,3,3,8,,
+"12/08/2026 10:25:00",María León,"11/08/2026",6,5,5,5,7,,""
+"12/08/2026 10:30:00",Inexistente,"11/08/2026",8,2,2,2,9,,""
+"12/08/2026 10:35:00",Candela,"31/12/2099",8,2,2,2,9,,""

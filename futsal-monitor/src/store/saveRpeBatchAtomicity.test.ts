@@ -38,6 +38,7 @@ vi.mock('@/db/database', () => ({
     trabajos_fuerza: { toArray: vi.fn(() => Promise.resolve([])) },
     plantillas_fuerza: { toArray: vi.fn(() => Promise.resolve([])) },
     sesiones_fuerza_individual: { toArray: vi.fn(() => Promise.resolve([])) },
+    compensacion_postpartido: { toArray: vi.fn(() => Promise.resolve([])) },
     transaction: vi.fn((_mode, _tables, cb) => {
       const fn = typeof _tables === 'function' ? _tables : cb
       return typeof fn === 'function' ? fn() : Promise.resolve()

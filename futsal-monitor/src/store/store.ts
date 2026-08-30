@@ -1,3 +1,5 @@
+import { validarRegistroMenstrual, evaluarAlertaMenstrualJugadora } from '@/domain/menstrual/menstrualEngine'
+import { getTodayLocalISO } from '@/domain/dates/dates'
 import { create } from 'zustand'
 import { db } from '@/db/database'
 import { seedDatabase } from '@/utils/seed'
@@ -12,7 +14,7 @@ import type { FiltrosCarga } from '@/domain/monitoring/monitoring'
 import { 
   validateJugadora,
   validateWellness, validateSesion, validatePartido, validateLesion, 
-  validateTest, validateRPE_Partido, 
+  validateTest, validateRPE_Partido, inferirParticipacionPartido,
   formatValidationErrors,
   validateSesionRPE
 } from '@/utils/validation'
@@ -26,8 +28,12 @@ import type {
   Alerta, FiltersState, SesionRPE, Readiness, AlertaEstado,
   HistorialImportacion, CicloMenstrual, CargaGPS, FuerzaVBT, Hidratacion,
   RTPChecklist, TestPsicologico, HistorialCopia, PlantillaImportacion,
-  ProtocoloCMJ, MedicionCMJ, EjercicioFuerza, TrabajoFuerzaIndividual, PlantillaFuerza, SesionFuerzaIndividual
+  ProtocoloCMJ, MedicionCMJ, EjercicioFuerza, TrabajoFuerzaIndividual, PlantillaFuerza, SesionFuerzaIndividual,
+  CompensacionPostPartido, RegistroMenstrual, AccionAjusteMenstrual
 } from '@/types'
+import type { StoreApi } from 'zustand'
+
+export type SetAppState = StoreApi<AppState>['setState']
 
 interface AppState {
   jugadoras: Jugadora[]
@@ -56,6 +62,12 @@ interface AppState {
     trabajos_fuerza: TrabajoFuerzaIndividual[]
     plantillas_fuerza: PlantillaFuerza[]
     sesiones_fuerza_individual: SesionFuerzaIndividual[]
+    compensacion_postpartido: CompensacionPostPartido[]
+  registros_menstruales: RegistroMenstrual[]
+
+  addRegistroMenstrual: (reg: Omit<RegistroMenstrual, 'id' | 'creado_en' | 'actualizado_en'>) => Promise<RegistroMenstrual>
+  updateRegistroMenstrual: (id: number, cambios: { fecha_inicio: string, impacto_percibido: number, comentario?: string | null, nota_ajuste?: string | null, accion_ajuste?: AccionAjusteMenstrual | null, fecha_decision?: string | null }) => Promise<void>
+  deleteRegistroMenstrual: (id: number) => Promise<void>
   filters: FiltersState
   loading: boolean
   isAuthenticated: boolean
@@ -87,6 +99,7 @@ interface AppState {
   addTest: (t: TestFisico) => Promise<void>
 
   addRPE_Partido: (r: RPE_Partido) => Promise<void>
+  saveRpePartidoBatch: (rpes: RPE_Partido[]) => Promise<void>
 
   addSesionRPE: (srpe: SesionRPE) => Promise<void>
   updateSesionRPE: (srpe: SesionRPE) => Promise<void>
@@ -147,6 +160,8 @@ interface AppState {
   ) => Promise<void>
   updatePlantillaFuerza: (p: PlantillaFuerza) => Promise<void>
   toggleActivaPlantillaFuerza: (id: string, activa: boolean) => Promise<void>
+
+  upsertCompensacionPostPartido: (c: CompensacionPostPartido) => Promise<void>
 }
 
 const DEFAULT_FILTERS: FiltersState = {
@@ -405,7 +420,7 @@ let activeLoadsCount = 0
 const sincronizarWellnessIncremental = async (
   jugadoraId: string,
   fecha: string,
-  setFn: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
+  setFn: SetAppState,
   getFn: () => AppState,
 ): Promise<void> => {
   // Incrementar loadEpoch invalida snapshots antiguos de loadAll() iniciados antes del commit
@@ -417,7 +432,7 @@ const sincronizarWellnessIncremental = async (
       db.readiness.where({ id_jugadora: jugadoraId, fecha }).first(),
     ])
 
-    setFn((state) => {
+    setFn((state: AppState) => {
       const wellnessFiltrados = state.wellness.filter(
         (x) => !((wSaved && x.id === wSaved.id) || (x.id_jugadora === jugadoraId && x.fecha === fecha)),
       )
@@ -464,7 +479,7 @@ const sincronizarWellnessIncremental = async (
 const sincronizarWellnessEditadoIncremental = async (
   wellnessId: number,
   affectedPairs: Array<{ id_jugadora: string; fecha: string }>,
-  setFn: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
+  setFn: SetAppState,
   getFn: () => AppState,
 ): Promise<void> => {
   loadEpoch++
@@ -487,7 +502,7 @@ const sincronizarWellnessEditadoIncremental = async (
       return
     }
 
-    setFn((state) => {
+    setFn((state: AppState) => {
       // 1. Reemplazar wellness editado por su id
       const wellnessFiltrados = state.wellness.filter((x) => x.id !== wUpdated.id)
       const nuevosWellness = [...wellnessFiltrados, wUpdated]
@@ -570,7 +585,7 @@ const sincronizarRpePartidoIncremental = async (
       return
     }
 
-    setFn((state) => {
+    setFn((state: AppState) => {
       // 1. rpe_partido
       const rpeFiltrados = state.rpe_partido.filter(
         (x) => !((rpeSaved.id && x.id === rpeSaved.id) || (x.id_partido === idPartido && x.id_jugadora === jugadoraId)),
@@ -660,7 +675,7 @@ const sincronizarSesionRpeIncremental = async (
       return
     }
 
-    setFn((state) => {
+    setFn((state: AppState) => {
       // 1. sesion_rpe
       const srpeFiltrados = state.sesion_rpe.filter(
         (x) => !((srpeSaved.id && x.id === srpeSaved.id) || (x.id_sesion === idSesion && x.id_jugadora === jugadoraId)),
@@ -756,7 +771,7 @@ const sincronizarSesionRpeEditadoIncremental = async (
       return
     }
 
-    setFn((state) => {
+    setFn((state: AppState) => {
       // 1. sesion_rpe: descartar por id y por clave lógica previa
       const srpeFiltrados = state.sesion_rpe.filter(
         (x) => !(x.id === srpeId || (x.id_sesion === srpeUpdated.id_sesion && x.id_jugadora === srpeUpdated.id_jugadora)),
@@ -867,7 +882,7 @@ const sincronizarSesionRpeEliminadoIncremental = async (
       return
     }
 
-    setFn((state) => {
+    setFn((state: AppState) => {
       // 1. sesion_rpe: eliminar deletedId
       const nuevosSrpe = state.sesion_rpe.filter((x) => x.id !== deletedId)
 
@@ -914,6 +929,93 @@ if (typeof window !== 'undefined') {
 }
 initializeAuth()
 
+/**
+ * Sincroniza las alertas estimadas de seguimiento menstrual.
+ */
+const sincronizarAlertaMenstrual = async (
+  idJugadora: string,
+  setFn: SetAppState,
+  skipStateSync: boolean = false
+): Promise<void> => {
+  try {
+    const [registrosJugadora, jugadora, todasAlertas] = await Promise.all([
+      db.registro_menstrual.where("id_jugadora").equals(idJugadora).toArray(),
+      db.jugadoras.get(idJugadora),
+      db.alertas.toArray()
+    ])
+
+    if (!jugadora) return
+
+    const hoyStr = getTodayLocalISO()
+    const ahoraStr = new Date().toISOString()
+    const nuevaAlertaCalculada = evaluarAlertaMenstrualJugadora(registrosJugadora, jugadora, hoyStr, ahoraStr)
+
+    const alertasMenstrualesPrevias = todasAlertas.filter(
+      (a) => a.id_jugadora === idJugadora && a.tipo === "MENSTRUACION_PROXIMA_ESTIMADA"
+    )
+
+    if (!nuevaAlertaCalculada) {
+      for (const a of alertasMenstrualesPrevias) {
+        if (a.id !== undefined && (a.estado === "abierta" || a.estado === "en_revision")) {
+          await db.alertas.update(a.id, {
+            estado: "resuelta",
+            fecha_resolucion: hoyStr
+          })
+        }
+      }
+    } else {
+      for (const a of alertasMenstrualesPrevias) {
+        if (a.id !== undefined && a.fecha !== nuevaAlertaCalculada.fecha) {
+          if (a.estado === "abierta" || a.estado === "en_revision") {
+            await db.alertas.update(a.id, {
+              estado: "resuelta",
+              fecha_resolucion: hoyStr
+            })
+          }
+        }
+      }
+
+      const existenteMismaFecha = alertasMenstrualesPrevias.find(
+        (a) => a.fecha === nuevaAlertaCalculada.fecha
+      )
+
+      if (!existenteMismaFecha) {
+        await db.alertas.add(nuevaAlertaCalculada)
+      }
+    }
+
+    if (!skipStateSync) {
+      const alertasActualizadas = await db.alertas.toArray()
+      const ordenadas = alertasActualizadas.sort((a, b) => b.creada.localeCompare(a.creada))
+      setFn({ alertas: ordenadas })
+    }
+  } catch (err) {
+  }
+}
+
+export const reconciliarAlertasMenstruales = async (
+  setFn: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Promise<void> => {
+  try {
+    const tablaRegistrosMenstruales = db.registro_menstrual
+    if (!tablaRegistrosMenstruales || typeof tablaRegistrosMenstruales.toArray !== "function") {
+      return
+    }
+    const todosRegistros = await tablaRegistrosMenstruales.toArray()
+    const jugadorasIdsUnicas = Array.from(new Set(todosRegistros.map(r => r.id_jugadora)))
+    for (const jId of jugadorasIdsUnicas) {
+      await sincronizarAlertaMenstrual(jId, setFn, true)
+    }
+    if (jugadorasIdsUnicas.length > 0) {
+      const alertasActualizadas = await db.alertas.toArray()
+      const ordenadas = alertasActualizadas.sort((a, b) => b.creada.localeCompare(a.creada))
+      setFn({ alertas: ordenadas })
+    }
+  } catch (err) {
+  }
+}
+
+
 export const useStore = create<AppState>((set, get) => ({
   jugadoras: [],
   wellness: [],
@@ -945,6 +1047,8 @@ export const useStore = create<AppState>((set, get) => ({
   trabajos_fuerza: [],
   plantillas_fuerza: [],
   sesiones_fuerza_individual: [],
+  compensacion_postpartido: [],
+  registros_menstruales: [],
 
   loadAll: async () => {
     activeLoadsCount++
@@ -961,7 +1065,9 @@ export const useStore = create<AppState>((set, get) => ({
         historial_copias,
         ciclo_menstrual, carga_gps, fuerza_vbt, hidratacion,
         rtp_checklist, test_psicologico, plantillas_importacion,
-        protocolos_cmj, pruebas_cmj, ejercicios_fuerza, trabajos_fuerza, plantillas_fuerza, sesiones_fuerza_individual
+        protocolos_cmj, pruebas_cmj, ejercicios_fuerza, trabajos_fuerza, plantillas_fuerza, sesiones_fuerza_individual,
+        compensacion_postpartido,
+        registros_menstruales
       ] =
         await Promise.all([
           db.jugadoras.toArray(),
@@ -989,7 +1095,9 @@ export const useStore = create<AppState>((set, get) => ({
           db.ejercicios_fuerza.toArray(),
           db.trabajos_fuerza.toArray(),
           db.plantillas_fuerza.toArray(),
-          db.sesiones_fuerza_individual.toArray()
+          db.sesiones_fuerza_individual.toArray(),
+          db.compensacion_postpartido.toArray(),
+          (db.registro_menstrual ? db.registro_menstrual.toArray() : [])
         ])
 
       // Si loadEpoch cambió durante la lectura I/O, este snapshot está obsoleto y se omite el set global
@@ -1029,8 +1137,14 @@ export const useStore = create<AppState>((set, get) => ({
         trabajos_fuerza,
         plantillas_fuerza,
         sesiones_fuerza_individual: sesiones_fuerza_individual.sort((a, b) => b.fecha.localeCompare(a.fecha)),
+        compensacion_postpartido,
+        registros_menstruales: registros_menstruales.sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio)),
         hasData: true
       })
+
+      if (currentEpoch === loadEpoch) {
+        await reconciliarAlertasMenstruales(set)
+      }
     } finally {
       activeLoadsCount = Math.max(0, activeLoadsCount - 1)
       set({ loading: activeLoadsCount > 0 })
@@ -1107,6 +1221,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addRPE_Partido: async (r) => {
+    inferirParticipacionPartido(r)
     const errors = validateRPE_Partido(r)
     if (errors.length > 0) {
       throw new Error(formatValidationErrors(errors))
@@ -1169,6 +1284,86 @@ export const useStore = create<AppState>((set, get) => ({
 
     await sincronizarRpePartidoIncremental(r.id_partido, r.id_jugadora, fechaEfectivaCalculada, set, get)
     await evaluarYSincronizarAlertas(r.id_jugadora, set)
+  },
+
+  saveRpePartidoBatch: async (rpes) => {
+    const erroresTodas: string[] = []
+    const procesados: RPE_Partido[] = []
+
+    for (const r of rpes) {
+      inferirParticipacionPartido(r)
+
+      const isZero = r.participacion === 'no_convocada' || r.participacion === 'convocada_sin_minutos' || r.minutos_jugados === 0
+      const hasMins = typeof r.minutos_jugados === 'number' && !isNaN(r.minutos_jugados)
+      const hasRpe = typeof r.rpe === 'number' && !isNaN(r.rpe)
+
+      if (isZero) {
+        r.carga_ua = 0
+      } else if (hasMins && hasRpe) {
+        r.carga_ua = r.minutos_jugados! * r.rpe!
+      } else {
+        r.carga_ua = null as any
+      }
+
+      const errs = validateRPE_Partido(r)
+      if (errs.length > 0) {
+        erroresTodas.push(...errs.map(e => `[${r.id_jugadora}] ${e.message}`))
+      } else {
+        procesados.push(r)
+      }
+    }
+
+    if (erroresTodas.length > 0) {
+      throw new Error(`Errores de validación:\n${erroresTodas.join('\n')}`)
+    }
+
+    if (procesados.length === 0) return
+
+    const affectedPairs = new Map<string, { id_jugadora: string; fecha: string }>()
+
+    await db.transaction(
+      'rw',
+      [db.rpe_partido, db.resumen_semanal, db.readiness, db.sesiones, db.partidos, db.sesion_rpe, db.wellness, db.jugadoras],
+      async () => {
+        const config = useStore.getState().filters
+
+        for (const r of procesados) {
+          const match = await db.partidos.get(r.id_partido as any)
+          if (!match) throw new Error(`El partido '${r.id_partido}' no existe.`)
+
+          const fechaEfectiva = r.fecha || match.fecha
+          if (!fechaEfectiva) throw new Error('No se pudo determinar la fecha del RPE de partido')
+
+          const existing = await db.rpe_partido
+            .where({ id_partido: r.id_partido, id_jugadora: r.id_jugadora })
+            .first()
+
+          const rpeGuardar = { ...r, fecha: fechaEfectiva }
+          if (existing?.id) {
+            rpeGuardar.id = existing.id
+          }
+
+          await db.rpe_partido.put(rpeGuardar)
+
+          const keyNew = JSON.stringify([rpeGuardar.id_jugadora, rpeGuardar.fecha])
+          affectedPairs.set(keyNew, { id_jugadora: rpeGuardar.id_jugadora, fecha: rpeGuardar.fecha })
+
+          await recalcularResumenSemanal(rpeGuardar.id_jugadora, rpeGuardar.fecha, {
+            incluirPartidos: config.incluirPartidos,
+            incluirGimnasio: config.incluirGimnasio,
+            incluirReadaptacion: config.incluirReadaptacion,
+          })
+          await recalcularReadinessJugadora(rpeGuardar.id_jugadora, rpeGuardar.fecha)
+        }
+      }
+    )
+
+    await get().loadAll()
+
+    const affectedPlayers = Array.from(
+      new Set(Array.from(affectedPairs.values(), ({ id_jugadora }) => id_jugadora))
+    )
+    await evaluarYSincronizarAlertasLote(affectedPlayers, set)
   },
 
   addWellness: async (w) => {
@@ -1291,6 +1486,12 @@ export const useStore = create<AppState>((set, get) => ({
     if (errors.length > 0) {
       throw new Error(formatValidationErrors(errors))
     }
+    if (s.tipo_sesion === 'Partido' && s.id_partido) {
+      const matchExists = get().partidos.some(p => p.id_partido === s.id_partido)
+      if (!matchExists) {
+        throw new Error(`El partido referenciado no existe: ${s.id_partido}`)
+      }
+    }
     await db.sesiones.put(s)
     set((state) => ({ sesiones: [s, ...state.sesiones] }))
   },
@@ -1299,6 +1500,12 @@ export const useStore = create<AppState>((set, get) => ({
     const errors = validateSesion(s)
     if (errors.length > 0) {
       throw new Error(formatValidationErrors(errors))
+    }
+    if (s.tipo_sesion === 'Partido' && s.id_partido) {
+      const matchExists = get().partidos.some(p => p.id_partido === s.id_partido)
+      if (!matchExists) {
+        throw new Error(`El partido referenciado no existe: ${s.id_partido}`)
+      }
     }
     await db.sesiones.put(s)
     set((state) => ({ sesiones: state.sesiones.map(r => (r.id_sesion === s.id_sesion ? s : r)).sort((a, b) => b.fecha.localeCompare(a.fecha)) }))
@@ -1882,5 +2089,111 @@ export const useStore = create<AppState>((set, get) => ({
     await db.plantillas_fuerza.update(id, { activa, updatedAt: new Date().toISOString() })
     await get().loadAll()
   },
+
+  upsertCompensacionPostPartido: async (c) => {
+    await db.transaction('rw', db.compensacion_postpartido, async () => {
+      const existing = await db.compensacion_postpartido
+        .where({ id_partido: c.id_partido, id_jugadora: c.id_jugadora })
+        .first()
+
+      const now = new Date().toISOString()
+      if (existing) {
+        await db.compensacion_postpartido.put({
+          ...existing,
+          ...c,
+          id: existing.id,
+          updated_at: now
+        })
+      } else {
+        await db.compensacion_postpartido.put({
+          ...c,
+          created_at: now,
+          updated_at: now
+        })
+      }
+    })
+    await get().loadAll()
+  },
+
+  addRegistroMenstrual: async (reg) => {
+    const existentes = await db.registro_menstrual.toArray()
+    const validacion = validarRegistroMenstrual(reg, existentes)
+    if (!validacion.valid) {
+      throw new Error(validacion.errors.join('. '))
+    }
+
+    const ahora = new Date().toISOString()
+    const nuevoRegistro: RegistroMenstrual = {
+      ...reg,
+      comentario: reg.comentario ?? null,
+      nota_ajuste: reg.nota_ajuste ?? null,
+      accion_ajuste: reg.accion_ajuste ?? null,
+      fecha_decision: reg.fecha_decision ?? null,
+      creado_en: ahora,
+      actualizado_en: ahora
+    }
+
+    const id = await db.registro_menstrual.add(nuevoRegistro)
+    nuevoRegistro.id = id
+
+    await sincronizarAlertaMenstrual(nuevoRegistro.id_jugadora, set)
+
+    const todosRegistros = await db.registro_menstrual.toArray()
+    todosRegistros.sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio))
+    set({ registros_menstruales: todosRegistros })
+    return nuevoRegistro
+  },
+
+  updateRegistroMenstrual: async (id, cambios) => {
+    const registroExistente = await db.registro_menstrual.get(id)
+    if (!registroExistente) {
+      throw new Error('Registro menstrual no encontrado.')
+    }
+
+    const registroParcial: RegistroMenstrual = {
+      ...registroExistente,
+      fecha_inicio: cambios.fecha_inicio,
+      impacto_percibido: cambios.impacto_percibido,
+      comentario: cambios.comentario ?? null,
+      nota_ajuste: cambios.nota_ajuste ?? null,
+      accion_ajuste: cambios.accion_ajuste !== undefined ? cambios.accion_ajuste : registroExistente.accion_ajuste,
+      fecha_decision: cambios.fecha_decision !== undefined ? cambios.fecha_decision : registroExistente.fecha_decision
+    }
+
+    const existentes = await db.registro_menstrual.toArray()
+    const validacion = validarRegistroMenstrual(registroParcial, existentes)
+    if (!validacion.valid) {
+      throw new Error(validacion.errors.join('. '))
+    }
+
+    const ahora = new Date().toISOString()
+    const registroActualizado: RegistroMenstrual = {
+      ...registroParcial,
+      actualizado_en: ahora,
+      creado_en: registroExistente.creado_en
+    }
+
+    await db.registro_menstrual.put(registroActualizado)
+
+    await sincronizarAlertaMenstrual(registroActualizado.id_jugadora, set)
+
+    const todosRegistros = await db.registro_menstrual.toArray()
+    todosRegistros.sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio))
+    set({ registros_menstruales: todosRegistros })
+  },
+
+  deleteRegistroMenstrual: async (id) => {
+    const registro = await db.registro_menstrual.get(id)
+    if (!registro) return
+    await db.registro_menstrual.delete(id)
+
+    await sincronizarAlertaMenstrual(registro.id_jugadora, set)
+
+    const todosRegistros = await db.registro_menstrual.toArray()
+    todosRegistros.sort((a, b) => b.fecha_inicio.localeCompare(a.fecha_inicio))
+    set({ registros_menstruales: todosRegistros })
+  },
+
+
 
 }))

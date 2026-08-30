@@ -1,9 +1,11 @@
+import { CompetitiveExposureCard } from '@/components/exposure/CompetitiveExposureCard'
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '@/store/store'
 import { parseISO, subDays, addDays, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { construirDecisionDiaria } from '@/domain/dailyDecision/dailyDecisionEngine'
+import { ContextoMenstrualWidget } from '@/components/menstrual/ContextoMenstrualWidget'
 
 export function DailyDecisionPage() {
   const {
@@ -130,6 +132,8 @@ export function DailyDecisionPage() {
         </div>
       </div>
 
+      <ContextoMenstrualWidget />
+
       {/* 3. Banner informativo de regla de ordenación */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-xs text-blue-900 flex items-center gap-2">
         <span className="text-base">ℹ️</span>
@@ -154,7 +158,7 @@ export function DailyDecisionPage() {
                   <th className="py-3 px-4">Wellness ({fechaOperativa})</th>
                   <th className="py-3 px-4">Alertas</th>
                   <th className="py-3 px-4">Último CMJ registrado</th>
-                  <th className="py-3 px-4">Carga sRPE (Últimos 7 días)</th>
+                  <th className="py-3 px-4">Carga y Exposición (7d)</th>
                   <th className="py-3 px-4 text-right">Acción</th>
                 </tr>
               </thead>
@@ -256,20 +260,27 @@ export function DailyDecisionPage() {
                       )}
                     </td>
 
-                    {/* Carga sRPE 7 días */}
+                    {/* Carga sRPE 7 días y Exposición */}
                     <td className="py-3 px-4">
-                      {j.carga7d ? (
-                        <div className="space-y-0.5">
-                          <span className="font-semibold text-surface-900">
-                            {j.carga7d.cargaAcumulada7d} UA
-                          </span>
-                          <span className="text-[10px] text-surface-500 block">
-                            {j.carga7d.numSesiones} sesión(es) (última: {j.carga7d.ultimaSesionFecha || 'N/A'})
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-surface-400 italic">sin registro</span>
-                      )}
+                      <div className="space-y-1.5">
+                        {j.carga7d ? (
+                          <div className="space-y-0.5">
+                            <span className="font-semibold text-surface-900">
+                              Carga: {j.carga7d.cargaAcumulada7d} UA
+                            </span>
+                            <span className="text-[10px] text-surface-500 block">
+                              {j.carga7d.numSesiones} sesión(es) (última: {j.carga7d.ultimaSesionFecha || 'N/A'})
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-surface-400 italic block">Sin carga sRPE</span>
+                        )}
+
+                        {(() => {
+                          const rpeJug = rpe_partido.filter(r => r.id_jugadora === j.id_jugadora)
+                          return <CompetitiveExposureCard registros={rpeJug} fechaCorteISO={fechaOperativa} modo="compacto" />
+                          })()}
+                      </div>
                     </td>
 
                     {/* Acción */}

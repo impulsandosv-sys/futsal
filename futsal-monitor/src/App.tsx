@@ -7,11 +7,13 @@ import { ROUTES } from '@/constants/routes'
 
 import { LoginPage } from '@/pages/LoginPage'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { DataQualityPage } from '@/pages/DataQualityPage'
 import { PlayersPage } from '@/pages/PlayersPage'
 import { PlayerProfilePage } from '@/pages/PlayerProfilePage'
 import { WellnessPage } from '@/pages/WellnessPage'
 import { SessionsPage } from '@/pages/SessionsPage'
 import { MatchesPage } from '@/pages/MatchesPage'
+import { CompetitiveLoadPage } from '@/pages/CompetitiveLoadPage'
 import { InjuriesPage } from '@/pages/InjuriesPage'
 import { TestsPage } from '@/pages/TestsPage'
 import { StrengthPage } from '@/pages/StrengthPage'
@@ -23,6 +25,7 @@ import { CMJPage } from '@/pages/CMJPage'
 import { FollowUpDashboardPage } from '@/pages/FollowUpDashboardPage'
 import { GovernancePage } from '@/pages/GovernancePage'
 import { DailyDecisionPage } from '@/pages/DailyDecisionPage'
+import { SeguimientoMenstrualPage } from '@/pages/SeguimientoMenstrualPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useStore((s) => s.isAuthenticated)
@@ -41,11 +44,13 @@ const SuspenseWrapper = ({ children }: { children: React.ReactNode }) => (
 
 const routes = [
   { path: ROUTES.DASHBOARD, Component: DashboardPage },
+  { path: ROUTES.CALIDAD_DATOS, Component: DataQualityPage },
   { path: ROUTES.JUGADORAS, Component: PlayersPage },
   { path: ROUTES.JUGADORA_PROFILE, Component: PlayerProfilePage },
   { path: ROUTES.WELLNESS, Component: WellnessPage },
   { path: ROUTES.SESIONES, Component: SessionsPage },
   { path: ROUTES.PARTIDOS, Component: MatchesPage },
+  { path: ROUTES.CARGA_COMPETITIVA, Component: CompetitiveLoadPage },
   { path: ROUTES.LESIONES, Component: InjuriesPage },
   { path: ROUTES.TESTS, Component: TestsPage },
   { path: ROUTES.FUERZA, Component: StrengthPage },
@@ -57,6 +62,7 @@ const routes = [
   { path: ROUTES.CMJ, Component: CMJPage },
   { path: ROUTES.SEGUIMIENTO, Component: FollowUpDashboardPage },
   { path: ROUTES.TEMPORADAS, Component: GovernancePage },
+  { path: ROUTES.SEGUIMIENTO_MENSTRUAL, Component: SeguimientoMenstrualPage },
 ]
 
 function App() {

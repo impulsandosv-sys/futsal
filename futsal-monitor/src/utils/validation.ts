@@ -64,9 +64,16 @@ export function validateJugadora(j: Jugadora, existingIds: string[], editingId?:
 
 export function validateSesion(s: Sesion): ValidationError[] {
   const errors: ValidationError[] = []
-  if (!s.id_sesion.trim()) errors.push({ field: 'id_sesion', message: 'El ID de sesión es obligatorio' })
-  if (!s.fecha) errors.push({ field: 'fecha', message: 'La fecha es obligatoria' })
-  
+  if (!s.id_sesion || !s.id_sesion.trim()) {
+    errors.push({ field: 'id_sesion', message: 'El ID de la sesión es obligatorio' })
+  }
+  if (!s.fecha) {
+    errors.push({ field: 'fecha', message: 'La fecha de la sesión es obligatoria' })
+  }
+  if (s.tipo_sesion === 'Partido' && (!s.id_partido || !s.id_partido.trim())) {
+    errors.push({ field: 'id_partido', message: 'Una sesión de tipo Partido requiere un partido vinculado' })
+  }
+
   const hasPlanificada = s.duracion_planificada_min !== undefined && s.duracion_planificada_min !== null
   const hasReal = s.duracion_real_grupal_min !== undefined && s.duracion_real_grupal_min !== null
   const hasHistorica = s.duracion_min !== undefined && s.duracion_min !== null
@@ -110,21 +117,91 @@ export function validateTest(t: TestFisico): ValidationError[] {
   return errors
 }
 
+export function inferirParticipacionPartido(r: RPE_Partido): void {
+  if (r.participacion) return // If explicitly defined, don't infer
+
+  const hasMins = r.minutos_jugados !== undefined && r.minutos_jugados !== null && r.minutos_jugados !== '' as any
+  if (!hasMins) return // Cannot infer from null
+  if (r.minutos_jugados === 0) return // Cannot infer from 0
+
+  if (r.minutos_jugados === 40) {
+    r.participacion_inferida = true
+    r.participacion = 'completa'
+  } else if (r.minutos_jugados! >= 1 && r.minutos_jugados! <= 39) {
+    r.participacion_inferida = true
+    r.participacion = 'parcial'
+  }
+}
+
 export function validateRPE_Partido(r: RPE_Partido): ValidationError[] {
   const errors: ValidationError[] = []
   if (!r.id_partido) errors.push({ field: 'id_partido', message: 'Selecciona un partido' })
   if (!r.id_jugadora) errors.push({ field: 'id_jugadora', message: 'Selecciona una jugadora' })
   
-  if (r.rpe !== undefined && r.rpe !== null && r.rpe !== '' as any) {
-    const rpeErr = validateRange(r.rpe, 1, 10, 'RPE')
-    if (rpeErr) errors.push(rpeErr)
-  }
-  
-  if (r.minutos_jugados !== undefined && r.minutos_jugados !== null && r.minutos_jugados !== '' as any) {
-    if (r.minutos_jugados < 0 || r.minutos_jugados > 40) {
-      errors.push({ field: 'minutos_jugados', message: 'Minutos fuera de rango (0-40)' })
+  const hasRPE = r.rpe !== undefined && r.rpe !== null && r.rpe !== '' as any
+  const hasMins = r.minutos_jugados !== undefined && r.minutos_jugados !== null && r.minutos_jugados !== '' as any
+
+  if (r.participacion) {
+    switch (r.participacion) {
+      case 'no_convocada':
+      case 'convocada_sin_minutos':
+        if (!hasMins || r.minutos_jugados !== 0) {
+          errors.push({ field: 'minutos_jugados', message: 'Los minutos deben ser exactamente 0 para este estado' })
+        }
+        if (hasRPE) {
+          errors.push({ field: 'rpe', message: 'El RPE no aplica para este estado' })
+        }
+        break
+      case 'completa':
+        if (!hasMins || r.minutos_jugados !== 40) {
+          errors.push({ field: 'minutos_jugados', message: 'Minutos deben ser exactamente 40' })
+        }
+        if (hasRPE) {
+          const rpeErr = validateRange(r.rpe!, 1, 10, 'RPE')
+          if (rpeErr) errors.push(rpeErr)
+        }
+        break
+      case 'parcial':
+        if (!hasMins || r.minutos_jugados! < 1 || r.minutos_jugados! > 39) {
+          errors.push({ field: 'minutos_jugados', message: 'Minutos deben estar entre 1 y 39' })
+        }
+        if (hasRPE) {
+          const rpeErr = validateRange(r.rpe!, 1, 10, 'RPE')
+          if (rpeErr) errors.push(rpeErr)
+        }
+        break
+      case 'modificada':
+        if (!hasMins || r.minutos_jugados! < 0 || r.minutos_jugados! > 39) {
+          errors.push({ field: 'minutos_jugados', message: 'Minutos deben estar entre 0 y 39' })
+        }
+        if (r.minutos_jugados === 0) {
+          if (hasRPE) {
+            errors.push({ field: 'rpe', message: 'RPE debe ser nulo o estar ausente si hay 0 minutos' })
+          }
+        } else if (r.minutos_jugados! > 0) {
+          if (hasRPE) {
+            const rpeErr = validateRange(r.rpe!, 1, 10, 'RPE')
+            if (rpeErr) errors.push(rpeErr)
+          }
+        }
+        if (!r.motivo_participacion_reducida?.trim()) {
+          errors.push({ field: 'motivo_participacion_reducida', message: 'Motivo obligatorio' })
+        }
+        break
+    }
+  } else {
+    // Legacy support for records without `participacion`
+    if (hasRPE) {
+      const rpeErr = validateRange(r.rpe!, 1, 10, 'RPE')
+      if (rpeErr) errors.push(rpeErr)
+    }
+    if (hasMins) {
+      if (r.minutos_jugados! < 0 || r.minutos_jugados! > 40) {
+        errors.push({ field: 'minutos_jugados', message: 'Minutos fuera de rango (0-40)' })
+      }
     }
   }
+
   return errors
 }
 

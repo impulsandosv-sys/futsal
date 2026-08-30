@@ -18,11 +18,24 @@ import {
   crearInformeValidacion,
   calcularVentanaPropagacion,
   confirmarYEjecutarImportacion,
-  obtenerContextoValidacionWellness
+  obtenerContextoValidacionWellness,
+  detectarMapeoWellnessSemanal,
+  detectarTipoCuestionario,
+  type TipoCuestionarioWellness
 } from '@/utils/importEngine'
 import { getWeekId } from '@/domain/dates/dates'
+import type { TipoIncidenciaImportacion } from '@/types'
 import { recalcularReadinessJugadora } from '@/services/readiness'
 import { recalcularResumenSemanal } from '@/services/resumenSemanal'
+
+const INCIDENCIAS_BLOQUEANTES: TipoIncidenciaImportacion[] = [
+  'jugadora_no_resuelta',
+  'alias_ambiguo',
+  'fecha_invalida',
+  'formato_invalido',
+  'temporada_no_activa',
+  'conflicto_interno'
+]
 
 export function ImportPage() {
   const {
@@ -31,7 +44,8 @@ export function ImportPage() {
     plantillas_importacion,
     addPlantillaImportacion,
     evaluarSeguimientoJugadora,
-    loadAll
+    loadAll,
+    jugadoras
   } = useStore()
 
   // States for Backup
@@ -53,32 +67,73 @@ export function ImportPage() {
   const [selectedSheet, setSelectedSheet] = useState<string>('')
   const [fileHeaders, setFileHeaders] = useState<string[]>([])
   const [parsedRawRows, setParsedRawRows] = useState<RawImportRow[]>([])
+  const [tipoCuestionario, setTipoCuestionario] = useState<TipoCuestionarioWellness | null>(null)
+  const [cuestionarioError, setCuestionarioError] = useState<string | null>(null)
 
   // Step 2: Mappings and Mapped Preview
   const [selectedPlantillaId, setSelectedPlantillaId] = useState<number | string>('default')
   const [activeMappings, setActiveMappings] = useState<ColumnMapping[]>([])
   const [newTemplateName, setNewTemplateName] = useState<string>('')
   const [previewData, setPreviewData] = useState<PreviewRow[]>([])
+  const [omittedRows, setOmittedRows] = useState<Set<number>>(new Set())
+  const [editingRowId, setEditingRowId] = useState<number | null>(null)
+  const [draftEditData, setDraftEditData] = useState<Record<string, any> | null>(null)
+  const [aliasesToSave, setAliasesToSave] = useState<Record<number, { filaOriginal: number, alias_origen: string, id_jugadora: string }>>({})
 
   // Derivación pura del resumen de previsualización (React State Pure Rule)
   const previewSummary = useMemo(() => {
     let nuevos = 0, actualizaciones = 0, duplicados = 0, errores = 0, omitidos = 0
+    let resIdExacto = 0, resAliasGuardado = 0, resCoincidenciaNombre = 0
+    let aliasesNuevosCount = Object.keys(aliasesToSave).length
+
+    // Quality Counters
+    let duplicadosExistentes = 0
+    let duplicadosInternosIdenticos = 0
+    let omitidasManual = 0
+    let erroresFormato = 0
+    let pendientesIdentidad = 0
+    let aliasAmbiguos = 0
+    let conflictosInternos = 0
+
     previewData.forEach(r => {
+      // Legacy buckets for general logic
       if (r.estado === 'NUEVO') nuevos++
       else if (r.estado === 'ACTUALIZACION_POSIBLE') actualizaciones++
       else if (r.estado === 'DUPLICADO_IDENTICO') duplicados++
       else if (r.estado === 'ERROR') errores++
       else if (r.estado === 'OMITIDA') omitidos++
+
+      // Categorias separadas basadas en tipo_incidencia
+      const tipo = r.tipo_incidencia || 'sin_incidencia'
+
+      if (tipo === 'duplicado_existente') duplicadosExistentes++
+      if (tipo === 'duplicado_interno_identico') duplicadosInternosIdenticos++
+      if (tipo === 'omitida_manual') omitidasManual++
+      if (tipo === 'formato_invalido' || tipo === 'fecha_invalida' || tipo === 'temporada_no_activa') erroresFormato++
+      if (tipo === 'jugadora_no_resuelta') pendientesIdentidad++
+      if (tipo === 'alias_ambiguo') aliasAmbiguos++
+      if (tipo === 'conflicto_interno') conflictosInternos++
+
+      // Resolved identity counters
+      if (r.metodo_resolucion_identidad === 'ID exacto') resIdExacto++
+      if (r.metodo_resolucion_identidad === 'Alias activo') resAliasGuardado++
+      if (r.metodo_resolucion_identidad === 'Nombre normalizado') resCoincidenciaNombre++
     })
+
+    const isBlocked = previewData.some(r => r.estado !== 'OMITIDA' && r.tipo_incidencia && INCIDENCIAS_BLOQUEANTES.includes(r.tipo_incidencia))
+
     return {
       total: previewData.length,
-      nuevos,
-      actualizaciones,
-      duplicados,
-      errores,
-      omitidos
+      nuevos, actualizaciones, duplicados, errores, omitidos,
+      resIdExacto, resAliasGuardado, resCoincidenciaNombre,
+      aliasesNuevosCount,
+
+      // Quality
+      duplicadosExistentes, duplicadosInternosIdenticos, omitidasManual,
+      erroresFormato, pendientesIdentidad, aliasAmbiguos, conflictosInternos, isBlocked
     }
-  }, [previewData])
+  }, [previewData, aliasesToSave])
+
 
   // Table pagination and filters
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
@@ -112,19 +167,29 @@ export function ImportPage() {
     }
   }, [plantillas_importacion, selectedPlantillaId])
 
+  const prevIsBlocked = useRef<boolean>(false)
+
+  useEffect(() => {
+    if (!prevIsBlocked.current && previewSummary.isBlocked) {
+      setStatusFilter('ERROR')
+    } else if (prevIsBlocked.current && !previewSummary.isBlocked) {
+      setStatusFilter('ALL')
+    }
+    prevIsBlocked.current = previewSummary.isBlocked
+  }, [previewSummary.isBlocked])
+
   // Recalculate preview directly from Dexie jugadoras when rows or mappings change
   useEffect(() => {
     let isMounted = true
     if (parsedRawRows.length > 0 && activeMappings.length > 0) {
-      obtenerContextoValidacionWellness().then(context => {
+      obtenerContextoValidacionWellness(undefined, tipoCuestionario || undefined).then(context => {
         if (!isMounted) return
-        const summary = construirVistaPrevia(parsedRawRows, activeMappings, wellness, context.jugadorasMap || {}, context)
+        const summary = construirVistaPrevia(parsedRawRows, activeMappings, wellness, context.jugadorasMap || {}, context, omittedRows)
         setPreviewData(summary.rows)
-        setCurrentPage(1)
       })
     }
     return () => { isMounted = false }
-  }, [parsedRawRows, activeMappings, wellness])
+  }, [parsedRawRows, activeMappings, wellness, omittedRows, tipoCuestionario])
 
   // --- Handlers Backup ---
   const handleCreateBackup = async () => {
@@ -258,21 +323,43 @@ export function ImportPage() {
 
   const readSheetData = (wb: any, sheetName: string, XLSX: any) => {
     const ws = wb.Sheets[sheetName]
-    const headersRaw = XLSX.utils.sheet_to_json(ws, { header: 1 }) as string[][]
-    if (headersRaw.length === 0) {
-      alert('La hoja de cálculo está vacía.')
+    const headersRaw = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][]
+
+    const esFilaConContenido = (row: unknown[]) =>
+      row.some((cell) => String(cell ?? '').trim() !== '')
+
+    const indiceCabecera = headersRaw.findIndex(esFilaConContenido)
+    if (indiceCabecera === -1) {
+      alert('Error: La hoja de cálculo está completamente vacía o no contiene cabeceras detectables.')
       return
     }
-    const headers = headersRaw[0] as string[]
+
+    const headers = (headersRaw[indiceCabecera] as unknown[]).map(h => String(h ?? '').trim())
     setFileHeaders(headers)
+    setCuestionarioError(null)
+    setTipoCuestionario(null)
 
-    const rawRows = XLSX.utils.sheet_to_json(ws, { defval: null }) as RawImportRow[]
-    setParsedRawRows(rawRows)
+    try {
+      const tipo = detectarTipoCuestionario(headers)
+      setTipoCuestionario(tipo)
+      const rawRows = XLSX.utils.sheet_to_json(ws, { range: indiceCabecera, defval: null }) as RawImportRow[]
+      setParsedRawRows(rawRows)
 
-    // Detect automatic mapping
-    const auto = detectarMapeoWellness(headers)
-    setActiveMappings(auto)
-    setSelectedPlantillaId('default')
+      if (tipo === 'DIARIO') {
+        const auto = detectarMapeoWellness(headers)
+        setActiveMappings(auto)
+        setSelectedPlantillaId('default')
+      } else if (tipo === 'SEMANAL') {
+        const auto = detectarMapeoWellnessSemanal(headers)
+        setActiveMappings(auto)
+        setSelectedPlantillaId('default')
+      } else {
+        setActiveMappings([])
+      }
+    } catch (err: any) {
+      setCuestionarioError(err.message)
+      setParsedRawRows([])
+    }
   }
 
   const resetFileState = () => {
@@ -281,6 +368,9 @@ export function ImportPage() {
     setSelectedSheet('')
     setFileHeaders([])
     setParsedRawRows([])
+    setTipoCuestionario(null)
+    setCuestionarioError(null)
+    setAliasesToSave({})
     if (importFileRef.current) importFileRef.current.value = ''
   }
 
@@ -365,22 +455,107 @@ export function ImportPage() {
   }
 
   const handleExcludeRow = (filaIndex: number) => {
-    setPreviewData(prevRows => {
-      return prevRows.map(r => {
-        if (r.filaOriginal === filaIndex) {
-          const isOmitida = r.estado === 'OMITIDA'
-          const prevEstado = (r as any).prevEstado || 'NUEVO'
-          const newEstado = isOmitida ? prevEstado : 'OMITIDA'
-          return {
-            ...r,
-            prevEstado: isOmitida ? undefined : r.estado,
-            estado: newEstado,
-            mensaje: newEstado === 'OMITIDA' ? 'Excluido manualmente por el usuario' : 'Habilitado de nuevo'
-          }
-        }
-        return r
-      })
+    setOmittedRows(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(filaIndex)) {
+        newSet.delete(filaIndex)
+      } else {
+        newSet.add(filaIndex)
+      }
+      return newSet
     })
+  }
+
+  const handleEditRow = (row: PreviewRow) => {
+    setEditingRowId(row.filaOriginal)
+    const aliasTemporalExistente = aliasesToSave[row.filaOriginal as number]
+    setDraftEditData({
+      id_jugadora: row.id_jugadora,
+      alias_origen_real: aliasTemporalExistente?.alias_origen ?? row.alias_origen,
+      recordar_alias: aliasTemporalExistente ? true : (row.estado === 'ERROR' || row.estado === 'ACTUALIZACION_POSIBLE'),
+      fecha: row.fecha,
+      calidad_sueno: row.calidad_sueno ?? '',
+      fatiga: row.fatiga ?? '',
+      dolor_muscular: row.dolor_muscular ?? '',
+      estres: row.estres ?? '',
+      estado_animo: row.estado_animo ?? '',
+      dolor_especifico: row.dolor_especifico ?? '',
+      comentario_sesion: row.comentario_sesion ?? '',
+      recuperacion_semana: row.recuperacion_semana ?? '',
+      sueno_semana: row.sueno_semana ?? '',
+      estres_fuera: row.estres_fuera ?? '',
+      energia_semana: row.energia_semana ?? '',
+      animo_semana: row.animo_semana ?? '',
+      preparada_semana: row.preparada_semana ?? '',
+      sintomas_menstruales: row.sintomas_menstruales ?? '',
+      dolor_sn: row.dolor_sn,
+      dolor_texto_semana: row.dolor_texto_semana ?? '',
+      actividad_sn: row.actividad_sn,
+      actividad_texto_semana: row.actividad_texto_semana ?? ''
+    })
+  }
+
+  const handleCancelEdit = () => {
+    setEditingRowId(null)
+    setDraftEditData(null)
+  }
+
+  const handleSaveRow = (filaOriginal: number) => {
+    if (!draftEditData) return
+
+    const originalRow = previewData.find(p => p.filaOriginal === filaOriginal)
+    const realAlias = draftEditData.alias_origen_real || originalRow?.alias_origen
+
+    if (realAlias) {
+      if (draftEditData.recordar_alias && draftEditData.id_jugadora) {
+        setAliasesToSave(prev => ({
+          ...prev,
+          [filaOriginal]: {
+            filaOriginal,
+            alias_origen: realAlias,
+            id_jugadora: draftEditData.id_jugadora
+          }
+        }))
+      } else {
+        setAliasesToSave(prev => {
+          const newState = { ...prev }
+          delete newState[filaOriginal]
+          return newState
+        })
+      }
+    }
+
+    setParsedRawRows(prev => {
+      const newRows = [...prev]
+      const idx = filaOriginal - 2
+      const targetRow = { ...newRows[idx] }
+
+      activeMappings.forEach(m => {
+        if (m.excelHeader && draftEditData[m.internalField] !== undefined) {
+          targetRow[m.excelHeader] = draftEditData[m.internalField]
+        }
+      })
+
+      newRows[idx] = targetRow
+      return newRows
+    })
+    setEditingRowId(null)
+    setDraftEditData(null)
+  }
+
+  const handleJumpToNextError = () => {
+    const errorIndex = filteredPreview.findIndex((r, idx) => r.estado !== 'OMITIDA' && r.tipo_incidencia && INCIDENCIAS_BLOQUEANTES.includes(r.tipo_incidencia) && idx >= currentPage * pageSize)
+    if (errorIndex !== -1) {
+      const page = Math.floor(errorIndex / pageSize) + 1
+      setCurrentPage(page)
+    } else {
+      // Si no hay más en páginas siguientes, buscar desde el principio
+      const firstError = filteredPreview.findIndex(r => r.estado !== 'OMITIDA' && r.tipo_incidencia && INCIDENCIAS_BLOQUEANTES.includes(r.tipo_incidencia))
+      if (firstError !== -1) {
+        const page = Math.floor(firstError / pageSize) + 1
+        setCurrentPage(page)
+      }
+    }
   }
 
   const handleDownloadValidationReport = () => {
@@ -411,6 +586,7 @@ export function ImportPage() {
     setRecalcError(null)
 
     await confirmarYEjecutarImportacion({
+      tipoCuestionario: tipoCuestionario as 'DIARIO' | 'SEMANAL',
       downloadedBackupName: downloadedImportBackupName,
       userConfirmedBackup: confirmImportBackup,
       previewData,
@@ -418,6 +594,7 @@ export function ImportPage() {
       filename: importFile?.name || 'forms.csv',
       sheetName: selectedSheet,
       mappingName: selectedPlantillaId === 'default' ? 'Google Forms Wellness 2026-27' : (plantillas_importacion.find(p => p.id === Number(selectedPlantillaId))?.nombre || 'Personalizada'),
+      aliasesToSave: Object.values(aliasesToSave).map(a => ({ alias_origen: a.alias_origen, id_jugadora: a.id_jugadora })),
       onStart: () => {
         setImporting(true)
       },
@@ -442,7 +619,7 @@ export function ImportPage() {
             await evaluarSeguimientoJugadora(jId)
           }
         } catch (err: any) {
-          console.error('Error en evaluación pos-commit de alertas:', err)
+          console.error('Error post-import evaluation:', err)
         } finally {
           setImporting(false)
         }
@@ -514,7 +691,7 @@ export function ImportPage() {
       await loadAll()
       setRecalcProgress(100)
     } catch (err: any) {
-      console.error(err)
+
       setRecalcError(err.message || 'Error al recalcular indicadores derivados')
       // Note: wellness records remain stored. Historial shows derivadosPendientes = true.
     } finally {
@@ -574,6 +751,9 @@ export function ImportPage() {
   // Preview filtering and pagination
   const filteredPreview = previewData.filter(r => {
     if (statusFilter === 'ALL') return true
+    if (statusFilter === 'ERROR') {
+      return r.estado !== 'OMITIDA' && r.tipo_incidencia && INCIDENCIAS_BLOQUEANTES.includes(r.tipo_incidencia)
+    }
     return r.estado === statusFilter
   })
 
@@ -583,8 +763,9 @@ export function ImportPage() {
   // Block Next in Step 2 if mapping of essential keys is missing, no valid rows, or unomitted ERROR rows exist
   const idMapped = activeMappings.find(m => m.internalField === 'id_jugadora')?.excelHeader
   const dateMapped = activeMappings.find(m => m.internalField === 'fecha')?.excelHeader
-  const hayErroresNoOmitidos = previewData.some(r => r.estado === 'ERROR')
-  const cannotGoToStep3 = !idMapped || !dateMapped || (previewSummary.nuevos + previewSummary.actualizaciones === 0) || hayErroresNoOmitidos
+
+  const cannotGoToStep3 = !idMapped || !dateMapped || (previewSummary.nuevos + previewSummary.actualizaciones === 0) || previewSummary.isBlocked
+
 
   return (
     <div className="container mx-auto p-4 max-w-6xl space-y-6">
@@ -675,10 +856,20 @@ export function ImportPage() {
                 <div className="bg-surface-50 p-4 rounded border border-surface-200 text-xs space-y-3">
                   <div>
                     <span className="font-bold text-surface-750 block">Tipo de importación:</span>
-                    <select disabled className="w-full text-xs border border-surface-300 rounded p-1.5 bg-surface-100 text-surface-500 mt-1 cursor-not-allowed">
-                      <option value="wellness">Wellness Diario</option>
-                    </select>
-                    <span className="text-[10px] text-surface-450 mt-1 block">Otras opciones (GPS, sRPE, menstrual) bloqueadas para fases futuras.</span>
+                    {cuestionarioError ? (
+                      <div className="mt-2 p-2 bg-red-50 border border-red-200 text-red-700 rounded text-xs font-semibold">
+                        {cuestionarioError}
+                      </div>
+                    ) : tipoCuestionario ? (
+                      <select disabled className="w-full text-xs border border-green-300 rounded p-1.5 bg-green-50 text-green-700 mt-1 cursor-not-allowed font-semibold">
+                        <option>Wellness {tipoCuestionario === 'DIARIO' ? 'Diario' : 'Semanal'}</option>
+                      </select>
+                    ) : (
+                      <select disabled className="w-full text-xs border border-surface-300 rounded p-1.5 bg-surface-100 text-surface-500 mt-1 cursor-not-allowed">
+                        <option>Pendiente de archivo...</option>
+                      </select>
+                    )}
+                    <span className="text-[10px] text-surface-450 mt-1 block">La detección (Diario/Semanal) se realiza automáticamente a partir de las cabeceras.</span>
                   </div>
                 </div>
               </div>
@@ -686,8 +877,10 @@ export function ImportPage() {
               <div className="flex justify-end gap-3 pt-4 border-t border-surface-150">
                 <button
                   type="button"
-                  disabled={!importFile || parsedRawRows.length === 0}
-                  onClick={() => setStep(2)}
+                  disabled={!importFile || parsedRawRows.length === 0 || !!cuestionarioError}
+                  onClick={() => {
+                    setStep(2)
+                  }}
                   className="bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold py-2 px-4 rounded shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Siguiente &rarr;
@@ -762,33 +955,131 @@ export function ImportPage() {
                 </div>
               </div>
 
-              {/* VALIDATION STATUS SUMMARY */}
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-                <div className="bg-surface-50 border border-surface-200 p-3 rounded text-center">
-                  <span className="text-[10px] text-surface-500 uppercase block">Total Filas</span>
-                  <span data-testid="preview-count-total" className="text-xl font-bold text-surface-800">{previewSummary.total}</span>
+              {/* PANEL DE CALIDAD (PR-3) */}
+              <div className="bg-white border border-surface-200 rounded-lg shadow-sm overflow-hidden mb-4">
+                <div className="bg-surface-50 px-4 py-3 border-b border-surface-200 flex justify-between items-center">
+                  <h3 className="text-sm font-bold text-surface-800">Panel de calidad de importación</h3>
                 </div>
-                <div className="bg-green-50 border border-green-200 p-3 rounded text-center">
-                  <span className="text-[10px] text-green-700 uppercase block">Nuevos</span>
-                  <span data-testid="preview-count-nuevos" className="text-xl font-bold text-green-700">{previewSummary.nuevos}</span>
+
+                {/* Sección 1: Estado de filas */}
+                <div className="p-4 border-b border-surface-200">
+                  <div className="text-[10px] font-bold text-surface-600 uppercase mb-3 pb-1 border-b border-surface-150">
+                    Estado de Filas
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div className="flex flex-col p-2.5 bg-surface-50 rounded border border-surface-200">
+                      <span className="text-[10px] text-surface-600 uppercase font-bold">Total Filas</span>
+                      <span data-testid="preview-count-total" className="text-xl font-bold text-surface-800">{previewSummary.total}</span>
+                    </div>
+                    <div className="flex flex-col p-2.5 bg-green-50/50 rounded border border-green-200">
+                      <span className="text-[10px] text-green-700 uppercase font-bold">Nuevas</span>
+                      <span data-testid="preview-count-nuevos" className="text-xl font-bold text-green-700">{previewSummary.nuevos}</span>
+                    </div>
+                    <div className="flex flex-col p-2.5 bg-amber-50/50 rounded border border-amber-200">
+                      <span className="text-[10px] text-amber-700 uppercase font-bold">Actualizables</span>
+                      <span data-testid="preview-count-actualizaciones" className="text-xl font-bold text-amber-700">{previewSummary.actualizaciones}</span>
+                    </div>
+                    <div className="flex flex-col p-2.5 bg-amber-50/50 rounded border border-amber-200">
+                      <span className="text-[10px] text-amber-700 uppercase font-bold">Omitidas manual</span>
+                      <span data-testid="preview-count-omitidas" className="text-xl font-bold text-amber-700">{previewSummary.omitidasManual}</span>
+                    </div>
+                    <div className="flex flex-col p-2.5 bg-surface-100/50 rounded border border-surface-200">
+                      <span className="text-[10px] text-surface-600 uppercase font-bold">Duplicados existentes</span>
+                      <span data-testid="preview-count-duplicados-existentes" className="text-xl font-bold text-surface-600">{previewSummary.duplicadosExistentes}</span>
+                    </div>
+                    <div className="flex flex-col p-2.5 bg-surface-100/50 rounded border border-surface-200">
+                      <span className="text-[10px] text-surface-600 uppercase font-bold">Duplicados internos</span>
+                      <span data-testid="preview-count-duplicados-internos" className="text-xl font-bold text-surface-600">{previewSummary.duplicadosInternosIdenticos}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="bg-blue-50 border border-blue-200 p-3 rounded text-center">
-                  <span className="text-[10px] text-blue-700 uppercase block">Actualizaciones</span>
-                  <span data-testid="preview-count-actualizaciones" className="text-xl font-bold text-blue-700">{previewSummary.actualizaciones}</span>
-                </div>
-                <div className="bg-surface-100 border border-surface-300 p-3 rounded text-center">
-                  <span className="text-[10px] text-surface-600 uppercase block">Duplicados</span>
-                  <span data-testid="preview-count-duplicados" className="text-xl font-bold text-surface-700">{previewSummary.duplicados}</span>
-                </div>
-                <div className="bg-red-50 border border-red-200 p-3 rounded text-center">
-                  <span className="text-[10px] text-red-700 uppercase block">Errores</span>
-                  <span data-testid="preview-count-errores" className="text-xl font-bold text-red-700">{previewSummary.errores}</span>
-                </div>
-                <div className="bg-amber-50 border border-amber-200 p-3 rounded text-center">
-                  <span className="text-[10px] text-amber-700 uppercase block">Omitidas</span>
-                  <span data-testid="preview-count-omitidas" className="text-xl font-bold text-amber-750">{previewSummary.omitidos}</span>
+
+                {/* Sub-métricas: Identidad e Integridad */}
+                <div className="bg-surface-50 p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Sección 2: Identidad */}
+                  <div className="bg-white p-3.5 rounded border border-surface-200 space-y-2">
+                    <div className="text-[10px] font-bold text-surface-600 uppercase border-b border-surface-200 pb-1">
+                      Identidad
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-surface-700">Resueltas por ID exacto:</span>
+                      <span data-testid="quality-resIdExacto" className="font-bold text-green-700">{previewSummary.resIdExacto}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-surface-700">Resueltas por alias guardado:</span>
+                      <span data-testid="quality-resAliasGuardado" className="font-bold text-green-700">{previewSummary.resAliasGuardado}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-surface-700">Resueltas por coincidencia de nombre:</span>
+                      <span data-testid="quality-resCoincidenciaNombre" className="font-bold text-green-700">{previewSummary.resCoincidenciaNombre}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-red-700 font-medium">Jugadoras no resueltas:</span>
+                      <span data-testid="quality-pendientesIdentidad" className="font-bold text-red-700">{previewSummary.pendientesIdentidad}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-red-700 font-medium">Alias ambiguos:</span>
+                      <span data-testid="quality-aliasAmbiguos" className="font-bold text-red-700">{previewSummary.aliasAmbiguos}</span>
+                    </div>
+                  </div>
+
+                  {/* Sección 3: Integridad */}
+                  <div className="bg-white p-3.5 rounded border border-surface-200 space-y-2">
+                    <div className="text-[10px] font-bold text-surface-600 uppercase border-b border-surface-200 pb-1">
+                      Integridad
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-red-700 font-medium">Errores formato/fecha/temporada:</span>
+                      <span data-testid="quality-erroresFormato" className="font-bold text-red-700">{previewSummary.erroresFormato}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-red-700 font-medium">Conflictos internos:</span>
+                      <span data-testid="quality-conflictosInternos" className="font-bold text-red-700">{previewSummary.conflictosInternos}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-green-700 font-medium">Nuevos aliases a guardar:</span>
+                      <span data-testid="quality-aliasesNuevosCount" className="font-bold text-green-700">{previewSummary.aliasesNuevosCount}</span>
+                    </div>
+                    <div className="flex justify-between text-xs py-0.5 border-t border-surface-100 pt-1">
+                      <span className="text-red-700 font-medium">Total incidencias bloqueantes:</span>
+                      <span data-testid="preview-count-errores" className="font-bold text-red-700">{previewSummary.errores}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
+
+              {cannotGoToStep3 ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 flex items-start gap-3">
+                  <span className="text-red-600 text-lg mt-0.5">⚠️</span>
+                  <div>
+                    <h4 className="text-red-800 font-bold text-sm mb-1">No puedes aplicar la importación todavía:</h4>
+                    <ul className="list-disc pl-4 text-xs text-red-700 space-y-1">
+                      {!idMapped && <li>Falta mapear la columna obligatoria: ID Jugadora.</li>}
+                      {!dateMapped && <li>Falta mapear la columna obligatoria: Fecha.</li>}
+                      {idMapped && dateMapped && previewSummary.nuevos + previewSummary.actualizaciones === 0 && (
+                        <li>No hay filas válidas nuevas ni actualizables para importar.</li>
+                      )}
+                      {previewSummary.pendientesIdentidad > 0 && <li>{previewSummary.pendientesIdentidad} fila(s) requiere(n) asignar jugadora.</li>}
+                      {previewSummary.erroresFormato > 0 && <li>{previewSummary.erroresFormato} fila(s) tiene(n) un formato de fecha o dato inválido.</li>}
+                      {previewSummary.aliasAmbiguos > 0 && <li>{previewSummary.aliasAmbiguos} fila(s) tiene(n) alias ambiguo.</li>}
+                      {previewSummary.conflictosInternos > 0 && <li>{previewSummary.conflictosInternos} conflicto(s) interno(s) dentro del archivo.</li>}
+                    </ul>
+                    <div className="mt-3">
+                      <button
+                        onClick={handleJumpToNextError}
+                        className="bg-white hover:bg-red-100 text-red-700 text-[11px] font-semibold py-1.5 px-3 border border-red-300 rounded shadow-sm"
+                      >
+                        Saltar a la siguiente incidencia &rarr;
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex items-center gap-3">
+                  <span className="text-green-600 text-lg">✅</span>
+                  <div className="text-green-800 font-bold text-sm">Archivo listo para aplicar.</div>
+                </div>
+              )}
 
               {/* INTERACTIVE PREVIEW TABLE */}
               <div className="space-y-3">
@@ -826,12 +1117,28 @@ export function ImportPage() {
                         <th className="p-2 w-24">ID</th>
                         <th className="p-2">Jugadora</th>
                         <th className="p-2 w-24">Fecha</th>
-                        <th className="p-2 w-10 text-center">Sue</th>
-                        <th className="p-2 w-10 text-center">Fat</th>
-                        <th className="p-2 w-10 text-center">Mus</th>
-                        <th className="p-2 w-10 text-center">Est</th>
-                        <th className="p-2 w-10 text-center">Áni</th>
-                        <th className="p-2">Dolor Esp.</th>
+                        {tipoCuestionario === 'SEMANAL' ? (
+                          <>
+                            <th className="p-2 w-8 text-center" title="Recuperación">Rec</th>
+                            <th className="p-2 w-8 text-center" title="Sueño">Sue</th>
+                            <th className="p-2 w-8 text-center" title="Estrés">Est</th>
+                            <th className="p-2 w-8 text-center" title="Energía">Ene</th>
+                            <th className="p-2 w-8 text-center" title="Ánimo">Áni</th>
+                            <th className="p-2 w-8 text-center" title="Preparada">Pre</th>
+                            <th className="p-2 w-10 text-center" title="Dolor">Dolor</th>
+                            <th className="p-2 w-10 text-center" title="Actividad">Act</th>
+                            <th className="p-2" title="Síntomas">Sín</th>
+                          </>
+                        ) : (
+                          <>
+                            <th className="p-2 w-10 text-center">Sue</th>
+                            <th className="p-2 w-10 text-center">Fat</th>
+                            <th className="p-2 w-10 text-center">Mus</th>
+                            <th className="p-2 w-10 text-center">Est</th>
+                            <th className="p-2 w-10 text-center">Áni</th>
+                            <th className="p-2">Dolor Esp.</th>
+                          </>
+                        )}
                         <th className="p-2 w-12 text-center">Omitir</th>
                       </tr>
                     </thead>
@@ -841,41 +1148,188 @@ export function ImportPage() {
                           <td colSpan={12} className="p-4 text-center text-surface-500 italic">No hay registros que coincidan con este filtro.</td>
                         </tr>
                       ) : (
-                        paginatedPreview.map((row, idx) => (
-                          <tr key={idx} className={row.estado === 'ERROR' ? 'bg-red-50/30' : row.estado === 'OMITIDA' ? 'opacity-50 bg-surface-50' : ''}>
-                            <td className="p-2 text-center text-surface-500 font-mono">{row.filaOriginal}</td>
-                            <td className="p-2">
-                              <span className={`text-[9px] font-bold py-0.5 px-2.5 rounded-full ${
-                                row.estado === 'NUEVO' ? 'bg-green-100 text-green-700' :
-                                row.estado === 'ACTUALIZACION_POSIBLE' ? 'bg-blue-100 text-blue-700' :
-                                row.estado === 'DUPLICADO_IDENTICO' ? 'bg-surface-200 text-surface-700' :
-                                row.estado === 'ERROR' ? 'bg-red-100 text-red-700' :
-                                'bg-amber-100 text-amber-700'
-                              }`}>
-                                {row.estado === 'ACTUALIZACION_POSIBLE' ? 'CONFLICTO' : row.estado}
-                              </span>
-                            </td>
-                            <td className="p-2 font-semibold font-mono text-surface-800">{row.id_jugadora}</td>
-                            <td className="p-2 text-surface-800">{row.nombreJugadora}</td>
-                            <td className="p-2 font-mono text-surface-700">{row.fecha}</td>
-                            <td className="p-2 text-center font-semibold">{row.calidad_sueno ?? '-'}</td>
-                            <td className="p-2 text-center font-semibold">{row.fatiga ?? '-'}</td>
-                            <td className="p-2 text-center font-semibold">{row.dolor_muscular ?? '-'}</td>
-                            <td className="p-2 text-center font-semibold">{row.estres ?? '-'}</td>
-                            <td className="p-2 text-center font-semibold">{row.estado_animo ?? '-'}</td>
-                            <td className="p-2 text-surface-600 truncate max-w-[150px]" title={row.dolor_especifico || ''}>{row.dolor_especifico || <span className="text-surface-300 italic">Ninguno</span>}</td>
-                            <td className="p-2 text-center">
-                              {row.estado !== 'DUPLICADO_IDENTICO' && (
-                                <input
-                                  type="checkbox"
-                                  checked={row.estado === 'OMITIDA'}
-                                  onChange={() => handleExcludeRow(row.filaOriginal)}
-                                  className="rounded border-surface-350 text-primary-600 focus:ring-primary-500 cursor-pointer"
-                                />
+                        paginatedPreview.map((row, idx) => {
+                          const isEditing = editingRowId === row.filaOriginal
+                          return (
+                            <React.Fragment key={idx}>
+                              <tr className={row.estado === 'ERROR' && !isEditing ? 'bg-red-50/30' : row.estado === 'OMITIDA' ? 'opacity-50 bg-surface-50' : ''}>
+                                <td className="p-2 text-center text-surface-500 font-mono">{row.filaOriginal}</td>
+                                <td className="p-2">
+                                  <span className={`text-[9px] font-bold py-0.5 px-2.5 rounded-full ${
+                                    row.estado === 'NUEVO' ? 'bg-green-100 text-green-700' :
+                                    row.estado === 'ACTUALIZACION_POSIBLE' ? 'bg-blue-100 text-blue-700' :
+                                    row.estado === 'DUPLICADO_IDENTICO' ? 'bg-surface-200 text-surface-700' :
+                                    row.estado === 'ERROR' ? 'bg-red-100 text-red-700' :
+                                    'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {row.estado === 'ACTUALIZACION_POSIBLE' ? 'CONFLICTO' : row.estado}
+                                  </span>
+                                </td>
+                                {isEditing && draftEditData ? (
+                                  <>
+                                    <td colSpan={2} className="p-1">
+                                      <select
+                                        value={draftEditData.id_jugadora}
+                                        onChange={e => setDraftEditData({ ...draftEditData, id_jugadora: e.target.value })}
+                                        className="w-full text-xs border border-primary-300 rounded p-1 bg-white focus:outline-none focus:border-primary-500"
+                                      >
+                                        <option value="">[Seleccionar]</option>
+                                        {jugadoras.map(j => (
+                                          <option key={j.id_jugadora} value={j.id_jugadora}>
+                                            {j.id_jugadora} - {j.nombre}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      {(row.estado === 'ERROR' || row.estado === 'ACTUALIZACION_POSIBLE') && draftEditData.id_jugadora && (
+                                        <div className="mt-1 flex items-center gap-1">
+                                          <input
+                                            type="checkbox"
+                                            id={`recordar-${row.filaOriginal}`}
+                                            checked={draftEditData.recordar_alias}
+                                            onChange={e => setDraftEditData({ ...draftEditData, recordar_alias: e.target.checked })}
+                                          />
+                                          <label htmlFor={`recordar-${row.filaOriginal}`} className="text-[9px] text-surface-600 font-medium">Recordar asignación</label>
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td className="p-1">
+                                      <input
+                                        type="date"
+                                        value={draftEditData.fecha}
+                                        onChange={e => setDraftEditData({ ...draftEditData, fecha: e.target.value })}
+                                        className="w-full text-xs border border-primary-300 rounded p-1 bg-white focus:outline-none focus:border-primary-500"
+                                      />
+                                    </td>
+                                    {tipoCuestionario === 'SEMANAL' ? (
+                                      <>
+                                        {['recuperacion_semana', 'sueno_semana', 'estres_fuera', 'energia_semana', 'animo_semana', 'preparada_semana'].map(metric => (
+                                          <td key={metric} className="p-1 text-center">
+                                            <input
+                                              type="number"
+                                              min="1" max="10"
+                                              value={draftEditData[metric]}
+                                              onChange={e => setDraftEditData({ ...draftEditData, [metric]: e.target.value })}
+                                              className="w-8 text-xs border border-primary-300 rounded p-1 text-center bg-white focus:outline-none focus:border-primary-500"
+                                            />
+                                          </td>
+                                        ))}
+                                        <td className="p-1 text-center">
+                                          <select
+                                            value={draftEditData.dolor_sn === true ? 'si' : draftEditData.dolor_sn === false ? 'no' : ''}
+                                            onChange={e => setDraftEditData({ ...draftEditData, dolor_sn: e.target.value === 'si' ? true : e.target.value === 'no' ? false : null })}
+                                            className="w-12 text-xs border border-primary-300 rounded p-1"
+                                          >
+                                            <option value="">-</option><option value="si">Sí</option><option value="no">No</option>
+                                          </select>
+                                          <input type="text" value={draftEditData.dolor_texto_semana} onChange={e => setDraftEditData({ ...draftEditData, dolor_texto_semana: e.target.value })} className="w-full text-[10px] mt-1 border border-primary-300 rounded p-0.5" placeholder="Desc..." />
+                                        </td>
+                                        <td className="p-1 text-center">
+                                          <select
+                                            value={draftEditData.actividad_sn === true ? 'si' : draftEditData.actividad_sn === false ? 'no' : ''}
+                                            onChange={e => setDraftEditData({ ...draftEditData, actividad_sn: e.target.value === 'si' ? true : e.target.value === 'no' ? false : null })}
+                                            className="w-12 text-xs border border-primary-300 rounded p-1"
+                                          >
+                                            <option value="">-</option><option value="si">Sí</option><option value="no">No</option>
+                                          </select>
+                                          <input type="text" value={draftEditData.actividad_texto_semana} onChange={e => setDraftEditData({ ...draftEditData, actividad_texto_semana: e.target.value })} className="w-full text-[10px] mt-1 border border-primary-300 rounded p-0.5" placeholder="Desc..." />
+                                        </td>
+                                        <td className="p-1 text-center">
+                                          <input type="number" min="1" max="10" value={draftEditData.sintomas_menstruales} onChange={e => setDraftEditData({ ...draftEditData, sintomas_menstruales: e.target.value })} className="w-8 text-xs border border-primary-300 rounded p-1 text-center bg-white" placeholder="-" />
+                                        </td>
+                                      </>
+                                    ) : (
+                                      <>
+                                        {['calidad_sueno', 'fatiga', 'dolor_muscular', 'estres', 'estado_animo'].map(metric => (
+                                          <td key={metric} className="p-1 text-center">
+                                            <input
+                                              type="number"
+                                              min="1" max="10"
+                                              value={draftEditData[metric]}
+                                              onChange={e => setDraftEditData({ ...draftEditData, [metric]: e.target.value })}
+                                              className="w-10 text-xs border border-primary-300 rounded p-1 text-center bg-white focus:outline-none focus:border-primary-500"
+                                            />
+                                          </td>
+                                        ))}
+                                        <td className="p-1">
+                                          <input
+                                            type="text"
+                                            value={draftEditData.dolor_especifico}
+                                            onChange={e => setDraftEditData({ ...draftEditData, dolor_especifico: e.target.value })}
+                                            className="w-full text-xs border border-primary-300 rounded p-1 bg-white focus:outline-none focus:border-primary-500"
+                                            placeholder="Dolor..."
+                                          />
+                                        </td>
+                                      </>
+                                    )}
+                                    <td className="p-1 text-center">
+                                      <div className="flex flex-col gap-1">
+                                        <button onClick={() => handleSaveRow(row.filaOriginal)} className="text-[10px] bg-primary-600 text-white font-medium px-2 py-0.5 rounded hover:bg-primary-700">Revalidar</button>
+                                        <button onClick={handleCancelEdit} className="text-[10px] bg-surface-200 text-surface-700 font-medium px-2 py-0.5 rounded hover:bg-surface-300">Cancelar</button>
+                                      </div>
+                                    </td>
+                                  </>
+                                ) : (
+                                  <>
+                                    <td className="p-2 font-semibold font-mono text-surface-800">{row.id_jugadora}</td>
+                                    <td className="p-2 text-surface-800">{row.nombreJugadora}</td>
+                                    <td className="p-2 font-mono text-surface-700">{row.fecha}</td>
+                                    {tipoCuestionario === 'SEMANAL' ? (
+                                      <>
+                                        <td className="p-2 text-center font-semibold">{row.recuperacion_semana ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.sueno_semana ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.estres_fuera ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.energia_semana ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.animo_semana ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.preparada_semana ?? '-'}</td>
+                                        <td className="p-2 text-center">
+                                          <span className="font-semibold">{row.dolor_sn === true ? 'Sí' : row.dolor_sn === false ? 'No' : '-'}</span>
+                                          {row.dolor_texto_semana && <div className="text-[9px] text-surface-500 truncate max-w-[60px]" title={row.dolor_texto_semana}>{row.dolor_texto_semana}</div>}
+                                        </td>
+                                        <td className="p-2 text-center">
+                                          <span className="font-semibold">{row.actividad_sn === true ? 'Sí' : row.actividad_sn === false ? 'No' : '-'}</span>
+                                          {row.actividad_texto_semana && <div className="text-[9px] text-surface-500 truncate max-w-[60px]" title={row.actividad_texto_semana}>{row.actividad_texto_semana}</div>}
+                                        </td>
+                                        <td className="p-2 text-center font-semibold">{row.sintomas_menstruales ?? '-'}</td>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <td className="p-2 text-center font-semibold">{row.calidad_sueno ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.fatiga ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.dolor_muscular ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.estres ?? '-'}</td>
+                                        <td className="p-2 text-center font-semibold">{row.estado_animo ?? '-'}</td>
+                                        <td className="p-2 text-surface-600 truncate max-w-[150px]" title={row.dolor_especifico || ''}>{row.dolor_especifico || <span className="text-surface-300 italic">Ninguno</span>}</td>
+                                      </>
+                                    )}
+                                    <td className="p-2 text-center">
+                                      <div className="flex flex-col items-center gap-1">
+                                        {row.estado !== 'DUPLICADO_IDENTICO' && (
+                                          <input
+                                            type="checkbox"
+                                            checked={row.estado === 'OMITIDA'}
+                                            onChange={() => handleExcludeRow(row.filaOriginal)}
+                                            className="rounded border-surface-350 text-primary-600 focus:ring-primary-500 cursor-pointer mb-1"
+                                            title="Omitir"
+                                          />
+                                        )}
+                                        {!isEditing && (row.estado === 'ERROR' || row.estado === 'ACTUALIZACION_POSIBLE') && (
+                                          <button onClick={() => handleEditRow(row)} className="text-[10px] font-medium text-primary-600 hover:text-primary-800 bg-primary-50 px-2 py-0.5 rounded border border-primary-200">Editar</button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </>
+                                )}
+                              </tr>
+                              {row.estado === 'ERROR' && !isEditing && (
+                                <tr>
+                                  <td colSpan={12} className="p-2 bg-red-50 text-[11px] text-red-700 border-b border-red-100">
+                                    <span className="font-bold">Error:</span> {row.mensaje}
+                                  </td>
+                                </tr>
                               )}
-                            </td>
-                          </tr>
-                        ))
+                            </React.Fragment>
+                          )
+                        })
                       )}
                     </tbody>
                   </table>
@@ -892,7 +1346,7 @@ export function ImportPage() {
                         disabled={currentPage === 1}
                         className="px-2 py-1 text-[10px] font-semibold bg-white border border-surface-300 rounded hover:bg-surface-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        &larr; Anterior
+                        &larr; Pág. anterior
                       </button>
                       <button
                         data-testid="pagination-next"
@@ -900,7 +1354,7 @@ export function ImportPage() {
                         disabled={currentPage === totalPages}
                         className="px-2 py-1 text-[10px] font-semibold bg-white border border-surface-300 rounded hover:bg-surface-50 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        Siguiente &rarr;
+                        Siguiente pág. &rarr;
                       </button>
                     </div>
                   </div>
@@ -908,8 +1362,26 @@ export function ImportPage() {
               </div>
 
               {cannotGoToStep3 && (
-                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded text-xs leading-relaxed">
-                  ⚠️ <strong>Asistente bloqueado:</strong> Asegúrate de asignar las columnas obligatorias (ID Jugadora y Fecha), tener al menos una fila válida ("Nuevos" o "Actualizaciones") y omitir o corregir todas las filas con estado ERROR para continuar.
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded flex justify-between items-center">
+                  <div className="text-amber-800 text-xs leading-relaxed max-w-3xl">
+                    ⚠️ <strong>Asistente bloqueado:</strong>
+  <ul className="list-disc pl-4 mt-1 font-medium">
+    {previewSummary.pendientesIdentidad > 0 && <li>{previewSummary.pendientesIdentidad} fila(s) requieren asignar jugadora.</li>}
+    {previewSummary.erroresFormato > 0 && <li>{previewSummary.erroresFormato} fila(s) contienen fecha u otro formato inválido.</li>}
+    {previewSummary.aliasAmbiguos > 0 && <li>{previewSummary.aliasAmbiguos} fila(s) tienen un alias ambiguo.</li>}
+    {previewSummary.conflictosInternos > 0 && <li>{previewSummary.conflictosInternos} conflicto(s) interno(s) requieren decidir qué registro conservar.</li>}
+    {previewSummary.errores > 0 && previewSummary.pendientesIdentidad === 0 && previewSummary.erroresFormato === 0 && previewSummary.aliasAmbiguos === 0 && previewSummary.conflictosInternos === 0 && <li>{previewSummary.errores} incidencia(s) general(es) bloqueando.</li>}
+  </ul>
+
+                  </div>
+                  {previewSummary.errores > 0 && (
+                    <button
+                      onClick={handleJumpToNextError}
+                      className="bg-white hover:bg-amber-100 text-amber-700 text-[11px] font-semibold py-1.5 px-3 border border-amber-300 rounded shadow-sm whitespace-nowrap"
+                    >
+                      Saltar al siguiente error &rarr;
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -1048,8 +1520,16 @@ export function ImportPage() {
             <div className="space-y-6">
               {importOutcome?.success && (
                 <div className="p-4 bg-green-50 border border-green-200 text-green-800 rounded-lg">
-                  <h3 className="font-bold text-sm">✓ ¡Importación aplicada en la base de datos local!</h3>
-                  <p className="text-xs mt-1">Registros añadidos: <strong>{importOutcome.inserted}</strong> | Actualizados: <strong>{importOutcome.updated}</strong> | Omitidos: {importOutcome.skipped} | Errores: {importOutcome.errors}</p>
+                  <h3 className="font-bold text-sm mb-2">🎉 ¡Importación aplicada en la base de datos local!</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                    <div>Registros añadidos: <strong>{importOutcome.inserted}</strong></div>
+                    <div>Actualizados: <strong>{importOutcome.updated}</strong></div>
+                    <div>Duplicados (ignorados): <strong>{previewSummary.duplicados}</strong></div>
+                    <div>Omitidos manualmente: <strong>{previewSummary.omitidos}</strong></div>
+                    <div className="text-red-700">Errores: <strong>{importOutcome.errors}</strong></div>
+                    <div className="text-green-700">Nuevos Alias guardados: <strong>{importOutcome.nuevos_aliases || 0}</strong></div>
+                    <div className="text-blue-700 col-span-2">Identidades resueltas automáticamente: <strong>{previewSummary.resAliasGuardado + previewSummary.resCoincidenciaNombre}</strong></div>
+                  </div>
                 </div>
               )}
 
@@ -1162,7 +1642,7 @@ export function ImportPage() {
                   <td colSpan={6} className="p-4 text-center text-surface-400 italic">No hay historial de importaciones disponible.</td>
                 </tr>
               ) : (
-                historial_importaciones.map((hist, idx) => (
+                historial_importaciones.slice(0, 10).map((hist, idx) => (
                   <tr key={idx} className="hover:bg-surface-50/50">
                     <td className="p-3 font-mono">{new Date(hist.fechaHora).toLocaleString()}</td>
                     <td className="p-3 font-semibold text-surface-800">

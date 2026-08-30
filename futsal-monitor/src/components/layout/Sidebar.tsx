@@ -3,12 +3,14 @@ import { ROUTES } from '@/constants/routes'
 
 const navItems = [
   { to: ROUTES.DASHBOARD, label: 'Dashboard', icon: '⊞' },
+  { to: ROUTES.CALIDAD_DATOS, label: 'Calidad de Datos', icon: '✓' },
   { to: ROUTES.SEGUIMIENTO, label: 'Panel Hoy', icon: '◈' },
   { to: ROUTES.DECISION_DIARIA, label: 'Decisión diaria', icon: '⚡' },
   { to: ROUTES.JUGADORAS, label: 'Jugadoras', icon: '◉' },
   { to: ROUTES.WELLNESS, label: 'Wellness', icon: '◐' },
   { to: ROUTES.SESIONES, label: 'Sesiones', icon: '◗' },
   { to: ROUTES.PARTIDOS, label: 'Partidos', icon: '◤' },
+  { to: ROUTES.CARGA_COMPETITIVA, label: 'Carga Competitiva', icon: '⚡' },
   { to: ROUTES.LESIONES, label: 'Lesiones', icon: '◕' },
   { to: ROUTES.TESTS, label: 'Tests', icon: '◖' },
   { to: ROUTES.CMJ, label: 'CMJ', icon: '⇡' },
@@ -16,7 +18,8 @@ const navItems = [
   { to: ROUTES.PLANTILLAS_FUERZA, label: 'Plantillas Fuerza', icon: '📋' },
   { to: ROUTES.SEMANAL, label: 'Resumen Semanal', icon: '◍' },
   { to: ROUTES.ALERTAS, label: 'Alertas', icon: '◉' },
-  { to: ROUTES.TEMPORADAS, label: 'Temporadas', icon: '🗓' },
+  { to: ROUTES.SEGUIMIENTO_MENSTRUAL, label: 'Seguimiento Menstrual', icon: '🗓' },
+  { to: ROUTES.TEMPORADAS, label: 'Temporadas', icon: '⚙' },
   { to: ROUTES.IMPORTAR, label: 'Importar', icon: '⇧' },
 ]
 

@@ -76,7 +76,7 @@ const makeRPEPayload = (idPartido: string, jugadoraId: string, fecha?: string, r
   id_partido: idPartido,
   id_jugadora: jugadoraId,
   fecha: fecha || '',
-  rpe_subjetivo: rpe,
+  rpe: rpe,
   minutos_jugados: min,
   carga_total: rpe * min,
 })

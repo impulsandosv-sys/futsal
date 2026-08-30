@@ -4,7 +4,7 @@ import { DataTable, DataRow, DataCell } from '@/components/shared/DataTable'
 import { Modal } from '@/components/shared/Modal'
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal'
 import { registrarCambioAuditoria } from '@/services/auditService'
-import { generarAlertas } from '@/utils/alerts'
+import { generarAlertas, getEstadoEfectivo } from '@/utils/alerts'
 import { useNavigate } from 'react-router-dom'
 import type { Alerta } from '@/types'
 
@@ -47,7 +47,7 @@ export function AlertsPage() {
 
   const handleTriggerStateChange = (alerta: Alerta, nuevoEstado: 'resuelta' | 'descartada') => {
     if (alerta.id !== undefined) {
-      const estadoAnterior = alerta.estado || (alerta.leida ? 'resuelta' : 'abierta')
+      const estadoAnterior = getEstadoEfectivo(alerta)
       setPendingAction({
         id: alerta.id,
         nuevoEstado,
@@ -60,19 +60,24 @@ export function AlertsPage() {
 
   const handleConfirmStateChange = async (motivo: string) => {
     if (pendingAction) {
-      await updateAlertaEstado(pendingAction.id, pendingAction.nuevoEstado)
-      registrarCambioAuditoria({
-        usuario: 'Preparador Físico',
-        entidad: 'alerta',
-        idEntidad: String(pendingAction.id),
-        idJugadora: pendingAction.idJugadora,
-        campoModificado: 'estado',
-        valorAnterior: pendingAction.estadoAnterior,
-        valorNuevo: pendingAction.nuevoEstado,
-        motivo
-      })
-      setConfirmModalOpen(false)
-      setPendingAction(null)
+      try {
+        await updateAlertaEstado(pendingAction.id, pendingAction.nuevoEstado)
+        registrarCambioAuditoria({
+          usuario: 'Preparador Físico',
+          entidad: 'alerta',
+          idEntidad: String(pendingAction.id),
+          idJugadora: pendingAction.idJugadora,
+          campoModificado: 'estado',
+          valorAnterior: pendingAction.estadoAnterior,
+          valorNuevo: pendingAction.nuevoEstado,
+          motivo
+        })
+        setConfirmModalOpen(false)
+        setPendingAction(null)
+      } catch (error) {
+        console.error('Error al actualizar estado de la alerta:', error)
+        alert('Hubo un error al actualizar la alerta. Inténtalo de nuevo.')
+      }
     }
   }
 
@@ -97,7 +102,7 @@ export function AlertsPage() {
     if (selectedAlerta && selectedAlerta.id !== undefined) {
       await registrarAlertaDecision(selectedAlerta.id, responsable, notaDecision)
       // Automatically transition to "en_revision" if it was "abierta"
-      const currentEstado = selectedAlerta.estado || (selectedAlerta.leida ? 'resuelta' : 'abierta')
+      const currentEstado = getEstadoEfectivo(selectedAlerta)
       if (currentEstado === 'abierta') {
         await updateAlertaEstado(selectedAlerta.id, 'en_revision')
       }
@@ -149,7 +154,7 @@ export function AlertsPage() {
 
   // Filter logic
   const filteredAlertas = alertas.filter((a) => {
-    const aEstado = a.estado || (a.leida ? 'resuelta' : 'abierta')
+    const aEstado = getEstadoEfectivo(a)
     const aPrioridad = a.prioridad || a.nivel || 'bajo'
 
     if (filterEstado !== 'todas' && aEstado !== filterEstado) return false
@@ -164,10 +169,11 @@ export function AlertsPage() {
     return true
   })
 
-  // Separate into 3 categories
+  // Separate into categories
   const loadAlerts = filteredAlertas.filter(a => a.tipo === 'wellness_bajo' || a.tipo === 'carga_alta')
   const injuryAlerts = filteredAlertas.filter(a => a.tipo === 'lesion' || a.tipo === 'readaptacion')
   const dataAlerts = filteredAlertas.filter(a => a.tipo === 'datos_faltantes')
+  const menstrualAlerts = filteredAlertas.filter(a => a.tipo === 'MENSTRUACION_PROXIMA_ESTIMADA')
 
   const renderAlertTable = (tableAlertas: Alerta[], emptyMsg: string) => (
     <DataTable
@@ -176,7 +182,7 @@ export function AlertsPage() {
     >
       {tableAlertas.map((a) => {
         const jug = jugadoras.find((j) => j.id_jugadora === a.id_jugadora)
-        const aEstado = a.estado || (a.leida ? 'resuelta' : 'abierta')
+        const aEstado = getEstadoEfectivo(a)
         const aPrioridad = a.prioridad || a.nivel || 'bajo'
         const aFecha = a.fecha_creacion?.slice(0, 10) || a.fecha
 
@@ -234,6 +240,11 @@ export function AlertsPage() {
                 <div className="text-[10px] space-y-1 bg-primary-25 p-1.5 rounded border border-primary-100">
                   {a.nota_decision && <p className="text-surface-700 italic">"{a.nota_decision}"</p>}
                   {a.responsable && <p className="text-surface-500 text-[9px] font-medium">Resp: {a.responsable}</p>}
+                </div>
+              ) : aEstado === 'descartada' ? (
+                <div className="text-[10px] space-y-1 bg-surface-50 p-1.5 rounded border border-surface-200">
+                  <p className="text-surface-700 font-medium">Descartada manualmente</p>
+                  {a.fecha_resolucion && <p className="text-surface-500 text-[9px]">{a.fecha_resolucion}</p>}
                 </div>
               ) : (
                 <span className="text-surface-400 italic text-[10px]">Sin revisar</span>
@@ -346,6 +357,7 @@ export function AlertsPage() {
             <option value="lesion">Lesión</option>
             <option value="readaptacion">Readaptación</option>
             <option value="datos_faltantes">Datos Faltantes</option>
+            <option value="MENSTRUACION_PROXIMA_ESTIMADA">Recordatorio Menstrual Estimado</option>
           </select>
         </div>
 
@@ -416,6 +428,22 @@ export function AlertsPage() {
           </h2>
         </div>
         {renderAlertTable(dataAlerts, 'No hay alertas de calidad o completitud de datos.')}
+      </div>
+
+      {/* Group 4: Contexto Individual y Recordatorios Estimados */}
+      <div className="space-y-2">
+        <div className="border-b border-surface-200 pb-1 flex items-center justify-between">
+          <h2 className="text-xs font-bold text-surface-700 uppercase tracking-wide">
+            4. Contexto Individual y Recordatorios Estimados ({menstrualAlerts.length})
+          </h2>
+          <button
+            onClick={() => navigate('/seguimiento-menstrual')}
+            className="text-[11px] text-primary-600 hover:underline font-medium"
+          >
+            Ir a Seguimiento Menstrual →
+          </button>
+        </div>
+        {renderAlertTable(menstrualAlerts, 'No hay recordatorios menstruales estimados activos.')}
       </div>
 
       {/* Decision Modal */}
@@ -491,15 +519,17 @@ export function AlertsPage() {
       {confirmModalOpen && pendingAction && (
         <ConfirmationModal
           open={confirmModalOpen}
+          requireReason={false}
           onClose={() => {
             setConfirmModalOpen(false)
             setPendingAction(null)
           }}
           onConfirm={handleConfirmStateChange}
+          title={pendingAction.nuevoEstado === 'resuelta' ? 'Resolver alerta' : 'Descartar alerta'}
           entidad="alerta"
           valorAnterior={pendingAction.estadoAnterior}
           valorNuevo={pendingAction.nuevoEstado}
-          descripcion={`Modificación de estado de alerta a ${pendingAction.nuevoEstado.toUpperCase()}. Requiere motivo justificado.`}
+          descripcion={`Modificación de estado de alerta a ${pendingAction.nuevoEstado.toUpperCase()}.`}
         />
       )}
     </div>

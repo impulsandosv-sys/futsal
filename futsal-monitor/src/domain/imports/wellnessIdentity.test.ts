@@ -22,21 +22,21 @@ describe('Dominio T-02A — Identity & Season Validation for Wellness Import', (
     // Configurar alias
     await db.alias_jugadora.put({
       id_jugadora: 'J1',
-      origen: 'google_forms',
+      origen: 'wellness',
       valor: 'GF-001',
       activo: true,
       fecha_alta: '2026-08-01'
     })
     await db.alias_jugadora.put({
       id_jugadora: 'J2',
-      origen: 'google_forms',
+      origen: 'wellness',
       valor: 'GF-002',
       activo: true,
       fecha_alta: '2026-08-01'
     })
     await db.alias_jugadora.put({
       id_jugadora: 'J1',
-      origen: 'google_forms',
+      origen: 'wellness',
       valor: 'GF-INACTIVO',
       activo: false,
       fecha_alta: '2026-08-01',
@@ -66,7 +66,7 @@ describe('Dominio T-02A — Identity & Season Validation for Wellness Import', (
     it('3. Alias inexistente retorna error de ID no reconocido', async () => {
       const res = await resolverIdentidadFilaWellness(db, 'GF-DESCONOCIDO')
       expect(res.exito).toBe(false)
-      expect(res.mensajeError).toContain('ID externo \'GF-DESCONOCIDO\' no reconocido')
+      expect(res.mensajeError).toContain('Jugadora no registrada')
     })
 
     it('4. Alias inactivo retorna error específico', async () => {
@@ -88,7 +88,7 @@ describe('Dominio T-02A — Identity & Season Validation for Wellness Import', (
     it('6. Alias asignado a una jugadora borrada retorna error de existencia', async () => {
       await db.alias_jugadora.put({
         id_jugadora: 'J99',
-        origen: 'google_forms',
+        origen: 'wellness',
         valor: 'GF-FANTASMA',
         activo: true,
         fecha_alta: '2026-08-01'
@@ -97,6 +97,55 @@ describe('Dominio T-02A — Identity & Season Validation for Wellness Import', (
       const res = await resolverIdentidadFilaWellness(db, 'GF-FANTASMA')
       expect(res.exito).toBe(false)
       expect(res.mensajeError).toContain('La jugadora \'J99\' no existe')
+    })
+
+    it('6.5. Prioridad de seguridad: ID interno exacto vence a alias activo con el mismo valor (Alias Hijacking)', async () => {
+      // Jugadora A tiene id_jugadora = "Maria".
+      await db.jugadoras.put({ id_jugadora: 'Maria', nombre: 'Maria Real', posicion: 'Cierre', activa: true })
+
+      // Jugadora B intenta secuestrar la identidad creando un alias "Maria"
+      await db.alias_jugadora.put({
+        id_jugadora: 'J2',
+        origen: 'wellness',
+        valor: 'Maria',
+        activo: true,
+        fecha_alta: '2026-08-01'
+      })
+
+      // Al importar "Maria", debe priorizar a Jugadora A (ID exacto), protegiendo la identidad
+      const res = await resolverIdentidadFilaWellness(db, 'Maria')
+      expect(res.exito).toBe(true)
+      expect(res.id_jugadora).toBe('Maria') // No debe ser J2
+      expect(res.alias_origen).toBe('Maria')
+    })
+
+    it('7. Resuelve por nombre normalizado (igualdad estricta)', async () => {
+      const res = await resolverIdentidadFilaWellness(db, ' ANA LOPEZ ')
+      expect(res.exito).toBe(true)
+      expect(res.id_jugadora).toBe('J1')
+      expect(res.alias_origen).toBe('ANA LOPEZ')
+    })
+
+    it('8. No resuelve coincidencias parciales de nombre', async () => {
+      const res = await resolverIdentidadFilaWellness(db, 'Ana')
+      expect(res.exito).toBe(false)
+      expect(res.mensajeError).toContain('Jugadora no registrada')
+    })
+
+    it('9. Bloquea ambigüedad si múltiples jugadoras coinciden exactamente con el nombre normalizado', async () => {
+      await db.jugadoras.put({ id_jugadora: 'J3', nombre: 'ana lopez', posicion: 'Cierre', activa: true })
+
+      const res = await resolverIdentidadFilaWellness(db, 'ANA LOPEZ')
+      expect(res.exito).toBe(false)
+      expect(res.mensajeError).toContain('Ambigüedad')
+    })
+
+    it('10. Ignora jugadoras inactivas al resolver por nombre', async () => {
+      await db.jugadoras.put({ id_jugadora: 'J4', nombre: 'Carmen', posicion: 'Cierre', activa: false })
+
+      const res = await resolverIdentidadFilaWellness(db, 'Carmen')
+      expect(res.exito).toBe(false)
+      expect(res.mensajeError).toContain('Jugadora no registrada')
     })
   })
 

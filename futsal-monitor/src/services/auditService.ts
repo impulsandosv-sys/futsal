@@ -27,13 +27,15 @@ const auditoriaMemoria: RegistroAuditoriaCambio[] = []
  * Asigna automáticamente identificador unívoco e hito temporal ISO.
  */
 export function registrarCambioAuditoria(
-  cambio: Omit<RegistroAuditoriaCambio, 'id' | 'timestamp'>
+  cambio: Omit<RegistroAuditoriaCambio, 'id' | 'timestamp' | 'motivo'> & { motivo?: string }
 ): RegistroAuditoriaCambio {
+  const motivoNormalizado = cambio.motivo?.trim() || 'Sin comentario'
+
   const registro: RegistroAuditoriaCambio = {
     ...cambio,
     id: `AUD-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     timestamp: new Date().toISOString(),
-    motivo: cambio.motivo && cambio.motivo.trim() !== '' ? cambio.motivo.trim() : 'Sin motivo especificado'
+    motivo: motivoNormalizado
   }
 
   auditoriaMemoria.unshift(registro)

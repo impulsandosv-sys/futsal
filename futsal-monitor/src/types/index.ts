@@ -129,6 +129,8 @@ export interface TestFisico {
   notas: string
 }
 
+export type ParticipacionPartido = 'no_convocada' | 'convocada_sin_minutos' | 'parcial' | 'completa' | 'modificada'
+
 export interface RPE_Partido {
   id?: number
   id_partido: string
@@ -138,7 +140,8 @@ export interface RPE_Partido {
   rpe?: number | null
   fecha: string
   carga_ua?: number | null
-  participacion?: 'completa' | 'parcial' | 'no_participa'
+  participacion?: ParticipacionPartido
+  participacion_inferida?: boolean
   motivo_participacion_reducida?: string
   comentario_staff?: string
 }
@@ -211,7 +214,7 @@ export interface ResumenSemanal {
   wellness_medio: number
 }
 
-export type AlertaTipo = 'wellness_bajo' | 'carga_alta' | 'lesion' | 'readaptacion' | 'datos_faltantes'
+export type AlertaTipo = 'wellness_bajo' | 'carga_alta' | 'lesion' | 'readaptacion' | 'datos_faltantes' | 'MENSTRUACION_PROXIMA_ESTIMADA'
 export type AlertaEstado = 'abierta' | 'en_revision' | 'resuelta' | 'descartada'
 export type AlertaPrioridad = 'bajo' | 'medio' | 'alto'
 
@@ -282,12 +285,42 @@ export interface MappedWellnessRow {
   estres: number | null
   estado_animo: number | null
   dolor_especifico: string | null
+  comentario_sesion: string | null
   marca_temporal?: string | null
+  metodo_resolucion_identidad?: string
+
+  // Semanal
+  recuperacion_semana?: number | null
+  sueno_semana?: number | null
+  estres_fuera?: number | null
+  energia_semana?: number | null
+  animo_semana?: number | null
+  preparada_semana?: number | null
+  sintomas_menstruales?: number | null
+  dolor_sn?: boolean | null
+  dolor_texto_semana?: string | null
+  actividad_sn?: boolean | null
+  actividad_texto_semana?: string | null
 }
+
+export type TipoIncidenciaImportacion =
+  | 'sin_incidencia'
+  | 'jugadora_no_resuelta'
+  | 'alias_ambiguo'
+  | 'fecha_invalida'
+  | 'formato_invalido'
+  | 'temporada_no_activa'
+  | 'duplicado_existente'
+  | 'duplicado_interno_identico'
+  | 'conflicto_interno'
+  | 'actualizacion_posible'
+  | 'omitida_manual'
+
 
 export interface PreviewRow {
   filaOriginal: number
   estado: 'NUEVO' | 'ACTUALIZACION_POSIBLE' | 'DUPLICADO_IDENTICO' | 'ERROR' | 'OMITIDA'
+  tipo_incidencia?: TipoIncidenciaImportacion
   id_jugadora: string
   alias_origen?: string
   id_temporada?: string
@@ -299,7 +332,21 @@ export interface PreviewRow {
   estres: number | null
   estado_animo: number | null
   dolor_especifico: string | null
+  comentario_sesion?: string | null
+  // Semanal
+  recuperacion_semana?: number | null
+  sueno_semana?: number | null
+  estres_fuera?: number | null
+  energia_semana?: number | null
+  animo_semana?: number | null
+  preparada_semana?: number | null
+  sintomas_menstruales?: number | null
+  dolor_sn?: boolean | null
+  dolor_texto_semana?: string | null
+  actividad_sn?: boolean | null
+  actividad_texto_semana?: string | null
   mensaje: string
+  metodo_resolucion_identidad?: string
   rowOriginal: RawImportRow
   normalRow?: MappedWellnessRow
 }
@@ -312,6 +359,7 @@ export interface ImportOutcome {
   updated: number
   skipped: number
   errors: number
+  nuevos_aliases?: number
   idImportacion?: number
   recalculoExitoso: boolean
 }
@@ -360,6 +408,27 @@ export interface CicloMenstrual {
   fase: FaseMenstrual
   sintomas: string
   notas: string
+}
+
+export type AccionAjusteMenstrual =
+  | 'SIN_CAMBIOS'
+  | 'CONVERSACION_MANTENIDA'
+  | 'AJUSTE_TAREA_INDIVIDUAL'
+  | 'AJUSTE_VOLUMEN'
+  | 'AJUSTE_INTENSIDAD'
+  | 'RECUPERACION_SEGUIMIENTO'
+
+export interface RegistroMenstrual {
+  id?: number
+  id_jugadora: string
+  fecha_inicio: string // ISO local: YYYY-MM-DD
+  impacto_percibido: number // entero de 0 a 10
+  comentario?: string | null
+  nota_ajuste?: string | null
+  accion_ajuste?: AccionAjusteMenstrual | null
+  fecha_decision?: string | null
+  creado_en: string
+  actualizado_en: string
 }
 
 export interface CargaGPS {
@@ -640,7 +709,7 @@ export interface Temporada {
   notas?: string
 }
 
-export type OrigenAlias = 'google_forms' | 'chronojump' | 'manual' | 'otro'
+export type OrigenAlias = 'google_forms' | 'chronojump' | 'manual' | 'otro' | 'wellness'
 
 export interface AliasJugadora {
   id_alias?: number
@@ -651,4 +720,18 @@ export interface AliasJugadora {
   fecha_alta: string
   fecha_baja?: string
   notas?: string
+}
+
+export interface CompensacionPostPartido {
+  id?: number
+  id_partido: string
+  id_jugadora: string
+  minutos_objetivo?: number | null
+  deficit_minutos?: number | null
+  estado: 'pendiente' | 'planificada' | 'realizada' | 'omitida'
+  id_sesion?: string | null
+  tipo_compensacion?: string | null
+  observaciones?: string | null
+  created_at: string
+  updated_at: string
 }

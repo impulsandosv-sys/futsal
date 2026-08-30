@@ -205,7 +205,13 @@ export function obtenerCargasDiariasJugadora(
     ) {
       cargaPartido = p.rpe * p.minutos_jugados
       tieneRPEValido = true
-    } else if (p.participacion === 'no_participa') {
+    } else if (p.minutos_jugados === 0 && (p.participacion === 'no_convocada' || p.participacion === 'convocada_sin_minutos')) {
+      // 0 minutos jugados implica carga 0 explícita, PERO SÓLO si la participación está explícita y los minutos son 0.
+      // Un registro legacy con 0 minutos y participación ausente debe seguir siendo ambiguo.
+      cargaPartido = 0
+      tieneRPEValido = true
+    } else if ((p.participacion as any) === 'no_participa') {
+      // Mantener compatibilidad con registros históricos no_participa solo si ese valor sigue presente en datos antiguos
       cargaPartido = 0
       tieneRPEValido = true
     }

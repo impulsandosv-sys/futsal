@@ -30,6 +30,11 @@ describe('T-03 — Dominio exportPrivacy: DTOs Staff con Allowlist Positiva', ()
     comentario_wellness: 'Siento mucha ansiedad antes del partido',
     ciclo_menstrual: { fase: 'Lútea', dia: 22, sintomas: ['cólicos'] },
     fase_ciclo: 'Lútea',
+    registro_menstrual: { fecha_inicio: '2026-07-01', impacto_percibido: 3, comentario: 'Molestia confidencial', nota_ajuste: 'Ajuste interno', accion_ajuste: 'AJUSTE_VOLUMEN', fecha_decision: '2026-07-02' },
+    comentario_menstrual: 'Molestia confidencial',
+    nota_ajuste: 'Ajuste interno',
+    accion_ajuste: 'AJUSTE_VOLUMEN',
+    fecha_decision: '2026-07-02',
     test_psicologico: { POMS_score: 45, estado: 'Estrés elevado' },
     diagnostico: 'Microtrauma en recto anterior',
     comentario_fisio_medico: 'Reposo relativo 48h',
@@ -75,10 +80,14 @@ describe('T-03 — Dominio exportPrivacy: DTOs Staff con Allowlist Positiva', ()
       Adherencia28d: '28/28'
     })
 
-    // Verificar que NINGUNA propiedad prohibida exista en el DTO
     expect(dto).not.toHaveProperty('dolor_especifico')
     expect(dto).not.toHaveProperty('comentario_wellness')
     expect(dto).not.toHaveProperty('ciclo_menstrual')
+    expect(dto).not.toHaveProperty('registro_menstrual')
+    expect(dto).not.toHaveProperty('comentario_menstrual')
+    expect(dto).not.toHaveProperty('nota_ajuste')
+    expect(dto).not.toHaveProperty('accion_ajuste')
+    expect(dto).not.toHaveProperty('fecha_decision')
     expect(dto).not.toHaveProperty('diagnostico')
     expect(dto).not.toHaveProperty('nota_nueva_no_clasificada')
   })
@@ -98,9 +107,17 @@ describe('T-03 — Dominio exportPrivacy: DTOs Staff con Allowlist Positiva', ()
       'Microtrauma',
       'Reposo relativo',
       'confidencial',
+      'Ajuste interno',
+      'AJUSTE_VOLUMEN',
+      '2026-07-02',
       'dolor_especifico',
       'comentario_wellness',
       'ciclo_menstrual',
+      'registro_menstrual',
+      'comentario_menstrual',
+      'nota_ajuste',
+      'accion_ajuste',
+      'fecha_decision',
       'test_psicologico',
       'diagnostico',
       'nota_nueva_no_clasificada'

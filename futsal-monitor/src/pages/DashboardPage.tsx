@@ -11,6 +11,7 @@ import { useMemo } from 'react'
 import { filtrarYCalcularResumenDashboard } from '@/domain/monitoring/monitoring'
 
 import { getTodayLocalISO } from '@/domain/dates/dates'
+import { ContextoMenstrualWidget } from '@/components/menstrual/ContextoMenstrualWidget'
 
 export function DashboardPage() {
   const {
@@ -71,8 +72,9 @@ export function DashboardPage() {
             <KPICard label="Strain (7d)" value={Math.round(strain)} subtitle="UA" icon="⚡" />
           </div>
         </div>
-        <div className="col-span-1">
+        <div className="col-span-1 space-y-4">
           <TodayWidget />
+          <ContextoMenstrualWidget />
         </div>
       </div>
 

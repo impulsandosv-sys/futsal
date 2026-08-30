@@ -48,6 +48,8 @@ vi.mock('@/db/database', () => {
       }))
     },
     historial_importaciones: mockTable(),
+    wellness_diario_importado: mockTable(),
+    wellness_semanal_importado: mockTable(),
     sesion_rpe: mockTable(),
     readiness: mockTable(),
     sesiones: mockTable(),
@@ -83,7 +85,7 @@ describe('importEngine - professional validation, mappings & transactions', () =
 
   // 1. Detección de alias de encabezados
   it('1. normalizarEncabezado limpia mayúsculas, espacios y acentos', () => {
-    expect(normalizarEncabezado('  Sueño (1-10)  ')).toBe('sueno (1-10)')
+    expect(normalizarEncabezado('  Sueño (1-10)  ')).toBe('sueno 1 10')
     expect(normalizarEncabezado('Código_Jugadora')).toBe('codigo jugadora')
     expect(normalizarEncabezado('Estrés')).toBe('estres')
   })
@@ -142,7 +144,7 @@ describe('importEngine - professional validation, mappings & transactions', () =
 
   it('9. validarFilaWellness detecta escalas fuera de rango, IDs inexistentes y fechas futuras', () => {
     const context = { jugadorasIds: ['J01', 'J02'] }
-    
+
     // Caso correcto
     let res = validarFilaWellness({ id_jugadora: 'J01', fecha: '2026-07-19', calidad_sueno: '8', fatiga: '7', dolor_muscular: '6', estres: '5', estado_animo: '8' }, context)
     expect(res.isValid).toBe(true)
@@ -150,7 +152,7 @@ describe('importEngine - professional validation, mappings & transactions', () =
     // ID no existente
     res = validarFilaWellness({ id_jugadora: 'J99', fecha: '2026-07-19', calidad_sueno: '8' }, context)
     expect(res.isValid).toBe(false)
-    expect(res.errorMsg).toContain('no existe')
+    expect(res.errorMsg).toContain('Jugadora no registrada')
 
     // Fecha futura
     const tomorrowStr = new Date(Date.now() + 86400 * 1000).toISOString().split('T')[0]
@@ -235,11 +237,11 @@ describe('importEngine - professional validation, mappings & transactions', () =
     ]
     const playersMap = { 'J01': 'Jugadora 1' }
     const result = construirVistaPrevia(rawRows, mapping, [], playersMap)
-    
+
     expect(result.total).toBe(2)
     expect(result.errores).toBe(1) // El segundo es error por duplicado en archivo
     expect(result.rows[1].estado).toBe('ERROR')
-    expect(result.rows[1].mensaje).toContain('Duplicado dentro del archivo')
+    expect(result.rows[1].mensaje).toContain('Conflicto interno: Diferentes datos')
   })
 
   it('14. aplicarImportacionWellness maneja estrategias omitir y sobrescribir en conflictos', async () => {
@@ -271,7 +273,7 @@ describe('importEngine - professional validation, mappings & transactions', () =
     db.wellness.put = vi.fn()
     // Hacer que first() retorne el registro existente
     ;(global as any).__mockExistingWellnessRecord = { id: 100, id_jugadora: 'J01', fecha: '2026-07-19', calidad_sueno: 5 }
-    
+
     const outcomeUpdate = await aplicarImportacionWellness(conflictPreview, 'update', 'test.csv', 'Hoja1', 'Default', 'backup.json')
     expect(outcomeUpdate.success).toBe(true)
     expect(outcomeUpdate.updated).toBe(1)
@@ -331,11 +333,11 @@ describe('importEngine - professional validation, mappings & transactions', () =
     db.historial_importaciones.put = vi.fn().mockResolvedValue(1)
 
     const outcome = await aplicarImportacionWellness(mockPreview, 'omit', 'test.csv', 'Hoja1', 'Default', 'backup.json')
-    
+
     // El resultado debe indicar fallo
     expect(outcome.success).toBe(false)
     expect(outcome.inserted).toBe(0)
-    
+
     // Se debió escribir un registro con estado 'error' en el historial
     expect(db.historial_importaciones.put).toHaveBeenCalledTimes(1)
     const calledWith = vi.mocked(db.historial_importaciones.put).mock.calls[0][0] as any
@@ -367,7 +369,7 @@ describe('importEngine - professional validation, mappings & transactions', () =
   it('18. calcularVentanaPropagacion calcula ventana de 28 dias hacia adelante', () => {
     const dates = ['2026-07-01']
     const window = calcularVentanaPropagacion(dates, '2026-07-10') // limitar a hoy = 2026-07-10
-    
+
     // Del 1 al 10 de julio hay 10 días inclusive
     expect(window.length).toBe(10)
     expect(window[0]).toBe('2026-07-01')
@@ -446,10 +448,10 @@ describe('importEngine - professional validation, mappings & transactions', () =
     // 1. Verificar que aplicarImportacionWellness ni siquiera se intenta (ya que se bloquea al inicio)
     // 2. onStart nunca se llama
     expect(onStart).not.toHaveBeenCalled()
-    
+
     // 3. onFailure es llamado con el mensaje claro de error
     expect(onFailure).toHaveBeenCalledWith('Debes descargar el backup de seguridad previo obligatoriamente.')
-    
+
     // 4. Dexie permanece inalterado
     expect(db.wellness.put).not.toHaveBeenCalled()
     expect(db.historial_importaciones.put).not.toHaveBeenCalled()

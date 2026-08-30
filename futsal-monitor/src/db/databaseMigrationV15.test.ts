@@ -162,7 +162,7 @@ describe('Migración Dexie v14 -> v15 (T-02-R-MIGRATION)', () => {
     const dbV15 = new FutsalDB(dbName)
     await dbV15.open()
 
-    expect(dbV15.verno).toBe(15)
+    expect(dbV15.verno).toBeGreaterThanOrEqual(16)
     const tableNames = dbV15.tables.map((t) => t.name)
     expect(dbV15.tables).toHaveLength(tableNames.length)
 

@@ -118,7 +118,7 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
 
     expect(screen.getAllByText('Sin registro hoy').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Sin CMJ registrado').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('sin registro').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Sin carga sRPE').length).toBeGreaterThan(0)
 
     expect(screen.queryByText('0 cm')).not.toBeInTheDocument()
     expect(screen.queryByText('0 UA')).not.toBeInTheDocument()
@@ -128,8 +128,8 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
   // D. Error parcial de una fuente
   it('D. Se renderiza sin colapsar cuando una colección de datos es nula o indefinida en la store', () => {
     useStore.setState({
-      pruebas_cmj: undefined as any,
-      sesion_rpe: null as any
+      pruebas_cmj: undefined,
+      sesion_rpe: null
     })
 
     render(
@@ -159,7 +159,7 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
 
   // F. Lectura pura contra Dexie
   it('F. Confirma que la renderización y cambio de fecha no disparan escrituras en Dexie', () => {
-    if (!db.jugadoras.put) (db.jugadoras as any).put = vi.fn()
+    if (!db.jugadoras.put) (db.jugadoras).put = vi.fn()
     const spyPut = vi.spyOn(db.jugadoras, 'put')
 
     render(
@@ -192,7 +192,7 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
       }
     ]
 
-    const lesiones: any[] = [
+    const lesiones: import("@/types").Lesion[] = [
       {
         id_lesion: 1,
         id_jugadora: 'J1',
@@ -262,5 +262,170 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
 
     expect(screen.queryByText(/wellness_bajo/i)).not.toBeInTheDocument()
   })
-})
 
+  // FASE 4B - Contexto Menstrual
+  it('Fase 4B. Panel diario muestra "Inicios comunicados hoy" si hay registros de hoy', () => {
+    useStore.setState({
+      jugadoras: mockJugadoras,
+      wellness: [],
+      alertas: [],
+      registros_menstruales: [
+        {
+          id: 1,
+          id_jugadora: 'J1',
+          fecha_inicio: new Date().toISOString().split('T')[0],
+          impacto_percibido: 8,
+          comentario: 'Fuerte dolor lumbar',
+          nota_ajuste: 'Bajar carga 50%',
+          creado_en: '2023-01-01',
+          actualizado_en: '2023-01-01'
+        },
+        {
+          id: 2,
+          id_jugadora: 'J2',
+          fecha_inicio: '2023-01-01', // Pasado
+          impacto_percibido: 4,
+          creado_en: '2023-01-01',
+          actualizado_en: '2023-01-01'
+        }
+      ]
+    })
+
+    render(
+      <MemoryRouter>
+        <DailyDecisionPage />
+      </MemoryRouter>
+    )
+
+    // Aparece el título del widget
+    expect(screen.getByText('Contexto menstrual del día')).toBeInTheDocument()
+    // Aparece Ana (J1) que fue hoy
+    expect(screen.getAllByText('Ana Lopez').length).toBeGreaterThan(0)
+    // No aparece el comentario ni la nota de ajuste (privacidad / neutralidad)
+    expect(screen.queryByText('Fuerte dolor lumbar')).not.toBeInTheDocument()
+    expect(screen.queryByText('Bajar carga 50%')).not.toBeInTheDocument()
+    // Aparece el impacto
+    expect(screen.getByText('Impacto percibido: 8/10')).toBeInTheDocument()
+    // No aparece Beatriz (J2) en el widget (solo en la lista principal)
+    expect(screen.getAllByText('Beatriz Gomez').length).toBe(1)
+    // Ana aparece 2 veces: en la lista principal y en el widget
+    expect(screen.getAllByText('Ana Lopez').length).toBe(2)
+  })
+
+  it('Fase 4B. Panel diario muestra "Recordatorios estimados activos" solo para alertas abiertas', () => {
+    useStore.setState({
+      jugadoras: mockJugadoras,
+      wellness: [],
+      registros_menstruales: [
+        {
+          id: 3,
+          id_jugadora: 'J2',
+          fecha_inicio: '2023-01-01',
+          impacto_percibido: 4,
+          creado_en: '2023-01-01',
+          actualizado_en: '2023-01-01'
+        }
+      ],
+      alertas: [
+        {
+          id: 1,
+          id_jugadora: 'J2',
+          tipo: 'MENSTRUACION_PROXIMA_ESTIMADA',
+          fecha: new Date().toISOString().split('T')[0],
+          mensaje: 'Alerta',
+          estado: 'abierta'
+        },
+        {
+          id: 2,
+          id_jugadora: 'J1',
+          tipo: 'MENSTRUACION_PROXIMA_ESTIMADA',
+          fecha: new Date().toISOString().split('T')[0],
+          mensaje: 'Alerta resuelta',
+          estado: 'resuelta'
+        }
+      ]
+    })
+
+    render(
+      <MemoryRouter>
+        <DailyDecisionPage />
+      </MemoryRouter>
+    )
+
+    // J2 tiene alerta abierta, J1 la tiene resuelta
+    expect(screen.getAllByText('Beatriz Gomez').length).toBeGreaterThan(0)
+    expect(screen.getByText(new RegExp(`Ventana estimada activa.*`))).toBeInTheDocument()
+
+    // Ana (J1) solo aparece 1 vez en la tabla (no en el widget menstrual)
+    expect(screen.getAllByText('Ana Lopez').length).toBe(1)
+  })
+
+  it('Fase 4B. Modal de decisión se abre y muestra datos correctos (solo lectura)', () => {
+    useStore.setState({
+      jugadoras: mockJugadoras,
+      wellness: [],
+      registros_menstruales: [
+        {
+          id: 1,
+          id_jugadora: 'J1',
+          fecha_inicio: new Date().toISOString().split('T')[0],
+          impacto_percibido: 8,
+          creado_en: '2023-01-01',
+          actualizado_en: '2023-01-01'
+        }
+      ],
+      alertas: []
+    })
+
+    render(
+      <MemoryRouter>
+        <DailyDecisionPage />
+      </MemoryRouter>
+    )
+
+    const btn = screen.getByText('Registrar decisión')
+    fireEvent.click(btn)
+
+    // Se abre el modal
+    expect(screen.getByText('Decisión operativa menstrual')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Ana Lopez')).toHaveAttribute('readonly')
+    expect(screen.getAllByDisplayValue(new Date().toISOString().split('T')[0]).length).toBeGreaterThan(1)
+
+    // El select de accion existe
+    const select = screen.getByRole('combobox')
+    expect(select).toBeInTheDocument()
+  })
+
+
+  it("Decision diaria: integra exposicion sin crear alertas ni modificar RPE/Wellness", () => {
+    useStore.setState({
+      jugadoras: [{
+        id_jugadora: "j1", nombre: "Jugadora 1", activa: true,
+        fecha_nacimiento: "2000-01-01", posicion: "Ala", altura_cm: 165, peso_kg: 58, imc: 21.3, grasa: 18, anos_experiencia_futsal: 5, historial_lesional: "", notas: ""
+      }],
+      wellness: [],
+      lesiones: [],
+      alertas: [],
+      pruebas_cmj: [],
+      sesion_rpe: [],
+      rpe_partido: [{ id_registro: "rp1", id_jugadora: "j1", id_partido: "p1", fecha: "2026-08-30", minutos_jugados: 40, tipo_participacion: "completa", rpe: 8 }]
+    })
+
+    const stateBefore = useStore.getState()
+
+    render(
+      <MemoryRouter>
+        <DailyDecisionPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText(/40 min/i)).toBeInTheDocument()
+    expect(screen.queryByText(/riesgo elevado/i)).not.toBeInTheDocument()
+
+    const stateAfter = useStore.getState()
+    expect(stateAfter.wellness.length).toBe(stateBefore.wellness.length)
+    expect(stateAfter.alertas.length).toBe(stateBefore.alertas.length)
+    expect(stateAfter.lesiones.length).toBe(stateBefore.lesiones.length)
+    expect(stateAfter.rpe_partido.length).toBe(stateBefore.rpe_partido.length)
+  })
+})

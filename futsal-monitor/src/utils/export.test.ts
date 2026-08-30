@@ -34,6 +34,7 @@ describe('T-03 — Integration export.ts: Exportaciones Staff con DTOs Concretos
     dolor_especifico: 'Dolor severo en isquios',
     comentario_wellness: 'Nota intima de jugadora',
     ciclo_menstrual: { fase: 'Folicular' },
+    registro_menstrual: { fecha_inicio: '2026-07-01', impacto_percibido: 3, comentario: 'Molestia confidencial', nota_ajuste: 'Ajuste interno' },
     diagnostico: 'Tendinitis'
   })
 

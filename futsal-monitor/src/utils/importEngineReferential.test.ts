@@ -70,7 +70,11 @@ vi.mock('@/db/database', () => {
     sesiones: mockTable(),
     partidos: mockTable(),
     rpe_partido: mockTable(),
-    resumen_semanal: mockTable()
+    resumen_semanal: mockTable(),
+    wellness_diario_importado: mockTable(),
+    wellness_semanal_importado: mockTable(),
+    alertas: mockTable(),
+    lesiones: mockTable()
   }
 
   return { db: dbMock }
@@ -137,7 +141,7 @@ describe('Bloque 3A - Unit tests de validación referencial e integridad de impo
     expect(preview.rows).toHaveLength(2)
     expect(preview.rows[0].estado).toBe('NUEVO')
     expect(preview.rows[1].estado).toBe('ERROR')
-    expect(preview.rows[1].mensaje).toContain('Duplicado dentro del archivo')
+    expect(preview.rows[1].mensaje).toContain('Conflicto interno')
   })
 
   it('5. Varias filas con errores distintos conservan diagnósticos independientes', () => {
@@ -208,7 +212,7 @@ describe('Bloque 3A - Unit tests de validación referencial e integridad de impo
 
     const outcome = await aplicarImportacionWellness(rows, 'omit', 'test.csv', 'Hoja1', 'default', 'backup.json')
 
-    expect(outcome.success).toBe(true)
+    if (!outcome.success) console.error('OUTCOME:', outcome); expect(outcome.success).toBe(true)
     expect(outcome.inserted).toBe(1)
     expect(outcome.skipped).toBe(1)
   })

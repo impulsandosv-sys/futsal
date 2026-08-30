@@ -25,6 +25,8 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
     await db.alias_jugadora.clear()
     await db.wellness.clear()
     await db.historial_importaciones.clear()
+    await db.wellness_diario_importado.clear()
+    await db.wellness_semanal_importado.clear()
 
     await db.jugadoras.add({
       id_jugadora: 'J001',
@@ -95,10 +97,10 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
     warnSpy.mockRestore()
   })
 
-  describe('BLOQUE A — Contadores reales de previsualización', () => {
-    it('Caso 1 — Fila NUEVO: verifica contadores iniciales (1/1/0), exclusión (0/1/OMITIDA) y restauración (1/0/NUEVO) sin escrituras Dexie', async () => {
+  describe('BLOCK A — Preview counters', () => {
+    it('Case 1 — Row NEW: check initial counters (1/1/0), exclusion (0/1/OMITIDA) and restoration (1/0/NUEVO) without Dexie writes', async () => {
       const csvContent = [
-        'ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo',
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
         'J001,2026-01-15,8,3,4,2,9'
       ].join('\n')
 
@@ -119,11 +121,11 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       fireEvent.change(importInput, { target: { files: [file] } })
 
       await waitFor(() => {
-        const nextBtn = screen.getByRole('button', { name: /siguiente/i })
+        const nextBtn = screen.getByRole('button', { name: /^siguiente →$/i })
         expect(nextBtn).not.toBeDisabled()
       })
 
-      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
 
       let omitirCheckbox!: HTMLInputElement
       await waitFor(() => {
@@ -163,7 +165,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       expect(await db.historial_importaciones.count()).toBe(0)
     })
 
-    it('Caso 2 — Fila ACTUALIZACION_POSIBLE: verifica contadores (Act:1, Omit:0, CONFLICTO), exclusión (Act:0, Omit:1) y restauración', async () => {
+    it('Case 2 — Row POSSIBLE_UPDATE: check counters (Act:1, Omit:0, CONFLICT), exclusion (Act:0, Omit:1) and restoration', async () => {
       await db.wellness.add({
         id_jugadora: 'J001',
         fecha: '2026-01-15',
@@ -181,7 +183,7 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       })
 
       const csvContent = [
-        'ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo',
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
         'J001,2026-01-15,7,4,5,3,8'
       ].join('\n')
 
@@ -201,11 +203,11 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       fireEvent.change(importInput, { target: { files: [file] } })
 
       await waitFor(() => {
-        const nextBtn = screen.getByRole('button', { name: /siguiente/i })
+        const nextBtn = screen.getByRole('button', { name: /^siguiente →$/i })
         expect(nextBtn).not.toBeDisabled()
       })
 
-      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
 
       let checkbox!: HTMLInputElement
       await waitFor(() => {
@@ -243,9 +245,9 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       expect(await db.wellness.count()).toBe(1)
     })
 
-    it('Caso 3 — Fila ERROR: verifica contadores (Nuevos:1, Errores:1), bloqueo del paso 3, exclusión de error y desbloqueo', async () => {
+    it('Case 3 — Row ERROR: check counters (New:1, Errors:1), block step 3, error exclusion and unblock', async () => {
       const csvContent = [
-        'ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo',
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
         'J001,2026-01-15,8,3,4,2,9',
         'INVALID_ID,2099-01-01,1,1,1,1,1'
       ].join('\n')
@@ -266,48 +268,223 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       fireEvent.change(importInput, { target: { files: [file] } })
 
       await waitFor(() => {
-        const nextBtn = screen.getByRole('button', { name: /siguiente/i })
+        const nextBtn = screen.getByRole('button', { name: /^siguiente →$/i })
         expect(nextBtn).not.toBeDisabled()
       })
 
-      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
 
-      let errorCheckbox!: HTMLInputElement
       await waitFor(() => {
         const checkboxes = screen.getAllByRole('checkbox')
         expect(checkboxes.length).toBeGreaterThan(0)
-        errorCheckbox = checkboxes[checkboxes.length - 1] as HTMLInputElement
       })
 
       // 2. Comprueba contadores (Nuevos: 1, Errores: 1) y bloqueo
       expect(screen.getByTestId('preview-count-nuevos').textContent).toBe('1')
       expect(screen.getByTestId('preview-count-errores').textContent).toBe('1')
-      expect(screen.getByText(/Asistente bloqueado/i)).toBeInTheDocument()
+      expect(screen.getByText(/No puedes aplicar la importaci.n todav.a/i)).toBeInTheDocument()
 
-      const stepNextBtn = screen.getByRole('button', { name: /siguiente/i })
+      const stepNextBtn = screen.getByRole('button', { name: /^siguiente →$/i })
       expect(stepNextBtn).toBeDisabled()
 
-      // 3. Excluye fila de error
-      fireEvent.click(errorCheckbox)
+      // 3. Excluye fila de error (re-query after filter switch)
+      const currentCheckboxes = screen.getAllByRole('checkbox')
+      const targetErrorCb = currentCheckboxes[currentCheckboxes.length - 1] as HTMLInputElement
+      fireEvent.click(targetErrorCb)
 
       // 4. Comprueba contadores (Errores: 0, Omitidas: 1) y desbloqueo del paso 3
       await waitFor(() => {
         expect(screen.getByTestId('preview-count-errores').textContent).toBe('0')
         expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('1')
-        expect(screen.queryByText(/Asistente bloqueado/i)).not.toBeInTheDocument()
-        expect(screen.getByRole('button', { name: /siguiente/i })).not.toBeDisabled()
+        expect(screen.queryByText(/No puedes aplicar la importaci.n todav.a/i)).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
+      })
+
+      // 5. Restaura la fila de error
+      await waitFor(() => {
+        expect(screen.queryAllByRole('checkbox').length).toBeGreaterThan(0)
+      })
+      const newCheckboxes = screen.getAllByRole('checkbox')
+      const newTargetErrorCb = newCheckboxes[newCheckboxes.length - 1] as HTMLInputElement
+      fireEvent.click(newTargetErrorCb)
+
+      // 6. Comprueba contadores (Errores: 1, Omitidas: 0) y bloqueo del paso 3
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-errores').textContent).toBe('1')
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('0')
+        expect(screen.getByText(/No puedes aplicar la importaci.n todav.a/i)).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).toBeDisabled()
+        expect(screen.getAllByText('ERROR').length).toBeGreaterThan(0)
       })
 
       // Pureza Dexie: 0 escrituras
       expect(await db.wellness.count()).toBe(0)
     })
+
+    it('Case 3.5 — Row ERROR: inline editing of ID Jugadora, save, and unblock', async () => {
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
+        'INVALID_ID,2026-01-15,8,3,4,2,9'
+      ].join('\n')
+
+      const file = new File([csvContent], 'wellness_error_inline.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
+
+      // 1. Wait for ERROR state and block
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-errores')).toHaveTextContent('1')
+        expect(screen.getByText(/No puedes aplicar la importaci.n todav.a/i)).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).toBeDisabled()
+      })
+
+      // 2. Click Edit button
+      const editBtn = screen.getByRole('button', { name: /editar/i })
+      fireEvent.click(editBtn)
+
+      // 3. Edit mode active: ID Jugadora dropdown and save button should be visible
+      const idSelect = screen.getAllByRole('combobox').slice(-1)[0] // Dropdown for ID Jugadora
+      const saveBtn = screen.getByRole('button', { name: /revalidar/i })
+
+      expect(idSelect).toBeInTheDocument()
+      expect(saveBtn).toBeInTheDocument()
+
+      // 4. Change ID Jugadora to valid J001
+      fireEvent.change(idSelect, { target: { value: 'J001' } })
+
+      // 5. Save changes
+      fireEvent.click(saveBtn)
+
+      // 6. Wait for revalidation and unblock
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-errores')).toHaveTextContent('0')
+        expect(screen.getByTestId('preview-count-nuevos')).toHaveTextContent('1')
+        expect(screen.queryByText(/No puedes aplicar la importaci.n todav.a/i)).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
+      })
+    })
+
+    it('Case 3.6 — Row ERROR: inline editing preserves comentario_sesion', async () => {
+      useStore.setState({
+        plantillas_importacion: [
+          {
+            id: 2,
+            nombre: 'Google Forms',
+            tipoImportacion: 'wellness',
+            mapeoColumnas: [
+              { excelHeader: 'ID_Jugadora', internalField: 'id_jugadora', required: true, label: 'ID Jugadora' },
+              { excelHeader: 'Fecha del entreno', internalField: 'fecha', required: true, label: 'Fecha' },
+              { excelHeader: 'Calidad de sueno', internalField: 'calidad_sueno', required: false, label: 'Calidad de sueño' },
+              { excelHeader: 'Fatiga', internalField: 'fatiga', required: false, label: 'Fatiga' },
+              { excelHeader: 'Dolor muscular', internalField: 'dolor_muscular', required: false, label: 'Dolor muscular' },
+              { excelHeader: 'Estres', internalField: 'estres', required: false, label: 'Estrés' },
+              { excelHeader: 'Estado de animo', internalField: 'estado_animo', required: false, label: 'Estado de ánimo' },
+              { excelHeader: 'Comentario sobre la sesion (opcional)', internalField: 'comentario_sesion', required: false, label: 'Comentario de sesión' }
+            ],
+            creadaEn: '2025-08-01T00:00:00Z',
+            actualizadaEn: '2025-08-01T00:00:00Z',
+            esPredeterminada: true
+          }
+        ]
+      })
+
+      const csvContent = [
+        'ID_Jugadora,Fecha del entreno,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo,Comentario sobre la sesion (opcional)',
+        'INVALID_ID,2026-01-15,8,3,4,2,9,Mi comentario de prueba'
+      ].join('\n')
+
+      const file = new File([csvContent], 'wellness_comentario.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
+
+      // 1. Wait for ERROR state
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-errores')).toHaveTextContent('1')
+      })
+
+      // 2. Click Edit button
+      const editBtn = screen.getByRole('button', { name: /editar/i })
+      fireEvent.click(editBtn)
+
+      const idSelect = screen.getAllByRole('combobox').slice(-1)[0]
+      const saveBtn = screen.getByRole('button', { name: /revalidar/i })
+
+      // 3. Change ID Jugadora to valid J001
+      fireEvent.change(idSelect, { target: { value: 'J001' } })
+
+      // 4. Save changes
+      fireEvent.click(saveBtn)
+
+      // 5. Wait for revalidation and unblock
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-errores')).toHaveTextContent('0')
+        expect(screen.getByTestId('preview-count-nuevos')).toHaveTextContent('1')
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
+
+      const downloadBtn = await screen.findByRole('button', { name: /descargar copia de seguridad/i })
+      fireEvent.click(downloadBtn)
+
+      const confirmBackupCb = await screen.findByRole('checkbox', { name: /confirmo que he guardado/i })
+      fireEvent.click(confirmBackupCb)
+
+      // Mock window.alert
+      const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {})
+
+      const applyBtn = await screen.findByRole('button', { name: /aplicar importación/i })
+      fireEvent.click(applyBtn)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Importación aplicada/i)).toBeInTheDocument()
+      }, { timeout: 3000 })
+
+      // Verificamos en IndexedDB
+      const dbImportado = await db.wellness_diario_importado.toArray()
+      expect(dbImportado).toHaveLength(1)
+      expect(dbImportado[0].textos['Comentario sobre la sesión (opcional)']).toBe('Mi comentario de prueba')
+
+      alertMock.mockRestore()
+    })
   })
 
-  describe('BLOQUE B — Paginación real (51 filas)', () => {
-    it('Demuestra paginación real (>50 filas), navegación a pág 2, exclusión en pág 2, filtrado OMITIDA y restauración', async () => {
+  describe('BLOCK B — Real pagination (51 rows)', () => {
+    it('Demonstrates real pagination (>50 rows), navigation to page 2, exclusion on page 2, filtering OMITIDA and restoration', async () => {
       // 1. Genera 51 filas válidas para J001 con fechas únicas en temporada 2025-2026
-      const csvLines = ['ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo']
-      
+      const csvLines = ['ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo']
+
       const startDate = new Date('2026-01-01')
       for (let i = 0; i < 51; i++) {
         const current = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000)
@@ -337,11 +514,11 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
 
       // 3. Avanza al paso de validación
       await waitFor(() => {
-        const nextBtn = screen.getByRole('button', { name: /siguiente/i })
+        const nextBtn = screen.getByRole('button', { name: /^siguiente →$/i })
         expect(nextBtn).not.toBeDisabled()
       })
 
-      fireEvent.click(screen.getByRole('button', { name: /siguiente/i }))
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
 
       // 4. Comprueba página 1 de 2 y botón Siguiente disponible
       await waitFor(() => {
@@ -395,6 +572,669 @@ describe('Microcierre de Fase 2 — Cobertura real de ImportPage (DOM, Contadore
       // Pureza Dexie: 0 escrituras
       expect(await db.wellness.count()).toBe(0)
       expect(await db.historial_importaciones.count()).toBe(0)
+    })
+  })
+
+  describe('BLOCK C — Flujo real de Importación (Google Forms)', () => {
+    it('Case 4 — Mapea fechas y textos correctamente, bloquea con ERROR y desblquea al omitir', async () => {
+      // 1. Configuramos plantilla parecida a la que se genera en la app real
+      useStore.setState({
+        plantillas_importacion: [
+          {
+            id: 2,
+            nombre: 'Google Forms',
+            tipoImportacion: 'wellness',
+            mapeoColumnas: [
+              { excelHeader: 'ID_Jugadora', internalField: 'id_jugadora', required: true, label: 'ID Jugadora' },
+              { excelHeader: 'Fecha del entreno', internalField: 'fecha', required: true, label: 'Fecha' },
+              { excelHeader: 'Calidad de sueno', internalField: 'calidad_sueno', required: false, label: 'Calidad de sueño' },
+              { excelHeader: 'Fatiga', internalField: 'fatiga', required: false, label: 'Fatiga' },
+              { excelHeader: 'Dolor muscular', internalField: 'dolor_muscular', required: false, label: 'Dolor muscular' },
+              { excelHeader: 'Estres', internalField: 'estres', required: false, label: 'Estrés' },
+              { excelHeader: 'Estado de animo', internalField: 'estado_animo', required: false, label: 'Estado de ánimo' },
+              { excelHeader: 'Dolor especifico o nota importante (opcional)', internalField: 'dolor_especifico', required: false, label: 'Dolor específico' },
+              { excelHeader: 'Comentario sobre la sesion (opcional)', internalField: 'comentario_sesion', required: false, label: 'Comentario de sesión' }
+            ],
+            creadaEn: '2025-08-01T00:00:00Z',
+            actualizadaEn: '2025-08-01T00:00:00Z',
+            esPredeterminada: false
+          }
+        ]
+      })
+
+      const csvContent = [
+        'Marca temporal,ID_Jugadora,Fecha del entreno,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo,Dolor especifico o nota importante (opcional),Comentario sobre la sesion (opcional)',
+        '2026-02-01 10:00:00,J001,2026-02-01,8,3,4,2,9,Rodilla derecha,Buen entreno', // Válida
+        '2026-02-02 10:00:00,J001,2099-01-01,1,1,1,1,1,,', // Inválida (fecha futura)
+      ].join('\n')
+
+      const file = new File([csvContent], 'Wellnes-Diario.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
+
+      // Debe haber error
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-errores')).toHaveTextContent('1')
+        expect(screen.getByText(/No puedes aplicar la importaci.n todav.a/i)).toBeInTheDocument()
+      })
+
+      // Omitir la fila con error
+      const checkboxes = screen.getAllByRole('checkbox')
+      const errorCheckbox = checkboxes[checkboxes.length - 1] as HTMLInputElement
+      fireEvent.click(errorCheckbox)
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente →$/i })).not.toBeDisabled()
+      })
+
+      // Avanzar al paso de confirmación
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente →$/i }))
+
+      // Simular copia de seguridad
+      const downloadBtn = await screen.findByRole('button', { name: /descargar copia de seguridad/i })
+      fireEvent.click(downloadBtn)
+
+      const confirmBackupCb = await screen.findByRole('checkbox', { name: /confirmo que he guardado/i })
+      fireEvent.click(confirmBackupCb)
+
+      // Mock window.alert to see if an error is thrown
+      const alertMock = vi.spyOn(window, 'alert').mockImplementation((msg) => {
+        console.error('WINDOW ALERT CALLED WITH:', msg)
+        console.error('ALL CONSOLE ERRORS:', errorSpy.mock.calls)
+      })
+
+      // Confirmar importación
+      const applyBtn = await screen.findByRole('button', { name: /aplicar importación/i })
+      fireEvent.click(applyBtn)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Importación aplicada/i)).toBeInTheDocument()
+      }, { timeout: 3000 })
+
+      // Verificar DB
+      const dbWellness = await db.wellness.toArray()
+      expect(dbWellness).toHaveLength(1)
+      expect(dbWellness[0].fecha).toBe('2026-02-01')
+      expect(dbWellness[0].dolor_especifico).toBe('Rodilla derecha')
+
+      const dbImportado = await db.wellness_diario_importado.toArray()
+      expect(dbImportado).toHaveLength(1)
+      expect(dbImportado[0].textos['Comentario sobre la sesión (opcional)']).toBe('Buen entreno')
+      expect(dbImportado[0].textos['Marca temporal']).toBe('46054.41615740741')
+
+      alertMock.mockRestore()
+    })
+  })
+
+  describe('BLOCK D - Flujo de Aliases (Recordar Asignacion)', () => {
+    beforeEach(async () => {
+      await db.wellness.clear()
+      await db.wellness_diario_importado.clear()
+      await db.alias_jugadora.clear()
+      await db.jugadoras.clear()
+
+      await db.jugadoras.bulkAdd([
+        { id_jugadora: 'J001', nombre: 'Jugadora 1', posicion: 'Cierre', activa: true },
+        { id_jugadora: 'J002', nombre: 'Jugadora 2', posicion: 'Ala', activa: true }
+      ])
+      await db.wellness.bulkAdd([
+        { id: 'W1', id_jugadora: 'J001', fecha: '2026-02-01', calidad_sueno: 8, fatiga: 7, dolor_muscular: 6, estres: 5, estado_animo: 8, dolor_especifico: 'Ninguno' },
+        { id: 'W2', id_jugadora: 'J001', fecha: '2026-02-02', calidad_sueno: 8, fatiga: 7, dolor_muscular: 6, estres: 5, estado_animo: 8, dolor_especifico: 'Ninguno' },
+        { id: 'W3', id_jugadora: 'J002', fecha: '2026-02-01', calidad_sueno: 8, fatiga: 7, dolor_muscular: 6, estres: 5, estado_animo: 8, dolor_especifico: 'Ninguno' },
+        { id: 'W4', id_jugadora: 'J002', fecha: '2026-02-02', calidad_sueno: 8, fatiga: 7, dolor_muscular: 6, estres: 5, estado_animo: 8, dolor_especifico: 'Ninguno' }
+      ])
+
+      useStore.getState().loadAll()
+    })
+
+    const setupWithCSV = async (csvRows: string[]) => {
+      const header = "Marca temporal,ID_Jugadora,Fecha,Calidad_sueno,Fatiga,Dolor_muscular,Estres,Estado_animo,Dolor_especifico\n";
+      const csvContent = header + csvRows.join("\n")
+      const file = new File([csvContent], 'test-wellness.csv', { type: 'text/csv' })
+
+      const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {})
+
+      render(
+        <MemoryRouter>
+          <ImportPage />
+        </MemoryRouter>
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText(/Asistente de Importacin|Asistente de Importación/i)).toBeInTheDocument()
+      })
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText(/ID Jugadora/i)).toBeInTheDocument()
+      })
+
+      const selects = screen.getAllByRole('combobox')
+      fireEvent.change(selects[1], { target: { value: 'ID_Jugadora' } })
+      fireEvent.change(selects[2], { target: { value: 'Fecha' } })
+
+      await waitFor(() => {
+        expect(screen.getByText(/No puedes aplicar la importaci.n todav.a/i)).toBeInTheDocument()
+      })
+
+      return alertMock
+    }
+
+    const completeImport = async () => {
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText(/resumen de carga/i)).toBeInTheDocument()
+      })
+
+      const backupBtn = screen.getByRole('button', { name: /descargar copia de seguridad previa/i })
+      fireEvent.click(backupBtn)
+
+      const confirmCheck = await screen.findByRole('checkbox', { name: /confirmo que he guardado/i })
+      await waitFor(() => {
+        expect(confirmCheck).not.toBeDisabled()
+      })
+      fireEvent.click(confirmCheck)
+
+      const applyBtn = screen.getByRole('button', { name: /^aplicar importacin|^aplicar importación/i })
+      fireEvent.click(applyBtn)
+
+      await waitFor(() => {
+        expect(screen.getByText(/importacin aplicada|importación aplicada/i)).toBeInTheDocument()
+      }, { timeout: 3000 })
+    }
+
+    it('Test A - Reabrir conserva alias original', async () => {
+      const alertMock = await setupWithCSV(["2026-02-01 10:00:00,Desconocida1,2026-02-01,9,7,6,5,8,Ninguno"])
+
+      // 1. Asignar J001 con recordar activado
+      let editBtn = await screen.findByRole('button', { name: /editar/i })
+      fireEvent.click(editBtn)
+      await waitFor(() => { expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0) })
+
+      const idSelects = screen.getAllByRole('combobox')
+      const idSelect = idSelects[idSelects.length - 1]
+      fireEvent.change(idSelect, { target: { value: 'J001' } })
+
+      let checkbox = await screen.findByLabelText(/recordar asignacin|recordar asignación/i) as HTMLInputElement
+      if (!checkbox.checked) fireEvent.click(checkbox)
+
+      // 2. Guardar/revalidar
+      let saveBtn = screen.getByRole('button', { name: /revalidar/i })
+      fireEvent.click(saveBtn)
+      await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
+      await waitFor(() => { expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
+
+      // 3. Reabrir edicion
+      editBtn = await screen.findByRole('button', { name: /editar/i })
+      fireEvent.click(editBtn)
+      await waitFor(() => { expect(screen.getByRole('button', { name: /revalidar/i })).toBeInTheDocument() })
+
+      // 4. Verificar que alias_origen_real sigue siendo Desconocida1 (el checkbox esta visible y marcado)
+      checkbox = await screen.findByLabelText(/recordar asignacin|recordar asignación/i) as HTMLInputElement
+      expect(checkbox).toBeInTheDocument()
+      expect(checkbox.checked).toBe(true)
+
+      // 5. Desmarcar, guardar e importar
+      fireEvent.click(checkbox)
+      saveBtn = screen.getByRole('button', { name: /revalidar/i })
+      fireEvent.click(saveBtn)
+      await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
+
+      await completeImport()
+
+      // 6. Verificar que Desconocida1 no se persiste
+      const allAliases = await db.alias_jugadora.toArray()
+      const savedAlias = allAliases.find(a => a.valor.toLowerCase() === 'desconocida1')
+      expect(savedAlias).toBeUndefined()
+
+      alertMock.mockRestore()
+    })
+
+    it('Test B - Dos aliases, misma jugadora', async () => {
+      const alertMock = await setupWithCSV([
+        "2026-02-01 10:00:00,Ani,2026-02-01,9,7,6,5,8,Ninguno",
+        "2026-02-02 10:00:00,Ana G.,2026-02-02,9,7,6,5,8,Ninguno"
+      ])
+
+      // Asignar ambas a J001
+      let editBtns = await screen.findAllByRole('button', { name: /editar/i })
+
+      // Fila 2 (Ani)
+      fireEvent.click(editBtns[0])
+      await waitFor(() => { expect(screen.getByRole('button', { name: /revalidar/i })).toBeInTheDocument() })
+      let idSelects = screen.getAllByRole('combobox')
+      fireEvent.change(idSelects[idSelects.length - 1], { target: { value: 'J001' } })
+      let checkbox = await screen.findByLabelText(/recordar asignacin|recordar asignación/i) as HTMLInputElement
+      if (!checkbox.checked) fireEvent.click(checkbox)
+      fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
+      await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
+
+      // Fila 3 (Ana G.)
+      editBtns = await screen.findAllByRole('button', { name: /editar/i })
+      fireEvent.click(editBtns[1])
+
+      await waitFor(() => { expect(screen.getByRole('button', { name: /revalidar/i })).toBeInTheDocument() })
+      idSelects = screen.getAllByRole('combobox')
+      fireEvent.change(idSelects[idSelects.length - 1], { target: { value: 'J001' } })
+      checkbox = await screen.findByLabelText(/recordar asignacin|recordar asignación/i) as HTMLInputElement
+      if (!checkbox.checked) fireEvent.click(checkbox)
+      fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
+      await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
+
+      await waitFor(() => { expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
+
+      // Reabrir solo fila 2 (Ani)
+      const reopenBtns = await screen.findAllByRole('button', { name: /editar/i })
+      fireEvent.click(reopenBtns[0])
+      await waitFor(() => { expect(screen.getByRole('button', { name: /revalidar/i })).toBeInTheDocument() })
+
+      // Desmarcar
+      checkbox = await screen.findByLabelText(/recordar asignacin|recordar asignación/i) as HTMLInputElement
+      if (checkbox.checked) fireEvent.click(checkbox)
+      fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
+      await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
+
+      await completeImport()
+
+      // Verificar DB
+      const allAliases = await db.alias_jugadora.toArray()
+
+      const ani = allAliases.find(a => a.valor.toLowerCase() === 'ani' && a.activo === true)
+      expect(ani).toBeUndefined()
+
+      const anaG = allAliases.find(a => a.valor.toLowerCase() === 'ana g.' && a.activo === true)
+      expect(anaG).toBeDefined()
+      expect(anaG?.id_jugadora).toBe('J001')
+
+      alertMock.mockRestore()
+    })
+
+    it('Test C - Cambio de jugadora', async () => {
+      const alertMock = await setupWithCSV(["2026-02-01 10:00:00,Ani,2026-02-01,9,7,6,5,8,Ninguno"])
+
+      // Asignar J001
+      let editBtn = await screen.findByRole('button', { name: /editar/i })
+      fireEvent.click(editBtn)
+      await waitFor(() => { expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0) })
+
+      let idSelects = screen.getAllByRole('combobox')
+      fireEvent.change(idSelects[idSelects.length - 1], { target: { value: 'J001' } })
+
+      let checkbox = await screen.findByLabelText(/recordar asignacin|recordar asignación/i) as HTMLInputElement
+      if (!checkbox.checked) fireEvent.click(checkbox)
+
+      fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
+      await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
+      await waitFor(() => { expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
+
+      // Reabrir misma fila
+      editBtn = await screen.findByRole('button', { name: /editar/i })
+      fireEvent.click(editBtn)
+      await waitFor(() => { expect(screen.getByRole('button', { name: /revalidar/i })).toBeInTheDocument() })
+
+      // Cambiar a J002
+      idSelects = screen.getAllByRole('combobox')
+      fireEvent.change(idSelects[idSelects.length - 1], { target: { value: 'J002' } })
+
+      // El checkbox deberia seguir ahi y estar marcado, si no, lo marcamos
+      checkbox = await screen.findByLabelText(/recordar asignacin|recordar asignación/i) as HTMLInputElement
+      if (!checkbox.checked) fireEvent.click(checkbox)
+
+      fireEvent.click(screen.getByRole('button', { name: /revalidar/i }))
+      await waitFor(() => { expect(screen.queryByRole('button', { name: /revalidar/i })).not.toBeInTheDocument() })
+      fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
+
+      await completeImport()
+
+      // Verificar
+      const allAliases = await db.alias_jugadora.toArray()
+      const ani = allAliases.find(a => a.valor.toLowerCase() === 'ani' && a.activo === true)
+      expect(ani).toBeDefined()
+      expect(ani?.id_jugadora).toBe('J002')
+
+      const aniJ001 = allAliases.find(a => a.valor.toLowerCase() === 'ani' && a.id_jugadora === 'J001')
+      expect(aniJ001).toBeUndefined()
+
+      alertMock.mockRestore()
+    })
+  })
+
+  describe('BLOCK E - PR-3 Calidad del Dato', () => {
+    beforeEach(async () => {
+      await db.wellness.clear()
+      await db.wellness_diario_importado.clear()
+      await db.alias_jugadora.clear()
+      await db.jugadoras.clear()
+      await db.temporadas.clear()
+
+      await db.temporadas.add({
+        id_temporada: 'temp-2025-2026',
+        nombre: 'Temporada 2025/2026',
+        fecha_inicio: '2025-08-01',
+        fecha_fin: '2026-07-31',
+        activa: true,
+        creadaEn: '2025-08-01T00:00:00Z',
+        actualizadaEn: '2025-08-01T00:00:00Z'
+      })
+
+      await db.jugadoras.bulkAdd([
+        { id_jugadora: 'J001', nombre: 'Ana Lopez', posicion: 'Cierre', activa: true },
+        { id_jugadora: 'J002', nombre: 'Ana Lopez', posicion: 'Ala', activa: true },
+        { id_jugadora: 'J003', nombre: 'Clara Soto', posicion: 'Pivot', activa: true }
+      ])
+
+      await useStore.getState().loadAll()
+    })
+
+    it('1. Dataset con omitida, duplicado existente y duplicado interno idéntico: contadores separados y correctos', async () => {
+      await db.wellness.add({
+        id: 'W1',
+        id_jugadora: 'J001',
+        fecha: '2026-01-15',
+        calidad_sueno: 8,
+        fatiga: 3,
+        dolor_muscular: 4,
+        estres: 2,
+        estado_animo: 9,
+        score_wellness: 8.0,
+        dolor_especifico: ''
+      })
+      useStore.setState({ wellness: await db.wellness.toArray() })
+
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
+        'J001,2026-01-15,8,3,4,2,9', // Duplicado existente en DB
+        'J003,2026-01-16,8,3,4,2,9', // Nueva (se omitirá)
+        'J003,2026-01-17,7,4,3,2,8', // Nueva
+        'J003,2026-01-17,7,4,3,2,8'  // Duplicado interno idéntico en archivo
+      ].join('\n')
+
+      const file = new File([csvContent], 'dataset1.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente/i }))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-total').textContent).toBe('4')
+      })
+
+      // Omitir manualmente la segunda fila (J003, 2026-01-16)
+      const checkboxes = screen.getAllByRole('checkbox')
+      const targetCheckbox = checkboxes[1]
+      fireEvent.click(targetCheckbox)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('1')
+        expect(screen.getByTestId('preview-count-duplicados-existentes').textContent).toBe('1')
+        expect(screen.getByTestId('preview-count-duplicados-internos').textContent).toBe('1')
+        expect(screen.getByTestId('preview-count-nuevos').textContent).toBe('1')
+      })
+    })
+
+    it('2. Dataset con jugadora no resuelta, alias ambiguo, fecha inválida y conflicto interno: contadores independientes', async () => {
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
+        'NO_REGISTRADA,2026-01-15,8,3,4,2,9', // Jugadora no resuelta
+        'Ana Lopez,2026-01-15,8,3,4,2,9',     // Alias ambiguo (J001 y J002)
+        'J003,FECHA_INVALIDA,8,3,4,2,9',       // Fecha inválida
+        'J003,2026-01-15,8,3,4,2,9',          // Válido
+        'J003,2026-01-15,8,3,4,2,10'          // Conflicto interno (mismo J003 y fecha, distintos datos)
+      ].join('\n')
+
+      const file = new File([csvContent], 'dataset2.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente/i }))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-total').textContent).toBe('5')
+      })
+
+      // Verificar cada contador de identidad e integridad por separado
+      expect(screen.getByTestId('quality-pendientesIdentidad').textContent).toBe('1')
+      expect(screen.getByTestId('quality-aliasAmbiguos').textContent).toBe('1')
+      expect(screen.getByTestId('quality-erroresFormato').textContent).toBe('1')
+      expect(screen.getByTestId('quality-conflictosInternos').textContent).toBe('1')
+    })
+
+    it('3. Jugadoras no resueltas NO aumenta cuando el único error es fecha inválida, conflicto interno o alias ambiguo', async () => {
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
+        'Ana Lopez,2026-01-15,8,3,4,2,9',     // Alias ambiguo
+        'J003,2026-99-99,8,3,4,2,9',          // Fecha inválida
+        'J003,2026-01-15,8,3,4,2,9',          // Válido
+        'J003,2026-01-15,8,3,4,2,10'          // Conflicto interno
+      ].join('\n')
+
+      const file = new File([csvContent], 'dataset3.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente/i }))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-total').textContent).toBe('4')
+      })
+
+      // Verificar explícitamente que Jugadoras no resueltas permanece en 0
+      expect(screen.getByTestId('quality-pendientesIdentidad').textContent).toBe('0')
+      expect(screen.getByTestId('quality-aliasAmbiguos').textContent).toBe('1')
+      expect(screen.getByTestId('quality-erroresFormato').textContent).toBe('1')
+      expect(screen.getByTestId('quality-conflictosInternos').textContent).toBe('1')
+    })
+
+    it('4. Muestra los contadores correctos del Panel de Calidad y verifica mensaje de bloqueo', async () => {
+      await db.wellness.add({
+        id: 'W1',
+        id_jugadora: 'J001',
+        fecha: '2026-01-15',
+        calidad_sueno: 8,
+        fatiga: 3,
+        dolor_muscular: 4,
+        estres: 2,
+        estado_animo: 9,
+        score_wellness: 8.0,
+        dolor_especifico: ''
+      })
+
+      useStore.setState({ wellness: await db.wellness.toArray() })
+
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
+        'J001,2026-01-15,8,3,4,2,9',  // Duplicado existente
+        'J002,2026-01-15,8,3,4,2,9',  // Nueva
+        'NO_EXISTE,2026-01-15,8,3,4,2,9', // Jugadora no resuelta
+        'J001,2026-01-15,8,3,4,2,10' // Conflicto interno (con la fila 1 de J001)
+      ].join('\n')
+
+      const file = new File([csvContent], 'wellness_pr3.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+
+      fireEvent.change(importInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente/i }))
+
+      // Esperar a que se calcule la previsualizacion (async)
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-total').textContent).toBe('4')
+      })
+
+      // Verificar contadores del panel de calidad
+      expect(screen.getByTestId('quality-resIdExacto').textContent).toBe('2') // J001 (fila 1) y J002 (fila 2) resueltas por ID exacto
+      expect(screen.getByTestId('quality-pendientesIdentidad').textContent).toBe('1') // NO_EXISTE
+      expect(screen.getByTestId('quality-conflictosInternos').textContent).toBe('1') // Conflicto interno fila 4
+      expect(screen.getByTestId('preview-count-duplicados-existentes').textContent).toBe('1') // Fila 1
+
+      // Verificar que el asistente está bloqueado con un mensaje accionable
+      expect(screen.getByText(/No puedes aplicar la importación todavía:/i)).toBeInTheDocument()
+      expect(screen.getByText(/1 fila\(s\) requiere\(n\) asignar jugadora/i)).toBeInTheDocument()
+      expect(screen.getByText(/1 conflicto\(s\) interno\(s\) dentro del archivo/i)).toBeInTheDocument()
+    })
+
+    // Nota: Un DUPLICADO_IDENTICO no tiene checkbox en la UI y no se puede omitir directamente.
+    // Este test demuestra que al omitir un NUEVO y aparecer un duplicado en la BD en segundo plano,
+    // restaurar la fila la empuja orgánicamente a DUPLICADO_IDENTICO por recálculo puro.
+    it('5. NUEVO -> OMITIDA -> DUPLICADO_IDENTICO tras cambio de BD y recálculo', async () => {
+      // 1. Dataset con un solo registro NUEVO
+      const csvContent = [
+        'ID_Jugadora,Fecha,Calidad de sueno,Fatiga,Dolor muscular,Estres,Estado de animo',
+        'J001,2026-02-01,8,3,4,2,9'
+      ].join('\n')
+
+      const testFile = new File([csvContent], 'duplicados.csv', { type: 'text/csv' })
+
+      render(
+        <MemoryRouter>
+          <StrictMode>
+            <ImportPage />
+          </StrictMode>
+        </MemoryRouter>
+      )
+
+      const inputs = document.querySelectorAll('input[type="file"]')
+      const importInput = Array.from(inputs).find(input => !input.getAttribute('accept')?.includes('.json')) as HTMLInputElement
+      fireEvent.change(importInput, { target: { files: [testFile] } })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^siguiente/i })).not.toBeDisabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^siguiente/i }))
+
+      // Estado 1: Fila 1 es NUEVA
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-nuevos').textContent).toBe('1')
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('0')
+      })
+
+      // Omitimos Fila 1
+      let checkboxes = screen.getAllByRole('checkbox')
+      fireEvent.click(checkboxes[0])
+
+      // Estado 2: Fila 1 OMITIDA
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('1')
+        expect(screen.getByTestId('preview-count-nuevos').textContent).toBe('0')
+      })
+
+      // Inyectamos el duplicado en la base de datos simulando un cambio en background
+      await db.wellness.add({
+        id: 'W_DUP_1',
+        id_jugadora: 'J001',
+        fecha: '2026-02-01',
+        calidad_sueno: 8,
+        fatiga: 3,
+        dolor_muscular: 4,
+        estres: 2,
+        estado_animo: 9,
+        score_wellness: 8.0,
+        dolor_especifico: ''
+      })
+      // Actualizamos store manual (useLiveQuery simulado)
+      useStore.setState({ wellness: await db.wellness.toArray() })
+
+      // Restauramos Fila 1
+      checkboxes = screen.getAllByRole('checkbox')
+      fireEvent.click(checkboxes[0])
+
+      // Estado 3: La fila ahora se detecta como DUPLICADO_IDENTICO por recálculo puro
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-count-nuevos').textContent).toBe('0')
+        expect(screen.getByTestId('preview-count-omitidas').textContent).toBe('0')
+        expect(screen.getByTestId('preview-count-duplicados-existentes').textContent).toBe('1')
+        expect(screen.queryAllByRole('checkbox').length).toBe(0) // Ya no tiene checkbox
+      })
     })
   })
 })

@@ -32,3 +32,10 @@ export async function generarAlertas(): Promise<void> {
     await db.alertas.put(a)
   }
 }
+
+export const getEstadoEfectivo = (alerta: import('@/types').Alerta) => alerta.estado ?? 'abierta'
+
+export const esAlertaActiva = (alerta: import('@/types').Alerta) => {
+  const estadoEfectivo = getEstadoEfectivo(alerta)
+  return estadoEfectivo === 'abierta' || estadoEfectivo === 'en_revision'
+}
