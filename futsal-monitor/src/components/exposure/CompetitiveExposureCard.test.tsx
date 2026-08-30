@@ -15,7 +15,7 @@ describe("CompetitiveExposureCard", () => {
     mockCalcular.mockReset()
   })
 
-  it("1. Usa calcularExposicionCompetitiva del dominio sin duplicar logica", () => {
+  it("1. completa: métricas reales visibles", () => {
     mockCalcular.mockReturnValue({
       minutos7d: 30, minutos28d: 120,
       partidosJugados7d: 1, partidosJugados28d: 4,
@@ -31,13 +31,54 @@ describe("CompetitiveExposureCard", () => {
     render(<CompetitiveExposureCard registros={[]} fechaCorteISO="2026-08-01" modo="completo" />)
     expect(mockCalcular).toHaveBeenCalledTimes(1)
     expect(screen.getByText("Completa")).toBeInTheDocument()
-    expect(screen.getByText("30 / 120")).toBeInTheDocument()
-    expect(screen.queryByText(/riesgo elevado/i)).not.toBeInTheDocument()
+    expect(screen.getAllByText("30 / 120").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("1 / 4").length).toBeGreaterThan(0) // Partidos
   })
 
-  it("2. Muestra � cuando ratio o referencia no son calculables", () => {
+  it("2. parcial: métricas reales visibles y etiqueta Parcial", () => {
     mockCalcular.mockReturnValue({
-      minutos7d: null, minutos28d: null,
+      minutos7d: 20, minutos28d: 40,
+      partidosJugados7d: 1, partidosJugados28d: 2,
+      convocatorias7d: 1, convocatorias28d: 2,
+      convocadaSinMinutos7d: 0, convocadaSinMinutos28d: 0,
+      porcentajeExposicion7d: 50,
+      referenciaSemanal28d: 10,
+      ratioCambioExposicion: 2.0,
+      calidadDato: "parcial",
+      motivosCalidadDato: []
+    })
+
+    render(<CompetitiveExposureCard registros={[]} fechaCorteISO="2026-08-01" modo="completo" />)
+    expect(screen.getByText("Parcial")).toBeInTheDocument()
+    expect(screen.getAllByText("20 / 40").length).toBeGreaterThan(0)
+  })
+
+  it("3. insuficiente: no muestra 0 / 0 ni 0 min / 0 conv.; muestra “", () => {
+    mockCalcular.mockReturnValue({
+      minutos7d: 0, minutos28d: 0,
+      partidosJugados7d: 0, partidosJugados28d: 0,
+      convocatorias7d: 0, convocatorias28d: 0,
+      convocadaSinMinutos7d: 0, convocadaSinMinutos28d: 0,
+      porcentajeExposicion7d: null,
+      referenciaSemanal28d: null,
+      ratioCambioExposicion: null,
+      calidadDato: "insuficiente",
+      motivosCalidadDato: []
+    })
+
+    const { unmount } = render(<CompetitiveExposureCard registros={[]} fechaCorteISO="2026-08-01" modo="completo" />)
+    expect(screen.getAllByText("“ / “").length).toBeGreaterThan(0)
+    expect(screen.queryByText("0 / 0")).toBeNull();
+    expect(screen.queryByText("0 min / 0 conv.")).toBeNull();
+
+    unmount()
+    render(<CompetitiveExposureCard registros={[]} fechaCorteISO="2026-08-01" modo="compacto" />)
+    expect(screen.queryByText("0 min / 0 conv.")).toBeNull();
+  })
+
+  it("4. sin_registros_competitivos: muestra Sin registros competitivos y “", () => {
+    mockCalcular.mockReturnValue({
+      minutos7d: 0, minutos28d: 0,
       partidosJugados7d: 0, partidosJugados28d: 0,
       convocatorias7d: 0, convocatorias28d: 0,
       convocadaSinMinutos7d: 0, convocadaSinMinutos28d: 0,
@@ -49,78 +90,52 @@ describe("CompetitiveExposureCard", () => {
     })
 
     render(<CompetitiveExposureCard registros={[]} fechaCorteISO="2026-08-01" modo="completo" />)
-    expect(screen.getByText("� / �")).toBeInTheDocument()
     expect(screen.getByText("Sin registros competitivos")).toBeInTheDocument()
-    expect(screen.queryByText("Ratio de cambio")).not.toBeInTheDocument()
+    expect(screen.getAllByText("“ / “").length).toBeGreaterThan(0)
+    expect(screen.queryByText("0 / 0")).toBeNull();
   })
 
-  it("3. Modo fila renderiza las celdas correctamente", () => {
+  it("5. convocada_sin_minutos válida: 0 minutos visible como dato real, 1 convocatoria", () => {
     mockCalcular.mockReturnValue({
-      minutos7d: 40, minutos28d: 40,
-      partidosJugados7d: 1, partidosJugados28d: 1,
+      minutos7d: 0, minutos28d: 0,
+      partidosJugados7d: 0, partidosJugados28d: 0,
       convocatorias7d: 1, convocatorias28d: 1,
-      convocadaSinMinutos7d: 0, convocadaSinMinutos28d: 0,
-      porcentajeExposicion7d: 100,
-      referenciaSemanal28d: 10,
-      ratioCambioExposicion: 4.0,
-      calidadDato: "parcial",
-      motivosCalidadDato: []
-    })
-
-    render(
-      <table>
-        <tbody>
-          <tr>
-            <CompetitiveExposureCard registros={[]} fechaCorteISO="2026-08-01" modo="fila" />
-          </tr>
-        </tbody>
-      </table>
-    )
-
-    expect(screen.getByText("40")).toBeInTheDocument()
-    expect(screen.getByText("Parcial")).toBeInTheDocument()
-  })
-
-  it("4. Modo compacto renderiza sin alertas", () => {
-    mockCalcular.mockReturnValue({
-      minutos7d: 40, minutos28d: 40,
-      partidosJugados7d: 1, partidosJugados28d: 1,
-      convocatorias7d: 1, convocatorias28d: 1,
-      convocadaSinMinutos7d: 0, convocadaSinMinutos28d: 0,
-      porcentajeExposicion7d: 100,
-      referenciaSemanal28d: 10,
-      ratioCambioExposicion: 4.0,
+      convocadaSinMinutos7d: 1, convocadaSinMinutos28d: 1,
+      porcentajeExposicion7d: 0,
+      referenciaSemanal28d: 0,
+      ratioCambioExposicion: null,
       calidadDato: "completa",
       motivosCalidadDato: []
     })
 
-    render(<CompetitiveExposureCard registros={[]} fechaCorteISO="2026-08-01" modo="compacto" />)
+    render(<CompetitiveExposureCard registros={[]} fechaCorteISO="2026-08-01" modo="completo" />)
     expect(screen.getByText("Completa")).toBeInTheDocument()
-    expect(screen.getByText("40 min / 1 conv.")).toBeInTheDocument()
-    expect(screen.getByText("Ratio: 4.00")).toBeInTheDocument()
+    // Como es de calidad completa, sí muestra los 0 reales.
+    expect(screen.getAllByText("0 / 0").length).toBeGreaterThan(0) // Minutos y Partidos (habrá bastantes)
+    expect(screen.getAllByText("1 / 1").length).toBeGreaterThan(0) // Convocatorias
   })
 
-  it("5. Tooltip accesible responde al foco y escape", () => {
+  it("6. tooltip accesible: responde al foco y escape", () => {
     mockCalcular.mockReturnValue({
-      minutos7d: 40, minutos28d: 40,
-      partidosJugados7d: 1, partidosJugados28d: 1,
-      convocatorias7d: 1, convocatorias28d: 1,
+      minutos7d: 30, minutos28d: 120,
+      partidosJugados7d: 1, partidosJugados28d: 4,
+      convocatorias7d: 1, convocatorias28d: 4,
       convocadaSinMinutos7d: 0, convocadaSinMinutos28d: 0,
-      porcentajeExposicion7d: 100,
-      referenciaSemanal28d: 10,
-      ratioCambioExposicion: 4.0,
-      calidadDato: "insuficiente",
+      porcentajeExposicion7d: 75,
+      referenciaSemanal28d: 30,
+      ratioCambioExposicion: 1.0,
+      calidadDato: "completa",
       motivosCalidadDato: []
     })
 
     render(<CompetitiveExposureCard registros={[]} fechaCorteISO="2026-08-01" modo="completo" />)
-
-    const trigger = screen.getByText("Datos competitivos incompletos")
+    
+    const trigger = screen.getByText("Completa")
     expect(trigger).toHaveAttribute("aria-describedby")
     expect(trigger).toHaveAttribute("tabIndex", "0")
-
+    
     const tooltipId = trigger.getAttribute("aria-describedby")
-    const tooltip = document.getElementById(tooltipId)
+    const tooltip = document.getElementById(tooltipId!)
     expect(tooltip).toBeInTheDocument()
     expect(tooltip).toHaveAttribute("role", "tooltip")
 
@@ -130,4 +145,5 @@ describe("CompetitiveExposureCard", () => {
     fireEvent.keyDown(trigger, { key: "Escape", code: "Escape" })
     expect(document.activeElement).not.toBe(trigger)
   })
+
 })

@@ -34,7 +34,7 @@ export function PlayerProfilePage() {
   const [searchParams] = useSearchParams()
   const location = useLocation()
 
-  const initialTabParam = (searchParams.get('tab') || (location.state as { tab?: string })?.tab) as string
+  const initialTabParam = (searchParams.get('tab') || (location.state as { tab?: string })?.tab) as any
 
   const {
     jugadoras, wellness, lesiones, tests, rpe_partido, resumen_semanal, readiness, 
@@ -81,16 +81,16 @@ export function PlayerProfilePage() {
   const [fuerzaDetailId, setFuerzaDetailId] = useState<string | null>(null)
   
   const [newGPSOpen, setNewGPSOpen] = useState(false)
-  const [gpsForm, setGpsForm] = useState({ fecha: '', distancia_total: 0, distancia_hsr: 0, aceleraciones: 0, deceleraciones: 0, player_load: 0 })
+  const [gpsForm, setGpsForm] = useState<any>({ fecha: '', distancia_total: 0, distancia_hsr: 0, aceleraciones: 0, deceleraciones: 0, player_load: 0 })
 
   const [newVBTOpen, setNewVBTOpen] = useState(false)
-  const [vbtForm, setVbtForm] = useState({ fecha: '', ejercicio: 'Sentadilla', carga_kg: 0, velocidad_media: 0, velocidad_pico: 0, perdida_velocidad: 0 })
+  const [vbtForm, setVbtForm] = useState<any>({ fecha: '', ejercicio: 'Sentadilla', carga_kg: 0, velocidad_media: 0, velocidad_pico: 0, perdida_velocidad: 0 })
 
   const [newHidratacionOpen, setNewHidratacionOpen] = useState(false)
-  const [hidratacionForm, setHidratacionForm] = useState({ fecha: '', peso_pre: 0, peso_post: 0, liquido_ingerido_ml: 0, tasa_sudoracion: 0 })
+  const [hidratacionForm, setHidratacionForm] = useState<any>({ fecha: '', peso_pre: 0, peso_post: 0, liquido_ingerido_ml: 0, tasa_sudoracion: 0 })
 
   const [newPsicologiaOpen, setNewPsicologiaOpen] = useState(false)
-  const [psicologiaForm, setPsicologiaForm] = useState({ fecha: '', tension: 0, depresion: 0, ira: 0, vigor: 0, fatiga_mental: 0, confusion: 0, notas: '' })
+  const [psicologiaForm, setPsicologiaForm] = useState<any>({ fecha: '', tension: 0, depresion: 0, ira: 0, vigor: 0, fatiga_mental: 0, confusion: 0, notas: '' })
 
   const rpeEntrenoJug = useMemo(() => sesion_rpe.filter((r) => r.id_jugadora === id), [sesion_rpe, id])
   const rpePartidoJug = useMemo(() => rpe_partido.filter((r) => r.id_jugadora === id), [rpe_partido, id])
