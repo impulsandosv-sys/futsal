@@ -26,6 +26,7 @@ import { FollowUpDashboardPage } from '@/pages/FollowUpDashboardPage'
 import { GovernancePage } from '@/pages/GovernancePage'
 import { DailyDecisionPage } from '@/pages/DailyDecisionPage'
 import { SeguimientoMenstrualPage } from '@/pages/SeguimientoMenstrualPage'
+import { MicrocycleDashboardPage } from '@/pages/MicrocycleDashboardPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useStore((s) => s.isAuthenticated)
@@ -44,6 +45,7 @@ const SuspenseWrapper = ({ children }: { children: React.ReactNode }) => (
 
 const routes = [
   { path: ROUTES.DASHBOARD, Component: DashboardPage },
+  { path: ROUTES.MICROCICLO, Component: MicrocycleDashboardPage },
   { path: ROUTES.CALIDAD_DATOS, Component: DataQualityPage },
   { path: ROUTES.JUGADORAS, Component: PlayersPage },
   { path: ROUTES.JUGADORA_PROFILE, Component: PlayerProfilePage },

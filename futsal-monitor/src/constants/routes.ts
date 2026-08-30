@@ -20,4 +20,5 @@ export const ROUTES = {
   IMPORTAR: '/importar',
   TEMPORADAS: '/temporadas',
   SEGUIMIENTO_MENSTRUAL: '/seguimiento-menstrual',
+  MICROCICLO: '/microciclo',
 } as const
