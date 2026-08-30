@@ -16,11 +16,11 @@ export function calcularDeficitCompensacion(
   if (minutosObjetivo === undefined || minutosObjetivo === null) {
     return null
   }
-  
+
   if (minutosJugados === undefined || minutosJugados === null) {
     return null
   }
-  
+
   const deficit = minutosObjetivo - minutosJugados
   return Math.max(0, deficit)
 }
@@ -39,14 +39,14 @@ export function inferirEstadoCompensacion(
   if (estadoActual === 'realizada' || estadoActual === 'omitida' || estadoActual === 'planificada') {
     return estadoActual
   }
-  
+
   if (deficit === null) {
     return 'pendiente'
   }
-  
+
   if (deficit === 0) {
     return 'omitida'
   }
-  
+
   return 'pendiente'
 }

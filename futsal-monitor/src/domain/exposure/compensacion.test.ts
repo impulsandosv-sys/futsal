@@ -59,19 +59,19 @@ describe('Compensacion Postpartido Domain', () => {
     it('debe crear un nuevo registro si no existe, y actualizarlo sin duplicar si ya existe', async () => {
       const store = useStore.getState()
       const mockDB: any[] = []
-      
+
       db.compensacion_postpartido.put = vi.fn(async (item) => {
         const index = mockDB.findIndex(x => x.id_partido === item.id_partido && x.id_jugadora === item.id_jugadora)
         if (index >= 0) mockDB[index] = item
         else mockDB.push(item)
       })
-      
+
       db.compensacion_postpartido.toArray = vi.fn(async () => mockDB)
-      
+
       db.compensacion_postpartido.where = vi.fn(() => ({
         first: vi.fn(async () => null) // simplification for first insert
       }))
-      
+
       const comp1 = {
         id_partido: 'p1',
         id_jugadora: 'j1',
@@ -83,7 +83,7 @@ describe('Compensacion Postpartido Domain', () => {
       }
 
       await store.upsertCompensacionPostPartido(comp1)
-      
+
       let all = useStore.getState().compensacion_postpartido
       expect(all.length).toBe(1)
       expect(all[0].minutos_objetivo).toBe(20)
@@ -103,7 +103,7 @@ describe('Compensacion Postpartido Domain', () => {
       }))
 
       await store.upsertCompensacionPostPartido(comp2)
-      
+
       all = useStore.getState().compensacion_postpartido
       expect(all.length).toBe(1)
       expect(all[0].minutos_objetivo).toBe(30)

@@ -12,7 +12,7 @@ describe('Data Quality: evaluarCompletitudDatos', () => {
   it('debe detectar partido pasado sin fila rpe_partido como pendiente de minutos', () => {
     const partidos: Partido[] = [{ id_partido: 'p1', fecha: '2026-08-17', rival: 'Rival', competicion: '', lugar: 'Local', resultado: '' }]
     const report = evaluarCompletitudDatos(jugadoras, [], partidos, [], [], hoyLocal)
-    
+
     expect(report.alertas).toHaveLength(1)
     expect(report.alertas[0].estado).toBe('pendiente')
     expect(report.alertas[0].tipo).toBe('minutos_partido')
@@ -22,7 +22,7 @@ describe('Data Quality: evaluarCompletitudDatos', () => {
   it('debe excluir partidos futuros', () => {
     const partidos: Partido[] = [{ id_partido: 'p1', fecha: '2026-08-20', rival: 'Futuro', competicion: '', lugar: 'Local', resultado: '' }]
     const report = evaluarCompletitudDatos(jugadoras, [], partidos, [], [], hoyLocal)
-    
+
     expect(report.alertas).toHaveLength(0)
   })
 
@@ -32,9 +32,9 @@ describe('Data Quality: evaluarCompletitudDatos', () => {
       id_partido: 'p1', id_jugadora: 'j1', fecha: '2026-08-17',
       participacion: 'no_convocada', minutos_jugados: 0, rpe: null, carga_ua: null
     }]
-    
+
     const report = evaluarCompletitudDatos(jugadoras, [], partidos, rpes, [], hoyLocal)
-    
+
     expect(report.alertas).toHaveLength(1)
     expect(report.alertas[0].estado).toBe('no_aplicable')
   })
@@ -45,9 +45,9 @@ describe('Data Quality: evaluarCompletitudDatos', () => {
       id_partido: 'p1', id_jugadora: 'j1', fecha: '2026-08-17',
       participacion: 'completa', minutos_jugados: 20, rpe: null, carga_ua: null
     }]
-    
+
     const report = evaluarCompletitudDatos(jugadoras, [], partidos, rpes, [], hoyLocal)
-    
+
     expect(report.alertas[0].tipo).toBe('rpe_partido')
     expect(report.alertas[0].estado).toBe('pendiente')
     expect(report.alertas[0].titulo).toBe('RPE competitivo pendiente')

@@ -14,7 +14,7 @@ import { WeeklyCalendar } from '@/components/planning/WeeklyCalendar'
 export function SessionsPage() {
   const location = useLocation()
   const navigate = useNavigate()
-  
+
   const { sesiones, partidos, jugadoras, sesion_rpe, filters, addSesion, updateSesion } = useStore()
   const [view, setView] = useState<'plan' | 'historial'>('plan')
   const [modalOpen, setModalOpen] = useState(false)
@@ -63,7 +63,7 @@ export function SessionsPage() {
   const openRpeModal = (s: Sesion, focusJugadoraId?: string) => {
     setRpeSession(s)
     setRpeModalOpen(true)
-    
+
     if (focusJugadoraId) {
       setTimeout(() => {
         const row = document.getElementById(`rpe-sesion-row-${focusJugadoraId}`)

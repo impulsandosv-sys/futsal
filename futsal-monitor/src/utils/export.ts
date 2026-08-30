@@ -147,4 +147,3 @@ export function exportarCSVPartidos(rows: ExportPartidoRow[], filename = 'export
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
   saveAs(blob, `${filename}.csv`)
 }
-

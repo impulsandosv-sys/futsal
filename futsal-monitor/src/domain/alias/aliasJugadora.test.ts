@@ -313,7 +313,7 @@ describe('Dominio AliasJugadora (T-02-DOM-GOV)', () => {
       fecha_alta: '2026-08-01',
     })
     expect(id2).toBeDefined()
-    
+
     // Count should be 1
     const count = await testDb.alias_jugadora.where('valor').equals('idempotente').count()
     expect(count).toBe(1)

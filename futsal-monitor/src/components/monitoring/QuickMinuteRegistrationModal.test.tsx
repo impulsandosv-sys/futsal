@@ -33,12 +33,12 @@ describe('QuickMinuteRegistrationModal', () => {
   it('Filtra partidos usando fecha local (hoy y pasados sí, futuros no)', () => {
     render(<QuickMinuteRegistrationModal open={true} onClose={vi.fn()} initialMatchId="p1" />)
     const select = screen.getAllByRole('combobox')[0] // Partido select
-    
+
     // Deberían estar las opciones correspondientes a Ayer y Hoy, pero no Mañana
     expect(screen.getByText(/Ayer/)).toBeInTheDocument()
     expect(screen.getByText(/Hoy/)).toBeInTheDocument()
     expect(screen.queryByText(/Manana/)).not.toBeInTheDocument()
-    
+
     // Verificamos que se usó getTodayLocalISO para determinar "hoy"
     expect(getTodayLocalISO).toHaveBeenCalled()
   })
@@ -52,7 +52,7 @@ describe('QuickMinuteRegistrationModal', () => {
     render(<QuickMinuteRegistrationModal open={true} onClose={vi.fn()} initialMatchId="p1" />)
     const select = screen.getAllByRole('combobox')[1] // Participacion select
     fireEvent.change(select, { target: { value: 'completa' } })
-    
+
     // Minutes input should be 40
     const minsInput = screen.getAllByRole('spinbutton')[0] as HTMLInputElement
     expect(minsInput.value).toBe('40')
@@ -61,14 +61,14 @@ describe('QuickMinuteRegistrationModal', () => {
   it('5 & 6. "Convocada sin jugar" / "No convocada" guarda minutos 0, RPE null y carga 0', async () => {
     render(<QuickMinuteRegistrationModal open={true} onClose={vi.fn()} initialMatchId="p1" />)
     const select = screen.getAllByRole('combobox')[1]
-    
+
     fireEvent.change(select, { target: { value: 'no_convocada' } })
     const minsInput = screen.getAllByRole('spinbutton')[0] as HTMLInputElement
     expect(minsInput.value).toBe('0')
-    
+
     const saveBtn = screen.getByText('Guardar minutos')
     fireEvent.click(saveBtn)
-    
+
     await waitFor(() => {
       expect(mockSave).toHaveBeenCalledWith([{
         id_partido: 'p1',
@@ -88,13 +88,13 @@ describe('QuickMinuteRegistrationModal', () => {
     render(<QuickMinuteRegistrationModal open={true} onClose={vi.fn()} initialMatchId="p1" />)
     const select = screen.getAllByRole('combobox')[1]
     fireEvent.change(select, { target: { value: 'parcial' } })
-    
+
     const minsInput = screen.getAllByRole('spinbutton')[0] as HTMLInputElement
     fireEvent.change(minsInput, { target: { value: '18' } })
-    
+
     const saveBtn = screen.getByText('Guardar minutos')
     fireEvent.click(saveBtn)
-    
+
     await waitFor(() => {
       expect(mockSave).toHaveBeenCalledWith([{
         id_partido: 'p1',
@@ -114,14 +114,14 @@ describe('QuickMinuteRegistrationModal', () => {
     render(<QuickMinuteRegistrationModal open={true} onClose={vi.fn()} initialMatchId="p1" />)
     const select = screen.getAllByRole('combobox')[1]
     fireEvent.change(select, { target: { value: 'parcial' } })
-    
+
     const inputs = screen.getAllByRole('spinbutton')
     fireEvent.change(inputs[0], { target: { value: '18' } })
     fireEvent.change(inputs[1], { target: { value: '7' } })
-    
+
     const saveBtn = screen.getByText('Guardar minutos')
     fireEvent.click(saveBtn)
-    
+
     await waitFor(() => {
       expect(mockSave).toHaveBeenCalledWith([{
         id_partido: 'p1',
@@ -141,7 +141,7 @@ describe('QuickMinuteRegistrationModal', () => {
     render(<QuickMinuteRegistrationModal open={true} onClose={vi.fn()} initialMatchId="p1" />)
     const saveBtn = screen.getByText('Guardar minutos')
     fireEvent.click(saveBtn)
-    
+
     await waitFor(() => {
       // should not save empty row
       expect(mockSave).not.toHaveBeenCalled()

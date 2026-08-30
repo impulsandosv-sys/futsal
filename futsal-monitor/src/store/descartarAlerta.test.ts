@@ -43,9 +43,9 @@ describe('Descartar Alerta - Flujo de Dominio y Persistencia', () => {
 
   it('1. Descartar una alerta sin motivo ni responsable y 2. Cambio a descartada y 3. fecha_resolucion', async () => {
     useStore.setState({ alertas: [{ ...baseAlerta }] })
-    
+
     await useStore.getState().updateAlertaEstado(1, 'descartada')
-    
+
     const enStore = useStore.getState().alertas[0]
     expect(enStore.estado).toBe('descartada')
     expect(enStore.fecha_resolucion).toBe('2026-08-14')
@@ -70,14 +70,14 @@ describe('Descartar Alerta - Flujo de Dominio y Persistencia', () => {
 
   it('5. Alerta activa con leida=true sigue considerándose activa si estado no es descartada', () => {
     const alertaLeida: Alerta = { ...baseAlerta, leida: true, estado: 'abierta' }
-    
+
     expect(getEstadoEfectivo(alertaLeida)).toBe('abierta')
     expect(esAlertaActiva(alertaLeida)).toBe(true)
   })
 
   it('6 & 7. El filtro activo depende de estado efectivo, y la descartada no aparece en activas', async () => {
     useStore.setState({ alertas: [{ ...baseAlerta }] })
-    
+
     expect(esAlertaActiva(useStore.getState().alertas[0])).toBe(true)
 
     await useStore.getState().updateAlertaEstado(1, 'descartada')
@@ -87,7 +87,7 @@ describe('Descartar Alerta - Flujo de Dominio y Persistencia', () => {
   it('8. El descarte no elimina físicamente el registro de Dexie (solo llama update)', async () => {
     useStore.setState({ alertas: [{ ...baseAlerta }] })
     await useStore.getState().updateAlertaEstado(1, 'descartada')
-    
+
     // Si usara delete habría fallado, pero solo llamó a update
     expect(mockUpdate).toHaveBeenCalled()
   })
@@ -97,7 +97,7 @@ describe('Descartar Alerta - Flujo de Dominio y Persistencia', () => {
 
     await useStore.getState().updateAlertaEstado(1, 'descartada')
     expect(mockUpdate).toHaveBeenCalledTimes(1)
-    
+
     // Cambiamos hora
     vi.setSystemTime(new Date(2026, 7, 15, 12, 0, 0))
     await useStore.getState().updateAlertaEstado(1, 'descartada')

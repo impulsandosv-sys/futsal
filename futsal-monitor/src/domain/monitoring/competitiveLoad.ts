@@ -68,7 +68,7 @@ export function calcularCargaCompetitivaJugadora(
   } else if (typeof filtros.rangoDias === 'number') {
     const end = parseISO(filtros.fechaReferencia)
     const start = subDays(end, filtros.rangoDias)
-    
+
     partidosFiltrados = partidos.filter(p => {
       const pDate = parseISO(p.fecha)
       return isWithinInterval(pDate, { start, end })
@@ -91,13 +91,13 @@ export function calcularCargaCompetitivaJugadora(
   let countRpe = 0
   let sRpeTotal = 0
   let datosPendientes = 0
-  
+
   const registros: JugadoraCompetitiveLoad['registros'] = []
 
   // Iterate over all matches in the period to find missing data
   for (const partido of partidosFiltrados) {
     const rpe = rpesFiltrados.find(r => r.id_partido === partido.id_partido)
-    
+
     if (!rpe) {
       datosPendientes++
       continue
@@ -105,7 +105,7 @@ export function calcularCargaCompetitivaJugadora(
 
     partidosConRegistro++
     registros.push({ partido, rpePartido: rpe })
-    
+
     const isZero = rpe.participacion === 'no_convocada' || rpe.participacion === 'convocada_sin_minutos' || rpe.minutos_jugados === 0
     const isMissing = rpe.minutos_jugados === null || rpe.minutos_jugados === undefined
 
@@ -116,13 +116,13 @@ export function calcularCargaCompetitivaJugadora(
         partidosJugados++
         const m = rpe.minutos_jugados || 0
         minutosTotales += m
-        
+
         if (rpe.rpe !== null && rpe.rpe !== undefined) {
           sumaRpe += rpe.rpe
           countRpe++
         }
       }
-      
+
       if (rpe.carga_ua !== null && rpe.carga_ua !== undefined) {
         sRpeTotal += rpe.carga_ua
       }

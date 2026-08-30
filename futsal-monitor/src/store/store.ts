@@ -1289,14 +1289,14 @@ export const useStore = create<AppState>((set, get) => ({
   saveRpePartidoBatch: async (rpes) => {
     const erroresTodas: string[] = []
     const procesados: RPE_Partido[] = []
-    
+
     for (const r of rpes) {
       inferirParticipacionPartido(r)
-      
+
       const isZero = r.participacion === 'no_convocada' || r.participacion === 'convocada_sin_minutos' || r.minutos_jugados === 0
       const hasMins = typeof r.minutos_jugados === 'number' && !isNaN(r.minutos_jugados)
       const hasRpe = typeof r.rpe === 'number' && !isNaN(r.rpe)
-      
+
       if (isZero) {
         r.carga_ua = 0
       } else if (hasMins && hasRpe) {
@@ -1312,7 +1312,7 @@ export const useStore = create<AppState>((set, get) => ({
         procesados.push(r)
       }
     }
-    
+
     if (erroresTodas.length > 0) {
       throw new Error(`Errores de validación:\n${erroresTodas.join('\n')}`)
     }
@@ -1326,28 +1326,28 @@ export const useStore = create<AppState>((set, get) => ({
       [db.rpe_partido, db.resumen_semanal, db.readiness, db.sesiones, db.partidos, db.sesion_rpe, db.wellness, db.jugadoras],
       async () => {
         const config = useStore.getState().filters
-        
+
         for (const r of procesados) {
           const match = await db.partidos.get(r.id_partido as any)
           if (!match) throw new Error(`El partido '${r.id_partido}' no existe.`)
-          
+
           const fechaEfectiva = r.fecha || match.fecha
           if (!fechaEfectiva) throw new Error('No se pudo determinar la fecha del RPE de partido')
 
           const existing = await db.rpe_partido
             .where({ id_partido: r.id_partido, id_jugadora: r.id_jugadora })
             .first()
-          
+
           const rpeGuardar = { ...r, fecha: fechaEfectiva }
           if (existing?.id) {
             rpeGuardar.id = existing.id
           }
-          
+
           await db.rpe_partido.put(rpeGuardar)
-          
+
           const keyNew = JSON.stringify([rpeGuardar.id_jugadora, rpeGuardar.fecha])
           affectedPairs.set(keyNew, { id_jugadora: rpeGuardar.id_jugadora, fecha: rpeGuardar.fecha })
-          
+
           await recalcularResumenSemanal(rpeGuardar.id_jugadora, rpeGuardar.fecha, {
             incluirPartidos: config.incluirPartidos,
             incluirGimnasio: config.incluirGimnasio,
@@ -1359,7 +1359,7 @@ export const useStore = create<AppState>((set, get) => ({
     )
 
     await get().loadAll()
-    
+
     const affectedPlayers = Array.from(
       new Set(Array.from(affectedPairs.values(), ({ id_jugadora }) => id_jugadora))
     )

@@ -12,10 +12,10 @@ import { useRpeBatchForm } from '@/hooks/useRpeBatchForm'
 export function MatchesPage() {
   const location = useLocation()
   const navigate = useNavigate()
-  
-  const { 
-    partidos, rpe_partido, jugadoras, filters, compensacion_postpartido, 
-    addPartido, updatePartido, saveRpePartidoBatch, upsertCompensacionPostPartido 
+
+  const {
+    partidos, rpe_partido, jugadoras, filters, compensacion_postpartido,
+    addPartido, updatePartido, saveRpePartidoBatch, upsertCompensacionPostPartido
   } = useStore()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Partido | null>(null)
@@ -25,9 +25,9 @@ export function MatchesPage() {
 
   const [rpeModalOpen, setRpeModalOpen] = useState(false)
   const [rpePartidoId, setRpePartidoId] = useState<string>('')
-  
+
   const { batchForm, initializeForm, handleUpdatePlayerForm, buildBatchToSave, setBatchForm } = useRpeBatchForm()
-  
+
   const [isSaving, setIsSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -47,11 +47,11 @@ export function MatchesPage() {
   const openRpeModal = (partidoId: string, focusJugadoraId?: string) => {
     setRpePartidoId(partidoId)
     const existingRpes = rpe_partido.filter(r => r.id_partido === partidoId)
-    
+
     initializeForm(activePlayers, existingRpes)
     setErrorMsg('')
     setRpeModalOpen(true)
-    
+
     if (focusJugadoraId) {
       setTimeout(() => {
         const row = document.getElementById(`rpe-row-${focusJugadoraId}`)
@@ -80,12 +80,12 @@ export function MatchesPage() {
   const handleSaveBatch = async () => {
     setErrorMsg('')
     setIsSaving(true)
-    
+
     const match = partidos.find(p => p.id_partido === rpePartidoId)
     const fecha = match?.fecha || ''
-    
+
     const toSave = buildBatchToSave(rpePartidoId, fecha)
-    
+
     try {
       if (toSave.length > 0) {
         await saveRpePartidoBatch(toSave)
@@ -101,7 +101,7 @@ export function MatchesPage() {
   const openCompensacionModal = (partidoId: string) => {
     setCompPartidoId(partidoId)
     const existingComps = compensacion_postpartido.filter(c => c.id_partido === partidoId)
-    
+
     const initialForm: Record<string, Partial<CompensacionPostPartido>> = {}
     activePlayers.forEach(j => {
       const existing = existingComps.find(c => c.id_jugadora === j.id_jugadora)
@@ -129,11 +129,11 @@ export function MatchesPage() {
   const handleSaveCompensacion = async (id_jugadora: string) => {
     const data = compForms[id_jugadora]
     if (!data) return
-    
+
     // Obtener los minutos jugados del rpe_partido actual para recalcular déficit exacto
     const rpeInfo = rpe_partido.find(r => r.id_partido === compPartidoId && r.id_jugadora === id_jugadora)
     const minJugados = rpeInfo?.minutos_jugados ?? null
-    
+
     if (minJugados === null) {
       alert("No se puede guardar una compensación si los minutos jugados están pendientes.")
       return
@@ -141,7 +141,7 @@ export function MatchesPage() {
 
     const deficit = calcularDeficitCompensacion(minJugados, data.minutos_objetivo)
     const estadoReal = inferirEstadoCompensacion(deficit, data.estado || 'pendiente')
-    
+
     await upsertCompensacionPostPartido({
       id: data.id,
       id_partido: compPartidoId,
@@ -155,7 +155,7 @@ export function MatchesPage() {
       created_at: data.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString()
     })
-    
+
     // Update local state to reflect calculated state/deficit
     handleUpdateCompForm(id_jugadora, 'deficit_minutos', deficit)
     handleUpdateCompForm(id_jugadora, 'estado', estadoReal)
@@ -284,20 +284,20 @@ export function MatchesPage() {
               {activePlayers.map(j => {
                 const data = batchForm[j.id_jugadora]
                 if (!data) return null
-                
+
                 const isZero = data.participacion === 'no_convocada' || data.participacion === 'convocada_sin_minutos'
                 const rpeVal = Number(data.rpe) || 0
                 const minVal = Number(data.minutos_jugados) || 0
                 const sRPE = (isZero || !data.minutos_jugados || !data.rpe) ? 0 : rpeVal * minVal
                 const isModificada = data.participacion === 'modificada'
-                
+
                 return (
                   <tr key={j.id_jugadora} id={`rpe-row-${j.id_jugadora}`} className="hover:bg-surface-50 transition-colors">
                     <td className="px-3 py-2 font-medium">{j.nombre}</td>
                     <td className="px-3 py-2">
-                      <select 
+                      <select
                         className="w-full border border-surface-200 rounded px-2 py-1 text-xs"
-                        value={data.participacion} 
+                        value={data.participacion}
                         onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'participacion', e.target.value)}
                       >
                         <option value="">(Sin definir)</option>
@@ -309,23 +309,23 @@ export function MatchesPage() {
                       </select>
                     </td>
                     <td className="px-3 py-2">
-                      <input 
-                        type="number" 
-                        min={0} max={isModificada ? 39 : 40} 
+                      <input
+                        type="number"
+                        min={0} max={isModificada ? 39 : 40}
                         className="w-full border border-surface-200 rounded px-2 py-1 text-xs disabled:bg-surface-100 disabled:opacity-50"
-                        value={data.minutos_jugados} 
+                        value={data.minutos_jugados}
                         disabled={isZero || data.participacion === 'completa' || !data.participacion}
                         placeholder={isZero ? '0' : ''}
-                        onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'minutos_jugados', e.target.value === '' ? '' : Number(e.target.value))} 
+                        onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'minutos_jugados', e.target.value === '' ? '' : Number(e.target.value))}
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <input 
+                      <input
                         type="number" min={1} max={10} step={1}
                         className="w-full border border-surface-200 rounded px-2 py-1 text-xs disabled:bg-surface-100 disabled:opacity-50"
-                        value={data.rpe} 
+                        value={data.rpe}
                         disabled={isZero || (isModificada && data.minutos_jugados === 0) || !data.participacion}
-                        onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'rpe', e.target.value === '' ? '' : Number(e.target.value))} 
+                        onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'rpe', e.target.value === '' ? '' : Number(e.target.value))}
                       />
                     </td>
                     <td className="px-3 py-2 font-mono font-medium">
@@ -334,16 +334,16 @@ export function MatchesPage() {
                     <td className="px-3 py-2">
                       <div className="flex flex-col gap-1">
                         {isModificada && (
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             className="w-full border border-red-200 bg-red-50 rounded px-2 py-1 text-xs placeholder:text-red-400"
                             placeholder="Motivo modificada *"
                             value={data.motivo_participacion_reducida}
                             onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'motivo_participacion_reducida', e.target.value)}
                           />
                         )}
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           className="w-full border border-surface-200 rounded px-2 py-1 text-xs"
                           placeholder="Nota (opcional)"
                           value={data.comentario_staff}
@@ -357,18 +357,18 @@ export function MatchesPage() {
             </tbody>
           </table>
         </div>
-        
+
         <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-surface-200">
-          <button 
-            onClick={() => setRpeModalOpen(false)} 
+          <button
+            onClick={() => setRpeModalOpen(false)}
             className="text-xs font-medium text-surface-600 px-4 py-2 border border-surface-200 rounded hover:bg-surface-50"
             disabled={isSaving}
           >
             Cancelar
           </button>
-          <button 
-            onClick={handleSaveBatch} 
-            disabled={isSaving} 
+          <button
+            onClick={handleSaveBatch}
+            disabled={isSaving}
             className="text-xs font-medium text-white bg-primary-600 px-4 py-2 rounded hover:bg-primary-700 disabled:opacity-50 shadow-sm"
           >
             {isSaving ? 'Guardando...' : 'Guardar todo'}
@@ -393,13 +393,13 @@ export function MatchesPage() {
               {activePlayers.map(j => {
                 const rpeData = rpe_partido.find(r => r.id_partido === compPartidoId && r.id_jugadora === j.id_jugadora)
                 const compData = compForms[j.id_jugadora] || {}
-                
+
                 const mins = rpeData?.minutos_jugados ?? null
                 const srpe = rpeData?.carga_ua || 0
                 const participacion = rpeData?.participacion || 'Sin registrar'
-                
+
                 const isPending = mins === null
-                
+
                 return (
                   <tr key={j.id_jugadora} className="hover:bg-surface-50 transition-colors">
                     <td className="px-3 py-2 font-medium">{j.nombre}</td>
@@ -431,7 +431,7 @@ export function MatchesPage() {
                       {isPending ? <span className="text-amber-500 font-sans font-medium text-[9px]">Pendiente de<br/>registrar minutos</span> : (compData.deficit_minutos !== undefined && compData.deficit_minutos !== null ? `${compData.deficit_minutos}'` : '—')}
                     </td>
                     <td className="px-3 py-2 text-center">
-                      <select 
+                      <select
                         value={compData.estado || 'pendiente'}
                         disabled={isPending}
                         onChange={(e) => handleUpdateCompForm(j.id_jugadora, 'estado', e.target.value)}
@@ -444,7 +444,7 @@ export function MatchesPage() {
                       </select>
                     </td>
                     <td className="px-3 py-2">
-                      <button 
+                      <button
                         onClick={() => handleSaveCompensacion(j.id_jugadora)}
                         disabled={isPending}
                         className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-2 py-1 rounded font-medium text-[10px] disabled:opacity-50 disabled:hover:bg-indigo-50"

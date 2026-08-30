@@ -86,7 +86,7 @@ describe("WeeklySummaryPage - Exposicion Competitiva Integration", () => {
         <WeeklySummaryPage />
       </MemoryRouter>
     )
-    
+
     // Obtener las filas de la tabla correspondientes a cada jugadora
     // Usamos getAllByText y filtramos para encontrar el que está en una tabla
     const rowAna = screen.getAllByText("Ana").find(el => el.closest("tr"))!.closest("tr")!

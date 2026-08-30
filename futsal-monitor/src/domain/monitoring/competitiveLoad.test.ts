@@ -9,7 +9,7 @@ describe('calcularCargaCompetitivaJugadora', () => {
   const p3: Partido = { id_partido: 'p3', fecha: '2026-08-15', rival: 'C', competicion: 'Liga', resultado: '0-0', lugar: 'Local' }
   const p4: Partido = { id_partido: 'p4', fecha: '2026-09-01', rival: 'D', competicion: 'Liga', resultado: '0-0', lugar: 'Local' }
   const pFuturo: Partido = { id_partido: 'p5', fecha: '2026-09-10', rival: 'E', competicion: 'Liga', resultado: '0-0', lugar: 'Local' }
-  
+
   const partidos = [p1, p2, p3, p4, pFuturo]
 
   const rpes: RPE_Partido[] = [
@@ -72,7 +72,7 @@ describe('calcularCargaCompetitivaJugadora', () => {
     // 7 días: >= 2026-08-09 (p2, p3)
     // 14 días: >= 2026-08-02 (p2, p3)
     // 28 días: >= 2026-07-19 (p1, p2, p3)
-    
+
     const res7 = calcularCargaCompetitivaJugadora(jugadora, partidos, rpes, {
       fechaReferencia: '2026-08-16',
       rangoDias: 7

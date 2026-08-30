@@ -10,17 +10,17 @@ import { QuickMinuteRegistrationModal } from '@/components/monitoring/QuickMinut
 
 export function CompetitiveLoadPage() {
   const { jugadoras, partidos, rpe_partido } = useStore()
-  
+
   const [temporadaActiva, setTemporadaActiva] = useState<Temporada | null>(null)
-  
+
   useEffect(() => {
     obtenerTemporadaActiva(db).then(t => setTemporadaActiva(t || null))
   }, [])
-  
+
   const [rangoDias, setRangoDias] = useState<number | 'temporada' | 'ultimo_partido'>('temporada')
   const [jugadoraSeleccionada, setJugadoraSeleccionada] = useState<string>('todas')
   const [sortBy, setSortBy] = useState<'minutos' | 'srpe' | 'srpe_ultimo'>('srpe')
-  
+
   const [quickModalOpen, setQuickModalOpen] = useState(false)
   const [initialMatchId, setInitialMatchId] = useState('')
 
@@ -29,7 +29,7 @@ export function CompetitiveLoadPage() {
   const handleOpenQuickModal = () => {
     const activePlayers = jugadoras.filter(j => j.activa !== false)
     const pastMatches = partidos.filter(p => p.fecha <= today).sort((a, b) => b.fecha.localeCompare(a.fecha))
-    
+
     let defaultMatchId = ''
     if (pastMatches.length > 0) {
       defaultMatchId = pastMatches[0].id_partido
@@ -67,8 +67,8 @@ export function CompetitiveLoadPage() {
     })
   }, [metricasPlantilla, sortBy])
 
-  const metricasJugadora = jugadoraSeleccionada !== 'todas' 
-    ? metricasPlantilla.find(m => m.jugadora.id_jugadora === jugadoraSeleccionada) 
+  const metricasJugadora = jugadoraSeleccionada !== 'todas'
+    ? metricasPlantilla.find(m => m.jugadora.id_jugadora === jugadoraSeleccionada)
     : null
 
   const formatParticipacion = (part: string) => {
@@ -86,7 +86,7 @@ export function CompetitiveLoadPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-surface-900">Carga Competitiva</h1>
-        <button 
+        <button
           onClick={handleOpenQuickModal}
           className="bg-primary-600 text-white text-xs font-medium px-4 py-2 rounded hover:bg-primary-700 shadow-sm"
         >
@@ -94,17 +94,17 @@ export function CompetitiveLoadPage() {
         </button>
       </div>
 
-      <QuickMinuteRegistrationModal 
-        open={quickModalOpen} 
-        onClose={() => setQuickModalOpen(false)} 
-        initialMatchId={initialMatchId} 
+      <QuickMinuteRegistrationModal
+        open={quickModalOpen}
+        onClose={() => setQuickModalOpen(false)}
+        initialMatchId={initialMatchId}
       />
 
       {/* Filtros */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-surface-200 flex flex-wrap gap-4 items-end">
         <div>
           <label className="block text-xs font-medium text-surface-600 mb-1">Periodo</label>
-          <select 
+          <select
             className="w-48 border border-surface-300 rounded px-3 py-1.5 text-sm focus:ring-1 focus:ring-primary-500"
             value={rangoDias.toString()}
             onChange={(e) => {
@@ -120,10 +120,10 @@ export function CompetitiveLoadPage() {
             <option value="28">Últimos 28 días</option>
           </select>
         </div>
-        
+
         <div>
           <label className="block text-xs font-medium text-surface-600 mb-1">Vista</label>
-          <select 
+          <select
             className="w-48 border border-surface-300 rounded px-3 py-1.5 text-sm focus:ring-1 focus:ring-primary-500"
             value={jugadoraSeleccionada}
             onChange={(e) => setJugadoraSeleccionada(e.target.value)}
@@ -134,11 +134,11 @@ export function CompetitiveLoadPage() {
             ))}
           </select>
         </div>
-        
+
         {jugadoraSeleccionada === 'todas' && (
           <div>
             <label className="block text-xs font-medium text-surface-600 mb-1">Ordenar por</label>
-            <select 
+            <select
               className="w-48 border border-surface-300 rounded px-3 py-1.5 text-sm focus:ring-1 focus:ring-primary-500"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
@@ -219,7 +219,7 @@ export function CompetitiveLoadPage() {
               const isZero = rpe.participacion === 'no_convocada' || rpe.participacion === 'convocada_sin_minutos'
               const minVal = rpe.minutos_jugados
               const rpeVal = rpe.rpe
-              
+
               return (
                 <DataRow key={r.partido.id_partido + i.toString()}>
                   <DataCell className="text-surface-600">{r.partido.fecha}</DataCell>

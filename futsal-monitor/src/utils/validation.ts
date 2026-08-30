@@ -201,7 +201,7 @@ export function validateRPE_Partido(r: RPE_Partido): ValidationError[] {
       }
     }
   }
-  
+
   return errors
 }
 

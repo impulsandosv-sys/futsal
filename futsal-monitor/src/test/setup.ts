@@ -31,8 +31,8 @@ vi.mock('@/db/database', () => ({
     sesiones_fuerza_individual: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
     trabajos_fuerza: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
     ejercicios_fuerza: { toArray: vi.fn(() => Promise.resolve([])), where: vi.fn(mockWhereClause) },
-    compensacion_postpartido: { 
-      toArray: vi.fn(() => Promise.resolve([])), 
+    compensacion_postpartido: {
+      toArray: vi.fn(() => Promise.resolve([])),
       where: vi.fn(mockWhereClause),
       clear: vi.fn(() => Promise.resolve()),
       put: vi.fn(() => Promise.resolve()),
@@ -47,7 +47,7 @@ vi.mock('@/db/database', () => ({
       toArray: vi.fn(() => Promise.resolve([])),
       where: vi.fn(mockWhereClause),
     },
-    plantillas_importacion: { 
+    plantillas_importacion: {
       toArray: vi.fn(() => Promise.resolve([])),
       where: vi.fn(mockWhereClause),
       put: vi.fn(() => Promise.resolve())

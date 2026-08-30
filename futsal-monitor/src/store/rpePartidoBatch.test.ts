@@ -60,7 +60,7 @@ describe('saveRpePartidoBatch', () => {
     expect(j2).toBeDefined()
     expect(j2?.carga_ua).toBe(0)
     expect(j2?.minutos_jugados).toBe(0)
-    
+
     // Check that we don't have duplicated entries
     expect(updatedStore.rpe_partido.length).toBe(2)
   })

@@ -16,9 +16,9 @@ export function QuickMinuteRegistrationModal({
   initialMatchId
 }: QuickMinuteRegistrationModalProps) {
   const { partidos, jugadoras, rpe_partido, saveRpePartidoBatch } = useStore()
-  
+
   const [selectedMatchId, setSelectedMatchId] = useState(initialMatchId)
-  
+
   useEffect(() => {
     if (open) {
       setSelectedMatchId(initialMatchId)
@@ -26,7 +26,7 @@ export function QuickMinuteRegistrationModal({
   }, [open, initialMatchId])
 
   const { batchForm, initializeForm, handleUpdatePlayerForm, buildBatchToSave } = useRpeBatchForm()
-  
+
   const activePlayers = useMemo(() => jugadoras.filter(j => j.activa !== false), [jugadoras])
   const pastMatches = useMemo(() => {
     const today = getTodayLocalISO()
@@ -48,12 +48,12 @@ export function QuickMinuteRegistrationModal({
     setErrorMsg('')
     setSuccessMsg('')
     setIsSaving(true)
-    
+
     const match = partidos.find(p => p.id_partido === selectedMatchId)
     const fecha = match?.fecha || ''
-    
+
     const toSave = buildBatchToSave(selectedMatchId, fecha)
-    
+
     try {
       if (toSave.length > 0) {
         await saveRpePartidoBatch(toSave)
@@ -88,10 +88,10 @@ export function QuickMinuteRegistrationModal({
           {successMsg}
         </div>
       )}
-      
+
       <div className="mb-4">
         <label className="block text-xs font-medium text-surface-600 mb-1">Partido</label>
-        <select 
+        <select
           className="w-full border border-surface-300 rounded px-3 py-1.5 text-sm focus:ring-1 focus:ring-primary-500"
           value={selectedMatchId}
           onChange={(e) => setSelectedMatchId(e.target.value)}
@@ -121,27 +121,27 @@ export function QuickMinuteRegistrationModal({
             {activePlayers.map(j => {
               const data = batchForm[j.id_jugadora]
               if (!data) return null
-              
+
               const isZero = data.participacion === 'no_convocada' || data.participacion === 'convocada_sin_minutos'
               const rpeVal = Number(data.rpe) || 0
               const minVal = Number(data.minutos_jugados) || 0
               const sRPE = (isZero || !data.minutos_jugados || !data.rpe) ? 0 : rpeVal * minVal
               const isModificada = data.participacion === 'modificada'
-              
+
               let status = ''
               if (!data.participacion) status = 'Pendiente'
               else if (data.minutos_jugados !== '' && data.minutos_jugados !== 0 && data.rpe === '') status = 'RPE pendiente'
               else if (isZero) status = '0 UA'
               else if (sRPE > 0) status = 'Completo'
               else status = 'Pendiente'
-              
+
               return (
                 <tr key={j.id_jugadora} className="hover:bg-surface-50 transition-colors">
                   <td className="px-3 py-2 font-medium">{j.nombre}</td>
                   <td className="px-3 py-2">
-                    <select 
+                    <select
                       className="w-full border border-surface-200 rounded px-2 py-1 text-xs"
-                      value={data.participacion} 
+                      value={data.participacion}
                       onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'participacion', e.target.value)}
                     >
                       <option value="">(Sin definir)</option>
@@ -153,23 +153,23 @@ export function QuickMinuteRegistrationModal({
                     </select>
                   </td>
                   <td className="px-3 py-2">
-                    <input 
-                      type="number" 
-                      min={0} max={isModificada ? 39 : 40} 
+                    <input
+                      type="number"
+                      min={0} max={isModificada ? 39 : 40}
                       className="w-full border border-surface-200 rounded px-2 py-1 text-xs disabled:bg-surface-100 disabled:opacity-50"
-                      value={data.minutos_jugados} 
+                      value={data.minutos_jugados}
                       disabled={isZero || data.participacion === 'completa' || !data.participacion}
                       placeholder={isZero ? '0' : ''}
-                      onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'minutos_jugados', e.target.value === '' ? '' : Number(e.target.value))} 
+                      onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'minutos_jugados', e.target.value === '' ? '' : Number(e.target.value))}
                     />
                   </td>
                   <td className="px-3 py-2">
-                    <input 
+                    <input
                       type="number" min={1} max={10} step={1}
                       className="w-full border border-surface-200 rounded px-2 py-1 text-xs disabled:bg-surface-100 disabled:opacity-50"
-                      value={data.rpe} 
+                      value={data.rpe}
                       disabled={isZero || (isModificada && data.minutos_jugados === 0) || !data.participacion}
-                      onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'rpe', e.target.value === '' ? '' : Number(e.target.value))} 
+                      onChange={(e) => handleUpdatePlayerForm(j.id_jugadora, 'rpe', e.target.value === '' ? '' : Number(e.target.value))}
                     />
                   </td>
                   <td className="px-3 py-2 font-mono font-medium">
@@ -180,8 +180,8 @@ export function QuickMinuteRegistrationModal({
                       {status}
                     </span>
                     {isModificada && (
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         className="w-full mt-1 border border-red-200 bg-red-50 rounded px-2 py-1 text-[10px] placeholder:text-red-400"
                         placeholder="Motivo modificada *"
                         value={data.motivo_participacion_reducida}
@@ -195,7 +195,7 @@ export function QuickMinuteRegistrationModal({
           </tbody>
         </table>
       </div>
-      
+
       <div className="flex flex-wrap justify-between items-center mt-4 pt-4 border-t border-surface-200 gap-4">
         <div className="flex gap-4 text-xs font-medium text-surface-600">
           <span>{jugadorasConMinutos} jugadoras con minutos registrados</span>
@@ -203,16 +203,16 @@ export function QuickMinuteRegistrationModal({
           <span>{jugadorasSinDefinir} jugadoras sin definir</span>
         </div>
         <div className="flex gap-2">
-          <button 
-            onClick={onClose} 
+          <button
+            onClick={onClose}
             className="text-xs font-medium text-surface-600 px-4 py-2 border border-surface-200 rounded hover:bg-surface-50"
             disabled={isSaving}
           >
             Cancelar
           </button>
-          <button 
-            onClick={handleSaveQuick} 
-            disabled={isSaving} 
+          <button
+            onClick={handleSaveQuick}
+            disabled={isSaving}
             className="text-xs font-medium text-white bg-primary-600 px-4 py-2 rounded hover:bg-primary-700 disabled:opacity-50 shadow-sm"
           >
             {isSaving ? 'Guardando...' : 'Guardar minutos'}

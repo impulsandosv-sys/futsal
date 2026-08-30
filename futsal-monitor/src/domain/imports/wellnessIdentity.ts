@@ -57,10 +57,10 @@ export async function resolverIdentidadFilaWellness(
 
   const aliasNormalizadoVal = normalizarAlias(aliasValor)
   const candidatosValor = candidatos.filter((a) => normalizarAlias(a.valor) === aliasNormalizadoVal)
-  
+
   if (candidatosValor.length > 0) {
     const activos = candidatosValor.filter((a) => a.activo === true)
-    
+
     if (activos.length === 0) {
       return {
         exito: false,
@@ -96,7 +96,7 @@ export async function resolverIdentidadFilaWellness(
 
   // 3. Prioridad 3: Nombre normalizado no ambiguo (Igualdad exacta)
   const aliasNormalizado = normalizarAlias(aliasValor)
-  
+
   const jugadorasActivas = await db.jugadoras.filter(j => j.activa === true).toArray()
   const jugadorasCoincidentes = jugadorasActivas.filter(j => normalizarAlias(j.nombre) === aliasNormalizado)
 

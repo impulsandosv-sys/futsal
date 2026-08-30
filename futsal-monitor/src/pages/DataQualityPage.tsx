@@ -7,7 +7,7 @@ import { getTodayLocalISO } from '@/domain/dates/dates'
 export function DataQualityPage() {
   const { jugadoras, wellness, partidos, rpe_partido, sesion_rpe } = useStore()
   const navigate = useNavigate()
-  
+
   const completitud = useMemo(() => {
     return evaluarCompletitudDatos(jugadoras, wellness, partidos, rpe_partido, sesion_rpe, getTodayLocalISO())
   }, [jugadoras, wellness, partidos, rpe_partido, sesion_rpe])
@@ -84,7 +84,7 @@ export function DataQualityPage() {
                       <p className="text-xs text-surface-500">{alerta.detalle}</p>
                     </div>
                     {isPendiente && (
-                      <button 
+                      <button
                         onClick={() => resolverAlerta(alerta)}
                         className="shrink-0 bg-primary-50 text-primary-600 hover:bg-primary-100 hover:text-primary-700 px-3 py-1.5 rounded text-xs font-medium transition-colors"
                       >

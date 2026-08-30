@@ -71,7 +71,7 @@ vi.mock('@/db/database', () => {
         put: async () => 1
       },
       readiness: {
-        where: () => ({ 
+        where: () => ({
           equals: () => ({ toArray: async () => [], first: async () => null }),
           toArray: async () => [],
           first: async () => null
@@ -118,12 +118,12 @@ describe('Wellness Semanal - Regresión y Deduplicación Real', () => {
 
   // Registro realista con datos exclusivamente en metricas y textos
   const existingRecordSemanalReal: WellnessSemanalImportado = {
-    id: 1, 
-    id_jugadora: 'J01', 
-    fecha: '2026-07-22', 
-    id_temporada: 'TEMP1', 
-    origen_alias: '', 
-    alias_origen: '', 
+    id: 1,
+    id_jugadora: 'J01',
+    fecha: '2026-07-22',
+    id_temporada: 'TEMP1',
+    origen_alias: '',
+    alias_origen: '',
     indice_semanal: null,
     metricas: {
       '¿Cómo valorarías tu recuperación general esta semana?': { original: 8, normalizado: 8 },
@@ -226,7 +226,7 @@ describe('Wellness Semanal - Regresión y Deduplicación Real', () => {
   it('6. Dos fechas diferentes de la misma semana comparan contra el mismo registro', () => {
     const rawMonday = { ...rawSemanalBase, fecha: '2026-07-20' } // Lunes
     const rawSunday = { ...rawSemanalBase, fecha: '2026-07-26' } // Domingo
-    
+
     expect(clasificarFilaImportacion(rawMonday, [], mockContextSemanal)).toBe('DUPLICADO_IDENTICO')
     expect(clasificarFilaImportacion(rawSunday, [], mockContextSemanal)).toBe('DUPLICADO_IDENTICO')
   })

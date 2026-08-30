@@ -60,21 +60,21 @@ export function useRpeBatchForm() {
           updated.rpe = ''
         }
       }
-      
+
       return { ...prev, [id]: updated }
     })
   }, [])
 
   const buildBatchToSave = useCallback((partidoId: string, fecha: string): RPE_Partido[] => {
     const toSave: RPE_Partido[] = []
-    
+
     for (const [id_jugadora, data] of Object.entries(batchForm)) {
       if (data.participacion || data.minutos_jugados !== '' || data.rpe !== '') {
         const isZero = data.participacion === 'no_convocada' || data.participacion === 'convocada_sin_minutos'
         const min = isZero ? 0 : (data.minutos_jugados === '' ? null : Number(data.minutos_jugados))
         const rpeVal = isZero ? null : (data.rpe === '' ? null : Number(data.rpe))
         const carga = isZero ? 0 : ((rpeVal !== null && min !== null) ? rpeVal * min : null)
-        
+
         toSave.push({
           id_partido: partidoId,
           id_jugadora,
@@ -88,7 +88,7 @@ export function useRpeBatchForm() {
         })
       }
     }
-    
+
     return toSave
   }, [batchForm])
 

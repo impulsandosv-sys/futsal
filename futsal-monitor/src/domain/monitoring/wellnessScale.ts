@@ -66,4 +66,3 @@ export function calcularIndiceSemanal(metricas: Record<string, { normalizado: nu
   if (valores.length === 0) return null
   return Math.round((valores.reduce((a, b) => a + b, 0) / valores.length) * 10) / 10
 }
-

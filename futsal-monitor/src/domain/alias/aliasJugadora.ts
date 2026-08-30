@@ -52,7 +52,7 @@ export function validarAliasJugadora(alias: Partial<AliasJugadora>): string[] {
   return errors
 }
 
-export type ResultadoPersistenciaAlias = 
+export type ResultadoPersistenciaAlias =
   | { accion: 'creado'; id_alias: number }
   | { accion: 'reactivado'; id_alias: number }
   | { accion: 'existente'; id_alias: number }
@@ -133,7 +133,7 @@ export async function resolverAliasActivo(
   const candidatosTotales = await db.alias_jugadora
     .where('origen').anyOf(orígenesAComprobar)
     .toArray()
-  
+
   const candidatos = candidatosTotales.filter(a => normalizarAlias(a.valor) === valorNormalizado)
   const candidatosActivos = candidatos.filter(a => a.activo === true)
 

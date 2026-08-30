@@ -37,7 +37,7 @@ export function evaluarCompletitudDatos(
   fechaReferencia: string
 ): QualityReport {
   const activas = jugadoras.filter(j => j.activa)
-  
+
   // Limites para 7 dias locales
   const fechasUltimos7 = obtenerFechasUltimosDias(fechaReferencia, 7)
   const limiteInferior = fechasUltimos7[0]
@@ -51,8 +51,8 @@ export function evaluarCompletitudDatos(
   activas.forEach(j => {
     // 1. Wellness (solo informativo)
     const w = wellness.filter(
-      x => x.id_jugadora === j.id_jugadora && 
-           compareDateStrings(x.fecha, limiteInferior) >= 0 && 
+      x => x.id_jugadora === j.id_jugadora &&
+           compareDateStrings(x.fecha, limiteInferior) >= 0 &&
            compareDateStrings(x.fecha, fechaReferencia) <= 0
     )
     wellnessResumen.push({

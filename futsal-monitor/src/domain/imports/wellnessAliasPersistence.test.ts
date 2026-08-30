@@ -81,7 +81,7 @@ describe('PR-1: Alias persistentes de Wellness', () => {
       [{ alias_origen: 'La Ani', id_jugadora: 'J-1' }]
     )
     expect(outcome.nuevos_aliases).toBe(1)
-    
+
     const res = await resolverIdentidadFilaWellness(db, 'La Ani')
     expect(res.exito).toBe(true)
   })
@@ -101,10 +101,10 @@ describe('PR-1: Alias persistentes de Wellness', () => {
     const rows = [{
        filaOriginal: 2,
        estado: 'NUEVO' as const,
-       id_jugadora: 'INEXISTENTE', 
+       id_jugadora: 'INEXISTENTE',
        alias_origen: 'Inva',
-       fecha: '2026-05-01', 
-       normalRow: { id_jugadora: 'INEXISTENTE', fecha: '2026-05-01', id_temporada: 'T1', calidad_sueno: 5 } as any, 
+       fecha: '2026-05-01',
+       normalRow: { id_jugadora: 'INEXISTENTE', fecha: '2026-05-01', id_temporada: 'T1', calidad_sueno: 5 } as any,
        rowOriginal: {} as any
     }]
     try {
@@ -113,7 +113,7 @@ describe('PR-1: Alias persistentes de Wellness', () => {
         [{ alias_origen: 'FailsSafe', id_jugadora: 'J-1' }]
       )
     } catch(e) {}
-    
+
     const res = await resolverIdentidadFilaWellness(db, 'FailsSafe')
     expect(res.exito).toBe(false)
   })

@@ -9,7 +9,7 @@ describe('Database Migration v17', () => {
   it('debe mantener los datos de versiones anteriores y configurar la nueva tabla de compensación', async () => {
     const dbName = 'test-migration-db'
     await Dexie.delete(dbName)
-    
+
     // 1. Crear y poblar BD en versión 16 (simulando estado anterior)
     const db16 = new Dexie(dbName)
     db16.version(16).stores({
@@ -17,7 +17,7 @@ describe('Database Migration v17', () => {
       rpe_partido: '++id, [id_partido+id_jugadora], id_jugadora, id_partido, fecha'
     })
     await db16.open()
-    
+
     // 2. Insertar datos previos
     await (db16 as any).table('partidos').put({ id_partido: 'p1', fecha: '2026-08-10', rival: 'Equipo A' })
     await (db16 as any).table('rpe_partido').put({ id_partido: 'p1', id_jugadora: 'j1', minutos_jugados: 20 })
@@ -40,7 +40,7 @@ describe('Database Migration v17', () => {
     const partidosPrevios = await (db17 as any).table('partidos').toArray()
     expect(partidosPrevios.length).toBe(1)
     expect(partidosPrevios[0].rival).toBe('Equipo A')
-    
+
     const rpePrevios = await (db17 as any).table('rpe_partido').toArray()
     expect(rpePrevios.length).toBe(1)
 
@@ -52,15 +52,15 @@ describe('Database Migration v17', () => {
       minutos_objetivo: 20,
       deficit_minutos: 0
     })
-    
+
     const compensaciones = await (db17 as any).table('compensacion_postpartido').toArray()
     expect(compensaciones.length).toBe(1)
-    
+
     // 6. Verificar el índice funcional [id_partido+id_jugadora] usado para el upsert
     const existing = await (db17 as any).table('compensacion_postpartido')
       .where({ id_partido: 'p1', id_jugadora: 'j1' })
       .first()
-      
+
     expect(existing).toBeDefined()
     expect(existing.estado).toBe('pendiente')
 

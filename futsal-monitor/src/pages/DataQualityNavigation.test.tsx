@@ -74,8 +74,8 @@ describe('DataQualityPage Navigation & Integration', () => {
     store.jugadoras = [{ id_jugadora: 'j1', nombre: 'Jugadora 1', activa: true, posicion: 'Ala' }] as any
     // Un partido reciente para provocar alerta de participación pendiente
     store.partidos = [{ id_partido: 'p1', rival: 'Test Rival', fecha: '2026-08-15', competicion: '', lugar: 'Local', resultado: '' }] as any
-    store.rpe_partido = [] 
-    
+    store.rpe_partido = []
+
     // Una sesión reciente para provocar alerta de sesión pendiente
     store.sesiones = [{ id_sesion: 's1', fecha: '2026-08-16', tipo_sesion: 'Entrenamiento' }] as any
     store.sesion_rpe = [{
@@ -85,7 +85,7 @@ describe('DataQualityPage Navigation & Integration', () => {
       fecha: '2026-08-16',
       rpe: null
     }] as any
-    
+
     store.wellness = []
     store.compensacion_postpartido = []
     store.filters = {
@@ -104,11 +104,11 @@ describe('DataQualityPage Navigation & Integration', () => {
 
   it('debe navegar a MatchesPage y SessionsPage con el state correcto', async () => {
     render(<TestRouter />)
-    
+
     // Esperar a que se rendericen las alertas
     const resolveButtons = await screen.findAllByText('Resolver →')
     expect(resolveButtons.length).toBe(2)
-    
+
     // Click en la alerta de partido
     fireEvent.click(resolveButtons[0])
 

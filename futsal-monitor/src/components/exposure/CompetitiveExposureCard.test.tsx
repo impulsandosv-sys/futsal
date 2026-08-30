@@ -129,11 +129,11 @@ describe("CompetitiveExposureCard", () => {
     })
 
     render(<CompetitiveExposureCard registros={[]} fechaCorteISO="2026-08-01" modo="completo" />)
-    
+
     const trigger = screen.getByText("Completa")
     expect(trigger).toHaveAttribute("aria-describedby")
     expect(trigger).toHaveAttribute("tabIndex", "0")
-    
+
     const tooltipId = trigger.getAttribute("aria-describedby")
     const tooltip = document.getElementById(tooltipId!)
     expect(tooltip).toBeInTheDocument()
