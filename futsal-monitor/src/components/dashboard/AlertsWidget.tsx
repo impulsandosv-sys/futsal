@@ -7,7 +7,7 @@ export function AlertsWidget() {
   const navigate = useNavigate()
 
   const activas = alertas.filter(esAlertaActiva)
-  const noLeidas = activas.slice(0, 8)
+  const alertasVisibles = activas.slice(0, 8)
 
   if (activas.length === 0) {
     return <div className="text-xs text-surface-400 text-center py-6">No hay alertas activas</div>
@@ -15,7 +15,7 @@ export function AlertsWidget() {
 
   return (
     <div className="space-y-1">
-      {noLeidas.map((a) => (
+      {alertasVisibles.map((a) => (
         <div
           key={a.id}
           className={`text-xs px-3 py-2 rounded cursor-pointer transition-colors ${

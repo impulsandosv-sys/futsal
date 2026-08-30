@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Modal } from '@/components/shared/Modal'
 import type { AccionAjusteMenstrual } from '@/types'
 import { getTodayLocalISO } from '@/domain/dates/dates'
@@ -31,15 +31,22 @@ export function DecisionMenstrualModal({ open, onClose, registroId, jugadoraName
   const [accionAjuste, setAccionAjuste] = useState<AccionAjusteMenstrual | ''>('')
   const [notaAjuste, setNotaAjuste] = useState('')
   const [error, setError] = useState('')
+  const currentOpenIdRef = useRef<number | null>(null)
 
   useEffect(() => {
-    if (open && registro) {
+    if (!open) {
+      currentOpenIdRef.current = null
+      return
+    }
+
+    if (open && registro && currentOpenIdRef.current !== registroId) {
       setAccionAjuste(registro.accion_ajuste ?? '')
       setNotaAjuste(registro.nota_ajuste ?? '')
       setFechaDecision(registro.fecha_decision ?? getTodayLocalISO())
       setError('')
+      currentOpenIdRef.current = registroId
     }
-  }, [open, registro])
+  }, [open, registroId, registro])
 
   if (!registro) return null
 

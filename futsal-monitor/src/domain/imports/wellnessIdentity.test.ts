@@ -99,6 +99,26 @@ describe('Dominio T-02A — Identity & Season Validation for Wellness Import', (
       expect(res.mensajeError).toContain('La jugadora \'J99\' no existe')
     })
 
+    it('6.5. Prioridad de seguridad: ID interno exacto vence a alias activo con el mismo valor (Alias Hijacking)', async () => {
+      // Jugadora A tiene id_jugadora = "Maria".
+      await db.jugadoras.put({ id_jugadora: 'Maria', nombre: 'Maria Real', posicion: 'Cierre', activa: true })
+
+      // Jugadora B intenta secuestrar la identidad creando un alias "Maria"
+      await db.alias_jugadora.put({
+        id_jugadora: 'J2',
+        origen: 'wellness',
+        valor: 'Maria',
+        activo: true,
+        fecha_alta: '2026-08-01'
+      })
+
+      // Al importar "Maria", debe priorizar a Jugadora A (ID exacto), protegiendo la identidad
+      const res = await resolverIdentidadFilaWellness(db, 'Maria')
+      expect(res.exito).toBe(true)
+      expect(res.id_jugadora).toBe('Maria') // No debe ser J2
+      expect(res.alias_origen).toBe('Maria')
+    })
+
     it('7. Resuelve por nombre normalizado (igualdad estricta)', async () => {
       const res = await resolverIdentidadFilaWellness(db, ' ANA LOPEZ ')
       expect(res.exito).toBe(true)

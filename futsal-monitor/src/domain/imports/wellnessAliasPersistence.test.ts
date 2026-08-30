@@ -88,8 +88,9 @@ describe('PR-1: Alias persistentes de Wellness', () => {
 
   it('7) conflicto misma jugadora (idempotente)', async () => {
     await agregarAliasJugadora(db, { id_jugadora: 'J-1', origen: 'wellness', valor: 'Doble', activo: true, fecha_alta: getLocalDateString() })
-    const id = await agregarAliasJugadora(db, { id_jugadora: 'J-1', origen: 'wellness', valor: 'Doble', activo: true, fecha_alta: getLocalDateString() })
-    expect(id).toBeDefined()
+    const res = await agregarAliasJugadora(db, { id_jugadora: 'J-1', origen: 'wellness', valor: 'Doble', activo: true, fecha_alta: getLocalDateString() })
+    expect(res.accion).toBe('existente')
+    expect(res.id_alias).toBeTypeOf('number')
   })
 
   it('8) conflicto distinta jugadora (lanza error)', async () => {
