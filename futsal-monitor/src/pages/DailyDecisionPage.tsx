@@ -5,7 +5,6 @@ import { useStore } from '@/store/store'
 import { parseISO, subDays, addDays, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { construirDecisionDiaria } from '@/domain/dailyDecision/dailyDecisionEngine'
-import { calcularExposicionCompetitiva } from '@/domain/exposure/matchExposure'
 import { ContextoMenstrualWidget } from '@/components/menstrual/ContextoMenstrualWidget'
 
 export function DailyDecisionPage() {

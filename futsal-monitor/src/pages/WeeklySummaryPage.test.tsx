@@ -34,7 +34,7 @@ describe('WeeklySummaryPage - Exposicion Competitiva Integration', () => {
       filters: { semana: '2026-W32' },
       setFilter: vi.fn(),
       generateWeeklySummary: vi.fn()
-    } as any)
+    } as import("@/store/store").StoreState)
   })
 
   it('Resumen semanal: muestra solo datos de cada jugadora, respetando la fecha', async () => {

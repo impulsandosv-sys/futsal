@@ -128,8 +128,8 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
   // D. Error parcial de una fuente
   it('D. Se renderiza sin colapsar cuando una colección de datos es nula o indefinida en la store', () => {
     useStore.setState({
-      pruebas_cmj: undefined as any,
-      sesion_rpe: null as any
+      pruebas_cmj: undefined,
+      sesion_rpe: null
     })
 
     render(
@@ -159,7 +159,7 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
 
   // F. Lectura pura contra Dexie
   it('F. Confirma que la renderización y cambio de fecha no disparan escrituras en Dexie', () => {
-    if (!db.jugadoras.put) (db.jugadoras as any).put = vi.fn()
+    if (!db.jugadoras.put) (db.jugadoras).put = vi.fn()
     const spyPut = vi.spyOn(db.jugadoras, 'put')
 
     render(
@@ -192,7 +192,7 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
       }
     ]
 
-    const lesiones: any[] = [
+    const lesiones: import("@/types").Lesion[] = [
       {
         id_lesion: 1,
         id_jugadora: 'J1',
@@ -409,7 +409,7 @@ describe('DailyDecisionPage Component (T-05-VISTA-DECISION-DIARIA & T-05-R)', ()
       isInitialized: true,
       filters: {}, setFilter: vi.fn(), resetFilters: vi.fn(), generarDecisionDiaria: vi.fn(), isLoading: false, error: null
     }
-    vi.mocked(useStore).mockReturnValue(customStore as any)
+    vi.mocked(useStore).mockReturnValue(customStore as import("@/store/store").StoreState)
 
     render(
       <MemoryRouter>

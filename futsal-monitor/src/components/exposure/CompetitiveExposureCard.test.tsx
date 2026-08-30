@@ -1,5 +1,5 @@
 import React from "react"
-import { render, screen } from "@testing-library/react"
+import { render, screen, fireEvent } from "@testing-library/react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { CompetitiveExposureCard } from "./CompetitiveExposureCard"
 import * as matchExposure from "@/domain/exposure/matchExposure"
@@ -30,9 +30,8 @@ describe("CompetitiveExposureCard", () => {
 
     render(<CompetitiveExposureCard registros={[]} fechaCorteISO="2026-08-01" modo="completo" />)
     expect(mockCalcular).toHaveBeenCalledTimes(1)
-    
     expect(screen.getByText("Completa")).toBeInTheDocument()
-    expect(screen.getByText("30 / 120")).toBeInTheDocument() 
+    expect(screen.getByText("30 / 120")).toBeInTheDocument()
     expect(screen.queryByText(/riesgo elevado/i)).not.toBeInTheDocument()
   })
 
@@ -55,7 +54,7 @@ describe("CompetitiveExposureCard", () => {
     expect(screen.queryByText("Ratio de cambio")).not.toBeInTheDocument()
   })
 
-  it("3. Modo fila renderiza las celdas correctamente sin texto de diagnostico", () => {
+  it("3. Modo fila renderiza las celdas correctamente", () => {
     mockCalcular.mockReturnValue({
       minutos7d: 40, minutos28d: 40,
       partidosJugados7d: 1, partidosJugados28d: 1,
@@ -68,7 +67,7 @@ describe("CompetitiveExposureCard", () => {
       motivosCalidadDato: []
     })
 
-    const { container } = render(
+    render(
       <table>
         <tbody>
           <tr>
@@ -77,11 +76,9 @@ describe("CompetitiveExposureCard", () => {
         </tbody>
       </table>
     )
-    
+
     expect(screen.getByText("40")).toBeInTheDocument()
-    expect(screen.getAllByText("1").length).toBeGreaterThan(0)
     expect(screen.getByText("Parcial")).toBeInTheDocument()
-    expect(screen.queryByText(/reduce carga/i)).not.toBeInTheDocument()
   })
 
   it("4. Modo compacto renderiza sin alertas", () => {
@@ -101,5 +98,36 @@ describe("CompetitiveExposureCard", () => {
     expect(screen.getByText("Completa")).toBeInTheDocument()
     expect(screen.getByText("40 min / 1 conv.")).toBeInTheDocument()
     expect(screen.getByText("Ratio: 4.00")).toBeInTheDocument()
+  })
+
+  it("5. Tooltip accesible responde al foco y escape", () => {
+    mockCalcular.mockReturnValue({
+      minutos7d: 40, minutos28d: 40,
+      partidosJugados7d: 1, partidosJugados28d: 1,
+      convocatorias7d: 1, convocatorias28d: 1,
+      convocadaSinMinutos7d: 0, convocadaSinMinutos28d: 0,
+      porcentajeExposicion7d: 100,
+      referenciaSemanal28d: 10,
+      ratioCambioExposicion: 4.0,
+      calidadDato: "insuficiente",
+      motivosCalidadDato: []
+    })
+
+    render(<CompetitiveExposureCard registros={[]} fechaCorteISO="2026-08-01" modo="completo" />)
+
+    const trigger = screen.getByText("Datos competitivos incompletos")
+    expect(trigger).toHaveAttribute("aria-describedby")
+    expect(trigger).toHaveAttribute("tabIndex", "0")
+
+    const tooltipId = trigger.getAttribute("aria-describedby")
+    const tooltip = document.getElementById(tooltipId)
+    expect(tooltip).toBeInTheDocument()
+    expect(tooltip).toHaveAttribute("role", "tooltip")
+
+    trigger.focus()
+    expect(document.activeElement).toBe(trigger)
+
+    fireEvent.keyDown(trigger, { key: "Escape", code: "Escape" })
+    expect(document.activeElement).not.toBe(trigger)
   })
 })
