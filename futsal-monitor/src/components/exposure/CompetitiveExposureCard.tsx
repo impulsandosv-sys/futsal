@@ -9,6 +9,8 @@ interface Props {
   modo?: "completo" | "compacto" | "fila"
 }
 
+const VALOR_NO_INTERPRETABLE = '—'
+
 export function CompetitiveExposureCard({ registros, fechaCorteISO, modo = "completo" }: Props) {
   const exp = calcularExposicionCompetitiva(registros, fechaCorteISO)
   const uniqueId = useId().replace(/:/g, "-")
@@ -38,14 +40,14 @@ export function CompetitiveExposureCard({ registros, fechaCorteISO, modo = "comp
     if (exp.calidadDato === "sin_registros_competitivos") return "Sin registros competitivos disponibles en la ventana"
     if (exp.calidadDato === "insuficiente") return "Datos competitivos incompletos o inconsistentes"
     if (exp.calidadDato === "parcial") return "Dato parcial: interpretar junto con el registro de partido"
-    return "Contexto de exposicion competitiva"
+    return "Contexto de exposición competitiva"
   }
 
   const renderCalidadTooltip = () => (
     <div className="relative group/calidad w-fit">
       <span
         className={"inline-block px-1.5 py-0.5 rounded text-[10px] font-medium peer cursor-help " + colorCalidad(exp.calidadDato)}
-        tabIndex= {0}
+        tabIndex={0}
         aria-describedby={"tooltip-calidad-" + uniqueId}
         onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur() }}
       >
@@ -68,9 +70,9 @@ export function CompetitiveExposureCard({ registros, fechaCorteISO, modo = "comp
   if(modo === "fila") {
     return (
       <>
-        <DataCell>{mostrarMetricasInterpretables ? exp.minutos7d : "“"}</DataCell>
-        <DataCell>{mostrarMetricasInterpretables ? exp.partidosJugados7d : "“"}</DataCell>
-        <DataCell>{mostrarMetricasInterpretables ? exp.convocatorias7d : "“"}</DataCell>
+        <DataCell>{mostrarMetricasInterpretables ? exp.minutos7d : VALOR_NO_INTERPRETABLE}</DataCell>
+        <DataCell>{mostrarMetricasInterpretables ? exp.partidosJugados7d : VALOR_NO_INTERPRETABLE}</DataCell>
+        <DataCell>{mostrarMetricasInterpretables ? exp.convocatorias7d : VALOR_NO_INTERPRETABLE}</DataCell>
         <DataCell>
           {renderCalidadTooltip()}
         </DataCell>
@@ -89,7 +91,7 @@ export function CompetitiveExposureCard({ registros, fechaCorteISO, modo = "comp
               <div className="relative group/ratio">
                 <span
                   className="border-b border-dashed border-surface-300 cursor-help peer"
-                  tabIndex= {0}
+                  tabIndex={0}
                   aria-describedby={"tooltip-ratio-" + uniqueId}
                   onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur() }}
                 >
@@ -103,7 +105,7 @@ export function CompetitiveExposureCard({ registros, fechaCorteISO, modo = "comp
                   Compara los minutos de los últimos 7 días con la media semanal de los últimos 28 días. Es un indicador descriptivo, no una predicción de riesgo.
                 </div>
               </div>
-            ) : (<span>Ratio: “</span>)}
+            ) : (<span>Ratio: {VALOR_NO_INTERPRETABLE}</span>)}
           </div>
         )}
       </div>
@@ -121,21 +123,21 @@ export function CompetitiveExposureCard({ registros, fechaCorteISO, modo = "comp
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-surface-500">Minutos (7d / 28d)</span>
           <span className="text-sm font-semibold text-surface-800">
-            {mostrarMetricasInterpretables ? exp.minutos7d : "“"} / {mostrarMetricasInterpretables ? exp.minutos28d : "“"}
+            {mostrarMetricasInterpretables ? exp.minutos7d : VALOR_NO_INTERPRETABLE} / {mostrarMetricasInterpretables ? exp.minutos28d : VALOR_NO_INTERPRETABLE}
           </span>
         </div>
 
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-surface-500">Partidos (7d / 28d)</span>
           <span className="text-xs font-medium text-surface-700">
-            {mostrarMetricasInterpretables ? exp.partidosJugados7d : "“"} / {mostrarMetricasInterpretables ? exp.partidosJugados28d : "“"}
+            {mostrarMetricasInterpretables ? exp.partidosJugados7d : VALOR_NO_INTERPRETABLE} / {mostrarMetricasInterpretables ? exp.partidosJugados28d : VALOR_NO_INTERPRETABLE}
           </span>
         </div>
 
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-surface-500">Convocatorias (7d / 28d)</span>
           <span className="text-xs font-medium text-surface-700">
-            {mostrarMetricasInterpretables ? exp.convocatorias7d : "“"} / {mostrarMetricasInterpretables ? exp.convocatorias28d : "“"}
+            {mostrarMetricasInterpretables ? exp.convocatorias7d : VALOR_NO_INTERPRETABLE} / {mostrarMetricasInterpretables ? exp.convocatorias28d : VALOR_NO_INTERPRETABLE}
           </span>
         </div>
 

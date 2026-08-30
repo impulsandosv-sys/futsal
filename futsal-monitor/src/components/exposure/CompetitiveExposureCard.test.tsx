@@ -53,7 +53,7 @@ describe("CompetitiveExposureCard", () => {
     expect(screen.getAllByText("20 / 40").length).toBeGreaterThan(0)
   })
 
-  it("3. insuficiente: no muestra 0 / 0 ni 0 min / 0 conv.; muestra “", () => {
+  it("3. insuficiente: no muestra 0 / 0 ni 0 min / 0 conv.; muestra —", () => {
     mockCalcular.mockReturnValue({
       minutos7d: 0, minutos28d: 0,
       partidosJugados7d: 0, partidosJugados28d: 0,
@@ -67,7 +67,7 @@ describe("CompetitiveExposureCard", () => {
     })
 
     const { unmount } = render(<CompetitiveExposureCard registros={[]} fechaCorteISO="2026-08-01" modo="completo" />)
-    expect(screen.getAllByText("“ / “").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("— / —").length).toBeGreaterThan(0)
     expect(screen.queryByText("0 / 0")).toBeNull();
     expect(screen.queryByText("0 min / 0 conv.")).toBeNull();
 
@@ -76,7 +76,7 @@ describe("CompetitiveExposureCard", () => {
     expect(screen.queryByText("0 min / 0 conv.")).toBeNull();
   })
 
-  it("4. sin_registros_competitivos: muestra Sin registros competitivos y “", () => {
+  it("4. sin_registros_competitivos: muestra Sin registros competitivos y —", () => {
     mockCalcular.mockReturnValue({
       minutos7d: 0, minutos28d: 0,
       partidosJugados7d: 0, partidosJugados28d: 0,
@@ -91,7 +91,7 @@ describe("CompetitiveExposureCard", () => {
 
     render(<CompetitiveExposureCard registros={[]} fechaCorteISO="2026-08-01" modo="completo" />)
     expect(screen.getByText("Sin registros competitivos")).toBeInTheDocument()
-    expect(screen.getAllByText("“ / “").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("— / —").length).toBeGreaterThan(0)
     expect(screen.queryByText("0 / 0")).toBeNull();
   })
 
