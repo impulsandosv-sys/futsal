@@ -201,7 +201,7 @@ function IndividualTable({ rows, endDate }: { rows: PlayerMicrocycleRow[], endDa
               </td>
               <td className="px-4 py-3">
                 {row.qualityIssues > 0 ? (
-                  <div className="text-red-600 font-medium">
+                  <div className="text-amber-700 font-medium">
                     {row.qualityIssues} {row.qualityIssues === 1 ? 'pendiente' : 'pendientes'}
                   </div>
                 ) : (

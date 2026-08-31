@@ -146,7 +146,7 @@ describe('MicrocycleDashboardPage', () => {
         { id: 1, id_sesion: 's1', id_jugadora: '1', rpe: 7, duracion_min: 60, carga_ua: 420, fecha: todayLocal }
       ],
       rpe_partido: [
-        { id_partido: 'p1', id_jugadora: '1', fecha: todayLocal, minutos_jugados: 40, participacion: 'titular', rpe: 8, carga_ua: 320 }
+        { id_partido: 'p1', id_jugadora: '1', fecha: todayLocal, minutos_jugados: 40, participacion: 'completa', rpe: 8, carga_ua: 320 }
       ],
       alertas: [],
       lesiones: []
