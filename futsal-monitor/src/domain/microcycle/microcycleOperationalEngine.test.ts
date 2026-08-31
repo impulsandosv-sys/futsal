@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildMicrocycleDashboardData } from './microcycleOperationalEngine'
-import type { Jugadora, Sesion, Partido, Wellness, SesionRPE, RPE_Partido, Alerta, Lesion } from '@/types'
-import { getTodayLocalISO } from '../dates/dates'
+import type { Jugadora, Alerta } from '@/types'
 
 describe('microcycleOperationalEngine', () => {
   const j1: Jugadora = { id_jugadora: '1', nombre: 'A', activa: true, posicion: 'Ala', fecha_nacimiento: '2000-01-01', altura_cm: 160, peso_kg: 60, imc: 20, grasa: 15, anos_experiencia_futsal: 5, historial_lesional: '', notas: '' }

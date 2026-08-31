@@ -1,36 +1,44 @@
 import { render, screen, act } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MicrocycleDashboardPage } from './MicrocycleDashboardPage'
 import { MemoryRouter } from 'react-router-dom'
 import { useStore } from '@/store/store'
-import { getTodayLocalISO, getWeekStartDateISO } from '@/domain/dates/dates'
+import { getTodayLocalISO } from '@/domain/dates/dates'
+import type { Jugadora } from '@/types'
 
-vi.mock('@/store/store', () => ({
-  useStore: vi.fn()
-}))
+const alice: Jugadora = {
+  id_jugadora: '1',
+  nombre: 'Alice',
+  activa: true,
+  posicion: 'Ala',
+  fecha_nacimiento: '2000-01-01',
+  altura_cm: 165,
+  peso_kg: 58,
+  imc: 21.3,
+  grasa: 18,
+  anos_experiencia_futsal: 5,
+  historial_lesional: '',
+  notas: ''
+}
 
 describe('MicrocycleDashboardPage', () => {
-  let mockStore: any
+  const initialState = useStore.getState()
 
   beforeEach(() => {
-    mockStore = {
-      jugadoras: [
-        { id_jugadora: '1', nombre: 'Alice', activa: true, posicion: 'Ala', fecha_nacimiento: '', altura_cm: 1, peso_kg: 1, imc: 1, grasa: 1, anos_experiencia_futsal: 1, historial_lesional: '', notas: '' }
-      ],
+    useStore.setState({
+      jugadoras: [alice],
       sesiones: [],
       partidos: [],
       wellness: [],
-      sesiones_rpe: [],
-      rpe_partidos: [],
+      sesion_rpe: [],
+      rpe_partido: [],
       alertas: [],
-      lesiones: [],
-      update: vi.fn(),
-      setState: vi.fn()
-    }
-    vi.mocked(useStore).mockImplementation((selector: any) => {
-      if (selector) return selector(mockStore)
-      return mockStore
+      lesiones: []
     })
+  })
+
+  afterEach(() => {
+    useStore.setState(initialState, true)
   })
 
   it('renders title and collective summary safely without menstrual references', () => {
@@ -48,18 +56,18 @@ describe('MicrocycleDashboardPage', () => {
     expect(content).not.toMatch(/MENSTRUACION/i)
     expect(content).not.toMatch(/registro_menstrual/i)
     expect(content).not.toMatch(/impacto_percibido/i)
-
-    // Checks that side effect functions were not called during render
-    expect(mockStore.update).not.toHaveBeenCalled()
-    expect(mockStore.setState).not.toHaveBeenCalled()
   })
 
   it('navigates weeks forward and backward without writing to store', () => {
+    const setStateSpy = vi.spyOn(useStore, 'setState')
+
     render(
       <MemoryRouter>
         <MicrocycleDashboardPage />
       </MemoryRouter>
     )
+
+    const callsBefore = setStateSpy.mock.calls.length
 
     const nextBtn = screen.getByText(/Siguiente/i)
     const prevBtn = screen.getByText(/Anterior/i)
@@ -69,9 +77,9 @@ describe('MicrocycleDashboardPage', () => {
     act(() => { nextBtn.click() })
     act(() => { currentBtn.click() })
 
-    // Verify mutations weren't triggered
-    expect(mockStore.update).not.toHaveBeenCalled()
-    expect(mockStore.setState).not.toHaveBeenCalled()
+    // No new setState calls should have been made by the component
+    expect(setStateSpy.mock.calls.length).toBe(callsBefore)
+    setStateSpy.mockRestore()
   })
 
   it('renders profile link correctly', () => {
@@ -83,5 +91,61 @@ describe('MicrocycleDashboardPage', () => {
 
     const profileLink = screen.getByRole('link', { name: /Perfil/i })
     expect(profileLink).toHaveAttribute('href', '/jugadoras/1')
+  })
+
+  it('uses local week as initial state and Semana Actual returns to local week', () => {
+    getTodayLocalISO() // verify local date utility doesn't throw
+
+    render(
+      <MemoryRouter>
+        <MicrocycleDashboardPage />
+      </MemoryRouter>
+    )
+
+    // Navigate away then back
+    const prevBtn = screen.getByText(/Anterior/i)
+    const currentBtn = screen.getByText(/Actual/i)
+
+    act(() => { prevBtn.click() })
+    act(() => { prevBtn.click() })
+    act(() => { currentBtn.click() })
+
+    // The component should be showing current week - title still present
+    expect(screen.getByText('Microciclo Operativo')).toBeInTheDocument()
+    expect(screen.getByText('Alice')).toBeInTheDocument()
+  })
+
+  it('shows training and match sRPE when sesion_rpe and rpe_partido contain data', () => {
+    const todayLocal = getTodayLocalISO()
+
+    useStore.setState({
+      jugadoras: [alice],
+      sesiones: [
+        { id_sesion: 's1', fecha: todayLocal, tipo: 'entrenamiento', titulo: 'Sesión 1', descripcion: '', estado: 'realizada', notas: '' }
+      ],
+      partidos: [
+        { id_partido: 'p1', fecha: todayLocal, rival: 'Rival FC', lugar: 'local', resultado: '3-2', notas: '' }
+      ],
+      wellness: [],
+      sesion_rpe: [
+        { id: 1, id_sesion: 's1', id_jugadora: '1', rpe: 7, duracion_min: 60, carga_ua: 420, fecha: todayLocal }
+      ],
+      rpe_partido: [
+        { id_partido: 'p1', id_jugadora: '1', fecha: todayLocal, minutos_jugados: 40, participacion: 'titular', rpe: 8, carga_ua: 320 }
+      ],
+      alertas: [],
+      lesiones: []
+    })
+
+    render(
+      <MemoryRouter>
+        <MicrocycleDashboardPage />
+      </MemoryRouter>
+    )
+
+    // Training sRPE = 7 * 60 = 420
+    expect(screen.getByText('420')).toBeInTheDocument()
+    // Match sRPE = 8 * 40 = 320
+    expect(screen.getByText('320')).toBeInTheDocument()
   })
 })

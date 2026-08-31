@@ -1,8 +1,10 @@
 import React, { useState, useMemo } from 'react'
 import { useStore } from '@/store/store'
 import { buildMicrocycleDashboardData, MicrocycleDashboardData, PlayerMicrocycleRow } from '@/domain/microcycle/microcycleOperationalEngine'
-import { getWeekStartDateISO, getWeekId } from '@/domain/dates/dates'
+import { getTodayLocalISO, getWeekId } from '@/domain/dates/dates'
 import { Link } from 'react-router-dom'
+import { ROUTES } from '@/constants/routes'
+import { CompetitiveExposureCard } from '@/components/exposure/CompetitiveExposureCard'
 import { format, parseISO, addWeeks, subWeeks } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -10,7 +12,7 @@ export function MicrocycleDashboardPage() {
   const store = useStore()
 
   const [currentWeekISO, setCurrentWeekISO] = useState<string>(() => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = getTodayLocalISO()
     return getWeekId(today)
   })
 
@@ -21,8 +23,8 @@ export function MicrocycleDashboardPage() {
       store.sesiones,
       store.partidos,
       store.wellness,
-      store.sesiones_rpe,
-      store.rpe_partidos,
+      store.sesion_rpe,
+      store.rpe_partido,
       store.alertas,
       store.lesiones
     )
@@ -32,24 +34,24 @@ export function MicrocycleDashboardPage() {
     store.sesiones,
     store.partidos,
     store.wellness,
-    store.sesiones_rpe,
-    store.rpe_partidos,
+    store.sesion_rpe,
+    store.rpe_partido,
     store.alertas,
     store.lesiones
   ])
 
   const handlePrevWeek = () => {
     const d = parseISO(currentWeekISO)
-    setCurrentWeekISO(getWeekId(subWeeks(d, 1).toISOString().split('T')[0]))
+    setCurrentWeekISO(getWeekId(format(subWeeks(d, 1), 'yyyy-MM-dd')))
   }
 
   const handleNextWeek = () => {
     const d = parseISO(currentWeekISO)
-    setCurrentWeekISO(getWeekId(addWeeks(d, 1).toISOString().split('T')[0]))
+    setCurrentWeekISO(getWeekId(format(addWeeks(d, 1), 'yyyy-MM-dd')))
   }
 
   const handleCurrentWeek = () => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = getTodayLocalISO()
     setCurrentWeekISO(getWeekId(today))
   }
 
@@ -98,7 +100,7 @@ export function MicrocycleDashboardPage() {
 
       <div className="mt-8">
         <h2 className="text-lg font-bold text-surface-900 mb-4">Tabla Individual Operativa</h2>
-        <IndividualTable rows={dashboardData.filasJugadoras} />
+        <IndividualTable rows={dashboardData.filasJugadoras} endDate={dashboardData.endDate} />
       </div>
     </div>
   )
@@ -144,7 +146,7 @@ function CollectiveSummary({ summary }: { summary: MicrocycleDashboardData['resu
   )
 }
 
-function IndividualTable({ rows }: { rows: PlayerMicrocycleRow[] }) {
+function IndividualTable({ rows, endDate }: { rows: PlayerMicrocycleRow[], endDate: string }) {
   if (rows.length === 0) {
     return (
       <div className="bg-white rounded-lg border border-surface-200 p-8 text-center text-sm text-surface-500">
@@ -163,7 +165,7 @@ function IndividualTable({ rows }: { rows: PlayerMicrocycleRow[] }) {
             <th className="px-4 py-3 text-center">Wellness</th>
             <th className="px-4 py-3 text-right">Carga Entreno (sRPE)</th>
             <th className="px-4 py-3 text-right">Carga Partido (sRPE)</th>
-            <th className="px-4 py-3 text-center">Calidad Competitiva</th>
+            <th className="px-4 py-3">Exposición Competitiva</th>
             <th className="px-4 py-3">Problemas Datos</th>
             <th className="px-4 py-3 text-right">Acciones</th>
           </tr>
@@ -201,8 +203,8 @@ function IndividualTable({ rows }: { rows: PlayerMicrocycleRow[] }) {
               <td className="px-4 py-3 text-right font-medium text-surface-900">
                 {row.sRPEMatch !== null ? row.sRPEMatch : '—'}
               </td>
-              <td className="px-4 py-3 text-center">
-                <QualityLabel label={row.exposicion.calidadDato} />
+              <td className="px-4 py-3">
+                <CompetitiveExposureCard registros={row.rpePartido} fechaCorteISO={endDate} modo="compacto" />
               </td>
               <td className="px-4 py-3">
                 {row.qualityIssues > 0 ? (
@@ -216,10 +218,10 @@ function IndividualTable({ rows }: { rows: PlayerMicrocycleRow[] }) {
               <td className="px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">
                   {row.qualityIssues > 0 && (
-                    <Link to="/calidad-datos" className="text-primary-600 hover:text-primary-800 font-medium">Resolver</Link>
+                    <Link to={ROUTES.CALIDAD_DATOS} className="text-primary-600 hover:text-primary-800 font-medium">Resolver</Link>
                   )}
-                  <Link to={`/jugadoras/${row.jugadora.id_jugadora}`} className="text-surface-500 hover:text-surface-800">Perfil</Link>
-                  <Link to="/decision-diaria" className="text-surface-500 hover:text-surface-800">Decisión</Link>
+                  <Link to={ROUTES.JUGADORA_PROFILE.replace(':id', row.jugadora.id_jugadora)} className="text-surface-500 hover:text-surface-800">Perfil</Link>
+                  <Link to={ROUTES.DECISION_DIARIA} className="text-surface-500 hover:text-surface-800">Decisión</Link>
                 </div>
               </td>
             </tr>
@@ -228,20 +230,4 @@ function IndividualTable({ rows }: { rows: PlayerMicrocycleRow[] }) {
       </table>
     </div>
   )
-}
-
-function QualityLabel({ label }: { label: string }) {
-  if (label === 'completa') {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-800">Completa</span>
-  }
-  if (label === 'parcial') {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800">Parcial</span>
-  }
-  if (label === 'insuficiente') {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-800">Insuficiente</span>
-  }
-  if (label === 'sin_registros_competitivos') {
-    return <span className="text-surface-400 text-[10px]">—</span>
-  }
-  return <span className="text-surface-400">—</span>
 }

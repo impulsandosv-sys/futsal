@@ -9,7 +9,6 @@ import type {
   Lesion
 } from '@/types'
 import {
-  getWeekStartDateISO,
   getWeekEndDateISO,
   compareDateStrings,
   getTodayLocalISO,
@@ -41,6 +40,7 @@ export interface PlayerMicrocycleRow {
   sRPEMatch: number | null
   scheduledSessions: number
   exposicion: ExposicionCompetitiva
+  readonly rpePartido: readonly RPE_Partido[]
   qualityIssues: number
   qualityIssuesLabels: string[]
   prioridadRazon: string | null
@@ -212,6 +212,7 @@ export function buildMicrocycleDashboardData(
       sRPEMatch: finalSRPEMatch,
       scheduledSessions: scheduledSessionsCount,
       exposicion,
+      rpePartido: playerAllMatchesRpe,
       qualityIssues: issues.length,
       qualityIssuesLabels: issues.map(i => i.tipo),
       prioridadRazon
