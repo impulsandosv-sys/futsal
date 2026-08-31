@@ -758,7 +758,6 @@ export function construirVistaPrevia(
       result.rows.push({
         filaOriginal,
         estado: finalEstado,
-        prevEstado: baseEstado,
         id_jugadora: mappedRow.id_jugadora ? String(mappedRow.id_jugadora).trim().toUpperCase() : '',
         alias_origen: mappedRow.id_jugadora ? String(mappedRow.id_jugadora).trim() : undefined,
         id_temporada: context.temporadaActiva?.id_temporada,
@@ -803,7 +802,6 @@ export function construirVistaPrevia(
         filaOriginal,
         estado: finalEstado as 'ERROR' | 'OMITIDA' | 'DUPLICADO_IDENTICO',
         tipo_incidencia: (finalEstado === 'OMITIDA' ? 'omitida_manual' : tipoInc) as TipoIncidenciaImportacion,
-        prevEstado: baseEstado,
         id_jugadora: normRow.id_jugadora,
         alias_origen: normRow.alias_origen,
         id_temporada: normRow.id_temporada,
@@ -853,7 +851,6 @@ export function construirVistaPrevia(
       filaOriginal,
       estado: finalEstado,
       tipo_incidencia: tipoInc as TipoIncidenciaImportacion,
-      prevEstado: clasificacion,
       id_jugadora: normRow.id_jugadora,
       alias_origen: normRow.alias_origen,
       metodo_resolucion_identidad: normRow.metodo_resolucion_identidad,
