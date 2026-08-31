@@ -93,8 +93,9 @@ describe('MicrocycleDashboardPage', () => {
     expect(profileLink).toHaveAttribute('href', '/jugadoras/1')
   })
 
-  it('uses local week as initial state and Semana Actual returns to local week', () => {
-    getTodayLocalISO() // verify local date utility doesn't throw
+  it('uses local week as initial state, navigates, and shows correct visual interval', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-05T12:00:00Z')) // Wednesday, Aug 5 2026
 
     render(
       <MemoryRouter>
@@ -102,17 +103,31 @@ describe('MicrocycleDashboardPage', () => {
       </MemoryRouter>
     )
 
-    // Navigate away then back
+    // Initial state: current week should be Monday Aug 3 to Sunday Aug 9
+    expect(screen.getByText('3 ago - 9 ago 2026')).toBeInTheDocument()
+    expect(screen.queryByText(/Invalid Date/i)).not.toBeInTheDocument()
+
     const prevBtn = screen.getByText(/Anterior/i)
+    const nextBtn = screen.getByText(/Siguiente/i)
     const currentBtn = screen.getByText(/Actual/i)
 
+    // Navigate back
     act(() => { prevBtn.click() })
-    act(() => { prevBtn.click() })
-    act(() => { currentBtn.click() })
+    expect(screen.getByText('27 jul - 2 ago 2026')).toBeInTheDocument()
 
-    // The component should be showing current week - title still present
-    expect(screen.getByText('Microciclo Operativo')).toBeInTheDocument()
-    expect(screen.getByText('Alice')).toBeInTheDocument()
+    // Navigate forward (back to current week)
+    act(() => { nextBtn.click() })
+    expect(screen.getByText('3 ago - 9 ago 2026')).toBeInTheDocument()
+
+    // Navigate forward again (next week)
+    act(() => { nextBtn.click() })
+    expect(screen.getByText('10 ago - 16 ago 2026')).toBeInTheDocument()
+
+    // Go back to current week using the button
+    act(() => { currentBtn.click() })
+    expect(screen.getByText('3 ago - 9 ago 2026')).toBeInTheDocument()
+
+    vi.useRealTimers()
   })
 
   it('shows training and match sRPE when sesion_rpe and rpe_partido contain data', () => {

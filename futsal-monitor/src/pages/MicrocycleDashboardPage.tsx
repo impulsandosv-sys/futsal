@@ -1,12 +1,11 @@
 import React, { useState, useMemo } from 'react'
 import { useStore } from '@/store/store'
 import { buildMicrocycleDashboardData, MicrocycleDashboardData, PlayerMicrocycleRow } from '@/domain/microcycle/microcycleOperationalEngine'
-import { getTodayLocalISO, getWeekId } from '@/domain/dates/dates'
+import { getTodayLocalISO, getWeekId, formatWeek } from '@/domain/dates/dates'
 import { Link } from 'react-router-dom'
 import { ROUTES } from '@/constants/routes'
 import { CompetitiveExposureCard } from '@/components/exposure/CompetitiveExposureCard'
 import { format, parseISO, addWeeks, subWeeks } from 'date-fns'
-import { es } from 'date-fns/locale'
 
 export function MicrocycleDashboardPage() {
   const store = useStore()
@@ -42,23 +41,17 @@ export function MicrocycleDashboardPage() {
 
   const handlePrevWeek = () => {
     const d = parseISO(currentWeekISO)
-    setCurrentWeekISO(getWeekId(format(subWeeks(d, 1), 'yyyy-MM-dd')))
+    setCurrentWeekISO(format(subWeeks(d, 1), 'yyyy-MM-dd'))
   }
 
   const handleNextWeek = () => {
     const d = parseISO(currentWeekISO)
-    setCurrentWeekISO(getWeekId(format(addWeeks(d, 1), 'yyyy-MM-dd')))
+    setCurrentWeekISO(format(addWeeks(d, 1), 'yyyy-MM-dd'))
   }
 
   const handleCurrentWeek = () => {
     const today = getTodayLocalISO()
     setCurrentWeekISO(getWeekId(today))
-  }
-
-  const formatWeekStr = (isoDate: string) => {
-    const start = parseISO(isoDate)
-    const end = parseISO(dashboardData.endDate)
-    return `${format(start, 'd MMM', { locale: es })} - ${format(end, 'd MMM yyyy', { locale: es })}`
   }
 
   return (
@@ -79,7 +72,7 @@ export function MicrocycleDashboardPage() {
             &larr; Anterior
           </button>
           <div className="px-4 py-1.5 text-sm font-semibold bg-surface-100 rounded text-surface-800 min-w-[180px] text-center">
-            {formatWeekStr(currentWeekISO)}
+            {formatWeek(currentWeekISO)}
           </div>
           <button
             onClick={handleNextWeek}
