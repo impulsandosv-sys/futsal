@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { useStore } from '@/store/store'
-import { buildMicrocycleDashboardData, MicrocycleDashboardData, PlayerMicrocycleRow } from '@/domain/microcycle/microcycleOperationalEngine'
+import { buildMicrocycleDashboardData } from '@/domain/microcycle/microcycleOperationalEngine'
+import type { MicrocycleDashboardData, PlayerMicrocycleRow } from '@/domain/microcycle/microcycleOperationalEngine'
 import { getTodayLocalISO, getWeekId, formatWeek } from '@/domain/dates/dates'
 import { Link } from 'react-router-dom'
 import { ROUTES } from '@/constants/routes'

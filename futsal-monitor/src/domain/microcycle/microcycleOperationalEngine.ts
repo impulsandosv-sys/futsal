@@ -15,9 +15,9 @@ import {
   isFechaLocalISO
 } from '../dates/dates'
 import {
-  calcularExposicionCompetitiva,
-  ExposicionCompetitiva
+  calcularExposicionCompetitiva
 } from '../exposure/matchExposure'
+import type { ExposicionCompetitiva } from '../exposure/matchExposure'
 import { evaluarCompletitudDatos } from '../monitoring/completitud'
 
 export interface MicrocycleCollectiveSummary {
@@ -40,7 +40,7 @@ export interface PlayerMicrocycleRow {
   sRPEMatch: number | null
   scheduledSessions: number
   exposicion: ExposicionCompetitiva
-  readonly rpePartido: readonly RPE_Partido[]
+  rpePartido: RPE_Partido[]
   qualityIssues: number
   qualityIssuesLabels: string[]
   prioridadRazon: string | null
